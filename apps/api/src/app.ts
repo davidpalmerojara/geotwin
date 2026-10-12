@@ -99,7 +99,7 @@ export async function buildApp(
   );
   const demo = options.demo ?? env.DEMO_MODE;
   const simulator = options.simulator ?? env.SIMULATOR_ENABLED;
-  registerRoutes(app, db, telemetry, demo, simulator);
+  registerRoutes(app, db, telemetry, hub.publish, demo, simulator);
   await app.register(swaggerUI, { routePrefix: '/api/docs' });
   const retentionHours = options.retentionHours ?? env.READINGS_RETENTION_HOURS;
   let stop: (() => Promise<void>) | undefined;

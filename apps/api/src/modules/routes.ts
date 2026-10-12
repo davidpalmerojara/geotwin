@@ -19,6 +19,7 @@ import {
   createAlertBody,
   updateAssetBody,
   uuid,
+  type RealtimeEvent,
 } from '@geotwin/shared';
 import { Repository } from './repository.js';
 import type { TelemetryService } from './telemetry-service.js';
@@ -28,6 +29,7 @@ export function registerRoutes(
   app: FastifyInstance,
   db: Database,
   telemetry: TelemetryService,
+  publish: (events: RealtimeEvent[]) => void,
   demo: boolean,
   simulator: boolean,
 ) {
@@ -115,8 +117,13 @@ export function registerRoutes(
         response: { 200: assetSchema, ...errors },
       },
     },
-    async (req) =>
-      (await repository.renameAsset(req.params.id, req.body.name)) ?? notFound('Activo'),
+    async (req) => {
+      const asset =
+        (await repository.renameAsset(req.params.id, req.body.name)) ?? notFound('Activo');
+      // Published after the UPDATE has committed (single statement, autocommit).
+      publish([{ type: 'asset:updated', data: asset }]);
+      return asset;
+    },
   );
   api.get(
     '/api/assets/:id/readings',

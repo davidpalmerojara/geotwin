@@ -33,11 +33,13 @@ export class Repository {
     ).rows[0];
   }
   async renameAsset(id: string, name: string) {
-    await this.db.query(
-      'UPDATE assets SET name=$1,updated_at=now() WHERE id=$2 AND organization_id=$3',
-      [name, id, ORGANIZATION_ID],
-    );
-    return this.asset(id);
+    return (
+      await this.db.query<Asset>(
+        `UPDATE assets a SET name=$1,updated_at=now() WHERE a.id=$2 AND a.organization_id=$3
+        RETURNING ${assetColumns}`,
+        [name, id, ORGANIZATION_ID],
+      )
+    ).rows[0];
   }
   async installations() {
     return (

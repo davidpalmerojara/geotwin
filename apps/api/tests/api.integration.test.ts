@@ -398,6 +398,31 @@ describe('Real API and PostgreSQL/PostGIS', () => {
       'Pump inspected',
     );
   });
+  it('broadcasts a rename so other clients update without refetching', async () => {
+    const address = app.server.address();
+    if (!address || typeof address === 'string') throw new Error('No listening port');
+    const socket = new WebSocket(`ws://127.0.0.1:${address.port}/api/ws`);
+    const events: RealtimeEvent[] = [];
+    socket.on('message', (data) =>
+      events.push(realtimeEventSchema.parse(JSON.parse(data.toString()))),
+    );
+    try {
+      await new Promise<void>((resolve, reject) => {
+        socket.once('open', resolve);
+        socket.once('error', reject);
+      });
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/assets/${assetId}`,
+        payload: { name: 'Pump 01 · Revisada' },
+      });
+      await expect
+        .poll(() => events.find((e) => e.type === 'asset:updated'), { timeout: 4000 })
+        .toMatchObject({ data: { id: assetId, name: 'Pump 01 · Revisada' } });
+    } finally {
+      socket.close();
+    }
+  });
   it('words not-found messages with the right grammatical gender', async () => {
     const missing = '/api/alerts/00000000-0000-4000-8000-00000000ffff';
     expect((await app.inject(missing)).json().error.message).toBe('Incidencia no encontrada');
