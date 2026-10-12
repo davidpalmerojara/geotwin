@@ -196,6 +196,46 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     );
     expect(earliest.rows[0]!.late).toBe(true);
   });
+  it('opens natural anomalies once per sensor and closes them when the reading recovers', async () => {
+    const events: RealtimeEvent[] = [];
+    const service = new TelemetryService(db, (e) => events.push(...e));
+    // An injected anomaly on another asset must stay active through the recovery.
+    const injected = await service.simulate('30000000-0000-4000-8000-000000000002', 'critical');
+    await db.query('UPDATE telemetry_state SET sequence=235');
+    events.length = 0;
+    await service.tick(); // phase 236: eligible sensors read critical
+    const opened = events.filter((e) => e.type === 'alert:created');
+    expect(opened.length).toBeGreaterThan(0);
+    const statusChanges = events.filter((e) => e.type === 'asset:status_changed');
+    const assetIds = statusChanges.map((e) =>
+      e.type === 'asset:status_changed' ? e.data.asset_id : '',
+    );
+    expect(new Set(assetIds).size).toBe(assetIds.length);
+    await service.tick(); // phase 237: still critical, no duplicates
+    expect(
+      (
+        await db.query(
+          "SELECT count(*)::int AS n FROM alerts WHERE status='active' AND source='telemetry'",
+        )
+      ).rows[0].n,
+    ).toBe(opened.length + 1);
+    await db.query('UPDATE telemetry_state SET sequence=239');
+    events.length = 0;
+    await service.tick(); // phase 0: readings are back in range
+    const recovered = events.filter((e) => e.type === 'alert:resolved');
+    expect(recovered).toHaveLength(opened.length);
+    for (const e of recovered)
+      if (e.type === 'alert:resolved') expect(e.data.resolved_by).toBe('auto_recovery');
+    const active = await db.query<{ id: string }>("SELECT id FROM alerts WHERE status='active'");
+    expect(active.rows.map((r) => r.id)).toEqual([injected.id]);
+    const statuses = await db.query<{ status: string; n: number }>(
+      'SELECT status, count(*)::int AS n FROM assets GROUP BY status ORDER BY status',
+    );
+    expect(statuses.rows).toEqual([
+      { status: 'critical', n: 1 },
+      { status: 'healthy', n: 17 },
+    ]);
+  });
   it('creates a failure, broadcasts it, deduplicates it, then resolves it durably', async () => {
     const address = app.server.address();
     if (!address || typeof address === 'string') throw new Error('No listening port');

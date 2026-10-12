@@ -52,6 +52,7 @@ export const alertSchema = z.object({
   source: z.enum(['telemetry', 'manual']),
   triggered_at: z.string(),
   resolved_at: z.string().nullable(),
+  resolved_by: z.enum(['operator', 'auto_recovery']).nullable(),
   asset_name: z.string(),
 });
 export const summarySchema = z.object({

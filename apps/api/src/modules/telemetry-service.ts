@@ -60,7 +60,7 @@ export class TelemetryService {
   }
   /**
    * Persists a batch of readings with a fixed number of statements:
-   * readings (unnest), new or escalated alerts and one status recompute.
+   * readings (unnest), new or escalated alerts, natural recoveries and one status recompute.
    */
   private async record(
     client: Transaction,
@@ -125,6 +125,24 @@ export class TelemetryService {
       opened.rows.map((r) => r.id),
     ))
       events.push({ type: 'alert:created', data: alert });
+    // Natural simulator anomalies close themselves once the reading is back in range.
+    // Injected anomalies keep their override and manual incidents have no sensor, so both
+    // stay active until someone resolves them.
+    const healthy = batch.filter((m) => evaluate(m.value, m.sensor) === 'healthy');
+    const recovered = healthy.length
+      ? await client.query<{ id: string }>(
+          `UPDATE alerts al SET status='resolved', resolved_at=$2::timestamptz, resolved_by='auto_recovery'
+          WHERE al.status='active' AND al.source='telemetry' AND al.sensor_id = ANY($1::uuid[])
+            AND NOT EXISTS(SELECT 1 FROM simulation_overrides o WHERE o.sensor_id=al.sensor_id)
+          RETURNING al.id`,
+          [healthy.map((m) => m.sensor.id), at],
+        )
+      : { rows: [] };
+    for (const alert of await this.alertsById(
+      client,
+      recovered.rows.map((r) => r.id),
+    ))
+      events.push({ type: 'alert:resolved', data: alert });
     await this.refreshStatuses(
       client,
       batch.map((m) => m.sensor.asset_id),
@@ -192,7 +210,7 @@ export class TelemetryService {
       const events: RealtimeEvent[] = [];
       if (alert.status === 'resolved') return { alert, events };
       await client.query(
-        "UPDATE alerts SET status='resolved',resolved_at=$2::timestamptz WHERE id=$1",
+        "UPDATE alerts SET status='resolved',resolved_at=$2::timestamptz,resolved_by='operator' WHERE id=$1",
         [alertId, at],
       );
       if (alert.sensor_id) {
