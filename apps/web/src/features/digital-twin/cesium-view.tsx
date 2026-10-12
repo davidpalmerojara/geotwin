@@ -104,7 +104,7 @@ export default function CesiumView({
   const [mapMessage, setMapMessage] = useState('');
   const [terrain, setTerrain] = useState<'ellipsoid' | 'world'>('ellipsoid');
   const ionLoading = useRef<Viewer | null>(null);
-  const [hover, setHover] = useState<{ name: string; x: number; y: number } | null>(null);
+  const tooltip = useRef<HTMLDivElement>(null);
   const token = import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined;
   const buildingsRef = useRef<Awaited<ReturnType<typeof createOsmBuildingsAsync>> | undefined>(
     undefined,
@@ -118,6 +118,8 @@ export default function CesiumView({
   useEffect(() => {
     if (!container.current) return;
     let v: Viewer | undefined, handler: ScreenSpaceEventHandler | undefined;
+    let pointer: Cartesian2 | undefined;
+    let hoverFrame = 0;
     try {
       Ion.defaultAccessToken = token ?? '';
       v = new Viewer(container.current, {
@@ -151,25 +153,39 @@ export default function CesiumView({
           if (id.startsWith('installation:')) callbacks.current.onInstallation(id.slice(13));
         }
       }, ScreenSpaceEventType.LEFT_CLICK);
+      // Hover picking: at most one scene.pick per animation frame, and the tooltip is moved
+      // directly in the DOM so mouse moves never re-render this component.
       handler.setInputAction((movement: { endPosition: Cartesian2 }) => {
-        const picked: unknown = v?.scene.pick(movement.endPosition);
-        if (typeof picked === 'object' && picked && 'id' in picked && picked.id instanceof Entity)
-          setHover({
-            name: picked.id.name ?? 'Activo',
-            x: Math.max(
-              8,
-              Math.min(movement.endPosition.x + 15, (container.current?.clientWidth ?? 400) - 200),
-            ),
-            y: movement.endPosition.y + 15,
-          });
-        else setHover(null);
+        pointer = Cartesian2.clone(movement.endPosition, pointer);
+        if (!hoverFrame) hoverFrame = requestAnimationFrame(pickHover);
       }, ScreenSpaceEventType.MOUSE_MOVE);
+      const pickHover = () => {
+        hoverFrame = 0;
+        const tip = tooltip.current;
+        if (!v || v.isDestroyed() || !tip || !pointer) return;
+        const picked: unknown = v.scene.pick(pointer);
+        const entity =
+          typeof picked === 'object' && picked && 'id' in picked && picked.id instanceof Entity
+            ? picked.id
+            : undefined;
+        v.scene.canvas.style.cursor = entity ? 'pointer' : '';
+        if (!entity) {
+          tip.style.display = 'none';
+          return;
+        }
+        const width = container.current?.clientWidth ?? 400;
+        tip.firstChild!.textContent = entity.name ?? 'Activo';
+        tip.style.left = `${Math.max(8, Math.min(pointer.x + 15, width - 200))}px`;
+        tip.style.top = `${pointer.y + 15}px`;
+        tip.style.display = '';
+      };
       setReady(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'WebGL no disponible');
     }
     return () => {
       setReady(false);
+      cancelAnimationFrame(hoverFrame);
       handler?.destroy();
       if (v && !v.isDestroyed()) v.destroy();
       viewer.current = null;
@@ -478,12 +494,10 @@ export default function CesiumView({
           <Mountain size={17} />
         </Button>
       </div>
-      {hover && (
-        <div className="map-tooltip" style={{ left: hover.x, top: hover.y }}>
-          {hover.name}
-          <small>Haz clic para inspeccionar</small>
-        </div>
-      )}
+      <div ref={tooltip} className="map-tooltip" style={{ display: 'none' }} aria-hidden="true">
+        <span />
+        <small>Haz clic para inspeccionar</small>
+      </div>
       {mapMessage && (
         <div className="map-message" role="status">
           {mapMessage}
