@@ -378,16 +378,25 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     await app.inject({ method: 'PATCH', url: `/api/alerts/${a.id}/resolve` });
     expect((await app.inject(`/api/assets/${assetId}`)).json().status).toBe('healthy');
   });
-  it('rolls back malformed incident creation and persists asset edits', async () => {
-    expect(
-      (
-        await app.inject({
-          method: 'POST',
-          url: '/api/alerts',
-          payload: { asset_id: assetId, severity: 'critical', message: 'x' },
-        })
-      ).statusCode,
-    ).toBe(400);
+  it('rejects invalid incidents without writing and persists asset edits', async () => {
+    const before = (await db.query('SELECT count(*)::int AS n FROM alerts')).rows[0].n;
+    const invalid = await app.inject({
+      method: 'POST',
+      url: '/api/alerts',
+      payload: { asset_id: assetId, severity: 'critical', message: 'x' },
+    });
+    expect(invalid.statusCode).toBe(400);
+    const missing = await app.inject({
+      method: 'POST',
+      url: '/api/alerts',
+      payload: {
+        asset_id: '20000000-0000-4000-8000-000000009999',
+        severity: 'critical',
+        message: 'Activo inexistente',
+      },
+    });
+    expect(missing.statusCode).toBe(404);
+    expect((await db.query('SELECT count(*)::int AS n FROM alerts')).rows[0].n).toBe(before);
     const renamed = await app.inject({
       method: 'PATCH',
       url: `/api/assets/${assetId}`,
