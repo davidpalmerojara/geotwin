@@ -29,3 +29,9 @@ export function generatedValue(
         : sensor.baseline * (1 + 0.12 * Math.sin(sequence * 0.37 + salt));
   return Math.round(value * 100) / 100;
 }
+const metricLabels: Record<Sensor['metric_type'], string> = {
+  temperature: 'Temperatura',
+  vibration: 'Vibración',
+  pressure: 'Presión',
+};
+export const metricLabel = (metric: Sensor['metric_type']) => metricLabels[metric];

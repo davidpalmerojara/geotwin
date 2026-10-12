@@ -5,6 +5,7 @@ import { createPool } from '../src/db/pool.js';
 import { migrate, seed } from '../src/db/migrate.js';
 import { buildApp } from '../src/app.js';
 import { TelemetryService } from '../src/modules/telemetry-service.js';
+import type { Database } from '../src/db/pool.js';
 import {
   assetSchema,
   alertSchema,
@@ -112,13 +113,88 @@ describe('Real API and PostgreSQL/PostGIS', () => {
       ).toHaveLength(0);
     expect((await app.inject('/api/assets?search=pump')).json()).toHaveLength(3);
   });
-  it('persists deterministic ticks and emits only after commit', async () => {
+  it('persists one deterministic reading per sensor and tick', async () => {
     const events: RealtimeEvent[] = [];
     const service = new TelemetryService(db, (e) => events.push(...e));
     await service.tick();
     expect(events.filter((e) => e.type === 'sensor:reading')).toHaveLength(36);
     const count = await db.query<{ count: string }>('SELECT count(*) FROM sensor_readings');
     expect(Number(count.rows[0]!.count)).toBe(2196);
+  });
+  it('publishes a tick only after COMMIT, so a subscriber already sees its rows', async () => {
+    const seen: Promise<number>[] = [];
+    const service = new TelemetryService(db, () => {
+      // Runs synchronously inside publish, on another connection (READ COMMITTED):
+      // it can only count the new readings if the transaction has already committed.
+      seen.push(
+        db
+          .query<{ n: number }>('SELECT count(*)::int AS n FROM sensor_readings')
+          .then((r) => r.rows[0]!.n),
+      );
+    });
+    await service.tick();
+    expect(seen).toHaveLength(1);
+    expect(await seen[0]).toBe(2196);
+  });
+  it('publishes nothing and keeps the sequence when the tick rolls back', async () => {
+    let published = 0;
+    const service = new TelemetryService(db, () => published++);
+    await db.query(`CREATE FUNCTION fail_reading() RETURNS trigger LANGUAGE plpgsql AS
+      $$BEGIN RAISE EXCEPTION 'forced failure'; END$$`);
+    await db.query(`CREATE TRIGGER fail_reading BEFORE INSERT ON sensor_readings
+      FOR EACH STATEMENT EXECUTE FUNCTION fail_reading()`);
+    try {
+      await expect(service.tick()).rejects.toThrow('forced failure');
+    } finally {
+      await db.query('DROP TRIGGER fail_reading ON sensor_readings');
+      await db.query('DROP FUNCTION fail_reading()');
+    }
+    expect(published).toBe(0);
+    expect((await db.query('SELECT sequence FROM telemetry_state')).rows[0].sequence).toBe('0');
+    expect((await db.query('SELECT count(*)::int AS n FROM sensor_readings')).rows[0].n).toBe(2160);
+  });
+  it('runs a tick with a fixed number of statements, not one batch per sensor', async () => {
+    let statements = 0;
+    const counting = Object.create(db) as Database;
+    counting.connect = (async () => {
+      const client = await db.connect();
+      const query = client.query;
+      const release = client.release;
+      client.query = ((...args: Parameters<typeof query>) => {
+        statements++;
+        return (query as (...a: unknown[]) => unknown).apply(client, args);
+      }) as typeof query;
+      client.release = (error?: Error | boolean) => {
+        client.query = query;
+        client.release = release;
+        return release.call(client, error);
+      };
+      return client;
+    }) as Database['connect'];
+    await new TelemetryService(counting, () => {}).tick();
+    // BEGIN, lock, sequence, overrides, sensors, readings, recoveries, statuses, COMMIT…
+    expect(statements).toBeLessThanOrEqual(12);
+  });
+  it('stamps readings after the lock is acquired, not at transaction start', async () => {
+    const holder = await db.connect();
+    let releasedAt: string;
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT 1 FROM telemetry_state FOR UPDATE');
+      const tick = new TelemetryService(db, () => {}).tick();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      releasedAt = (await holder.query('SELECT clock_timestamp()::text AS at')).rows[0].at;
+      await holder.query('COMMIT');
+      await tick;
+    } finally {
+      holder.release();
+    }
+    const earliest = await db.query<{ late: boolean }>(
+      `SELECT min(recorded_at) > $1::timestamptz AS late FROM sensor_readings
+      WHERE recorded_at > now() - interval '1 minute' AND recorded_at > date_trunc('minute', now())`,
+      [releasedAt],
+    );
+    expect(earliest.rows[0]!.late).toBe(true);
   });
   it('creates a failure, broadcasts it, deduplicates it, then resolves it durably', async () => {
     const address = app.server.address();
