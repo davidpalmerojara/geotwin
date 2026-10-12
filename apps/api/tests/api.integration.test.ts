@@ -248,6 +248,13 @@ describe('Real API and PostgreSQL/PostGIS', () => {
       'Pump inspected',
     );
   });
+  it('words not-found messages with the right grammatical gender', async () => {
+    const missing = '/api/alerts/00000000-0000-4000-8000-00000000ffff';
+    expect((await app.inject(missing)).json().error.message).toBe('Incidencia no encontrada');
+    expect(
+      (await app.inject('/api/assets/20000000-0000-4000-8000-000000009999')).json().error.message,
+    ).toBe('Activo no encontrado');
+  });
   it('does not expose the anomaly endpoint outside demo mode', async () => {
     const secure = await buildApp(db, { demo: false, simulator: false, logger: false });
     try {

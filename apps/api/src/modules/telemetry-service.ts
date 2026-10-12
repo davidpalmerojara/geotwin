@@ -137,7 +137,7 @@ export class TelemetryService {
     const result = await transaction(this.db, async (client) => {
       await this.lock(client);
       const alert = await this.repository.alert(alertId, client);
-      if (!alert) notFound('Incidencia');
+      if (!alert) notFound('Incidencia', 'f');
       const events: RealtimeEvent[] = [];
       if (alert.status === 'resolved') return { alert, events };
       await client.query("UPDATE alerts SET status='resolved',resolved_at=now() WHERE id=$1", [

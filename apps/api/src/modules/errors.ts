@@ -7,6 +7,6 @@ export class AppError extends Error {
     super(message);
   }
 }
-export function notFound(entity: string): never {
-  throw new AppError(404, 'NOT_FOUND', `${entity} no encontrado`);
+export function notFound(entity: string, gender: 'm' | 'f' = 'm'): never {
+  throw new AppError(404, 'NOT_FOUND', `${entity} no encontrad${gender === 'f' ? 'a' : 'o'}`);
 }

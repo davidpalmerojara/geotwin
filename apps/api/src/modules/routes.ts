@@ -156,7 +156,7 @@ export function registerRoutes(
   api.get(
     '/api/alerts/:id',
     { schema: { tags: ['Alerts'], params: idParams, response: { 200: alertSchema, ...errors } } },
-    async (req) => (await repository.alert(req.params.id)) ?? notFound('Incidencia'),
+    async (req) => (await repository.alert(req.params.id)) ?? notFound('Incidencia', 'f'),
   );
   api.post(
     '/api/alerts',
