@@ -289,6 +289,24 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     });
     expect(malformed.statusCode).toBe(400);
   });
+  it('returns the newest readings per asset in ascending time, per sensor when asked', async () => {
+    const all = (await app.inject(`/api/assets/${assetId}/readings?limit=5`)).json();
+    expect(all).toHaveLength(5);
+    const times = all.map((r: { recorded_at: string }) => r.recorded_at);
+    expect([...times].sort()).toEqual(times);
+    const one = (
+      await app.inject(`/api/assets/${assetId}/readings?limit=3&sensor_id=${sensorId}`)
+    ).json();
+    expect(one).toHaveLength(3);
+    expect(new Set(one.map((r: { sensor_id: string }) => r.sensor_id))).toEqual(
+      new Set([sensorId]),
+    );
+    const newest = await db.query<{ recorded_at: string }>(
+      'SELECT max(recorded_at) AS recorded_at FROM sensor_readings WHERE sensor_id=$1',
+      [sensorId],
+    );
+    expect(one.at(-1).recorded_at).toBe(newest.rows[0]!.recorded_at);
+  });
   it('does not expose the anomaly endpoint outside demo mode', async () => {
     const secure = await buildApp(db, { demo: false, simulator: false, logger: false });
     try {

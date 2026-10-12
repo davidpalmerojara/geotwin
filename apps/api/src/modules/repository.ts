@@ -73,13 +73,20 @@ export class Repository {
       )
     ).rows;
   }
+  // Top-N per sensor through the (sensor_id, recorded_at) index, then the newest N overall.
   async readings(assetId: string, limit: number, sensorId?: string) {
     return (
       await this.db.query<Reading>(
-        `SELECT * FROM (SELECT r.sensor_id,s.asset_id,s.metric_type,s.unit,r.value,r.recorded_at,r.simulated
-      FROM sensor_readings r JOIN sensors s ON s.id=r.sensor_id JOIN assets a ON a.id=s.asset_id
-      WHERE a.id=$1 AND a.organization_id=$2 AND ($4::uuid IS NULL OR s.id=$4)
-      ORDER BY r.recorded_at DESC,r.id DESC LIMIT $3) recent ORDER BY recorded_at ASC`,
+        `SELECT sensor_id,asset_id,metric_type,unit,value,recorded_at,simulated FROM (
+        SELECT s.id AS sensor_id,s.asset_id,s.metric_type,s.unit,r.value,r.recorded_at,r.simulated,r.id
+        FROM sensors s JOIN assets a ON a.id=s.asset_id
+        CROSS JOIN LATERAL (
+          SELECT id,value,recorded_at,simulated FROM sensor_readings
+          WHERE sensor_id=s.id ORDER BY recorded_at DESC LIMIT $3
+        ) r
+        WHERE a.id=$1 AND a.organization_id=$2 AND ($4::uuid IS NULL OR s.id=$4)
+        ORDER BY r.recorded_at DESC,r.id DESC LIMIT $3
+      ) recent ORDER BY recorded_at ASC,id ASC`,
         [assetId, ORGANIZATION_ID, limit, sensorId ?? null],
       )
     ).rows;
