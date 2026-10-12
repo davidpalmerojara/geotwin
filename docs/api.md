@@ -6,12 +6,13 @@ Swagger UI: `/api/docs/`. Contrato OpenAPI: `/api/openapi.json`. Las fechas se t
 | ------------------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
 | `GET /api/health`               | —                                                    | PostgreSQL real, versión PostGIS, modos demo/simulador |
 | `GET /api/dashboard/summary`    | `installation_id?` UUID                              | Conteos y tendencia de 30 min                          |
+| `GET /api/organization`         | —                                                    | Organización de la demo y su región (nombre de lugar)  |
 | `GET /api/installations`        | —                                                    | Instalaciones, coordenadas y número de activos         |
-| `GET /api/assets`               | `installation_id?`, `status?`, `search?`             | Lista de activos                                       |
+| `GET /api/assets`               | `installation_id?`, `status?`, `search?` (literal)   | Lista de activos                                       |
 | `GET /api/assets/nearby`        | `lat`, `lng`, `radius?`                              | Activos y `distance_m`, ordenados por distancia        |
 | `GET /api/assets/:id`           | UUID                                                 | Detalle del activo                                     |
-| `PATCH /api/assets/:id`         | `{ "name": "Pump 01 · Revisada" }`                   | Activo actualizado                                     |
-| `GET /api/assets/:id/readings`  | `sensor_id?`, `limit?`                               | Últimas lecturas, orden temporal ascendente            |
+| `PATCH /api/assets/:id`         | `{ "name": "Pump 01 · Revisada" }`                   | Activo actualizado; emite `asset:updated`              |
+| `GET /api/assets/:id/readings`  | `sensor_id?`, `limit?`                               | Últimas `limit` lecturas, orden temporal ascendente    |
 | `GET /api/sensors`              | `asset_id?`                                          | Sensores, umbrales y última lectura                    |
 | `GET /api/alerts`               | `asset_id?`, `installation_id?`, `status?`, `limit?` | Incidencias activas/resueltas                          |
 | `GET /api/alerts/:id`           | UUID                                                 | Detalle sincronizado de una incidencia                 |
@@ -20,7 +21,7 @@ Swagger UI: `/api/docs/`. Contrato OpenAPI: `/api/openapi.json`. Las fechas se t
 | `POST /api/demo/anomalies`      | `sensor_id`, `mode`                                  | Lectura inmediata e incidencia; 201; solo demo         |
 | `GET /api/docs`                 | —                                                    | Swagger UI (redirección a `/api/docs/`)                |
 
-`lat` [-90,90], `lng` [-180,180], `radius` (0,50000] metros, predeterminado 500. `limit` de lecturas [1,500], predeterminado 120, y de alertas [1,500], predeterminado 100. `name` 1–100 caracteres; mensaje manual 5–500. `mode`/`severity`: `warning` o `critical`. Estados de activo: `healthy`, `warning`, `critical`; de alerta: `active`, `resolved`.
+`lat` [-90,90], `lng` [-180,180], `radius` (0,50000] metros, predeterminado 500. `limit` de lecturas [1,500], predeterminado 120, y de alertas [1,500], predeterminado 100. `name` 1–100 caracteres; mensaje manual 5–500. `search` busca texto literal: `%` y `_` no son comodines. `mode`/`severity`: `warning` o `critical`. Estados de activo: `healthy`, `warning`, `critical`; de alerta: `active`, `resolved`.
 
 ## Ejemplo reproducible
 
@@ -35,7 +36,7 @@ Resolución no recibe cuerpo; no envíes `Content-Type: application/json` vacío
 
 ## Errores
 
-Validación devuelve 400, recurso inexistente 404, creación válida 201, lectura/actualización 200 y fallo interno 500. La ausencia del endpoint demo cuando está deshabilitado devuelve 404. WebSocket rechaza un Origin ajeno a la allowlist con 403. Los errores internos se registran con request ID y no exponen detalles SQL al cliente.
+Validación o JSON mal formado devuelve 400, recurso inexistente 404, cuerpo de más de 16 KB 413 (`PAYLOAD_TOO_LARGE`), tipo de contenido no admitido 415, creación válida 201, lectura/actualización 200 y fallo interno 500. Los demás errores 4xx de Fastify conservan su código. La ausencia del endpoint demo cuando está deshabilitado devuelve 404. WebSocket rechaza un Origin ajeno a la allowlist con 403. Los errores internos se registran con request ID y no exponen detalles SQL al cliente.
 
 ```json
 { "error": { "code": "NOT_FOUND", "message": "Activo no encontrado", "request_id": "req-12" } }
@@ -50,7 +51,8 @@ Mensaje JSON: `{ "type": "...", "data": { ... } }`, validado con `realtimeEventS
 | `sync:required`        | `connected_at`; se emite al conectar y pide sincronización REST        |
 | `sensor:reading`       | sensor, activo, métrica, unidad, valor, fecha, simulated               |
 | `asset:status_changed` | `asset_id`, `status`                                                   |
+| `asset:updated`        | Activo completo tras un cambio de nombre                               |
 | `alert:created`        | Alerta completa; también escalado warning → critical sobre el mismo ID |
-| `alert:resolved`       | Alerta completa, con `resolved_at`                                     |
+| `alert:resolved`       | Alerta completa, con `resolved_at` y `resolved_by`                     |
 
-Solo se publican cambios confirmados en PostgreSQL. Los eventos no sustituyen la fuente de verdad REST. No existe replay por cursor ni outbox en este MVP.
+Las alertas incluyen `resolved_by`: `operator` cuando alguien la resuelve y `auto_recovery` cuando una anomalía natural del simulador vuelve al rango normal. Solo se publican cambios confirmados en PostgreSQL. Los eventos no sustituyen la fuente de verdad REST. No existe replay por cursor ni outbox en este MVP.
