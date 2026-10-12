@@ -25,6 +25,7 @@ services:
       DEMO_MODE: ${DEMO_MODE:-true}
       SIMULATOR_ENABLED: ${SIMULATOR_ENABLED:-true}
       SIMULATOR_INTERVAL_MS: ${SIMULATOR_INTERVAL_MS:-5000}
+      READINGS_RETENTION_HOURS: ${READINGS_RETENTION_HOURS:-24}
       CORS_ORIGIN: http://localhost:8080,http://127.0.0.1:8080
     depends_on:
       db: { condition: service_healthy }
