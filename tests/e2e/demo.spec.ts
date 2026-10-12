@@ -32,9 +32,15 @@ test('dashboard → 3D twin → persisted anomaly → resolved incident', async 
   // Exercise the real offline layer control; external imagery is not needed for the business flow.
   await page.getByRole('button', { name: 'Alternar cartografía', exact: true }).click();
   await expect(page.locator('.map-top')).toContainText('Local');
+  // Tag the WebGL canvas: if the viewer were rebuilt, the new canvas would not carry it.
+  await page.locator('.cesium-widget canvas').evaluate((canvas) => {
+    canvas.dataset.probe = 'same-viewer';
+  });
   await page
     .getByLabel('Seleccionar instalación')
     .selectOption('10000000-0000-4000-8000-000000000001');
+  await expect(page.locator('.cesium-widget canvas')).toHaveAttribute('data-probe', 'same-viewer');
+  await expect(page.locator('.map-top')).toContainText('Local');
   await page.getByTestId(`map-asset-${assetId}`).click();
   await expect(page.getByRole('heading', { name: 'Sensores del activo' })).toBeVisible();
   await page.getByRole('button', { name: 'Simular fallo', exact: true }).click();

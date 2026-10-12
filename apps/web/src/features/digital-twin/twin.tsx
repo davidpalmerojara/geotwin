@@ -7,7 +7,11 @@ import { AssetDetail } from '../assets/asset-detail';
 import { Button } from '../../components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
+import type { Asset, Installation } from '@geotwin/shared';
 const CesiumView = lazy(() => import('./cesium-view'));
+// Stable empty arrays so the viewer's effects do not re-run on every render while loading.
+const noAssets: Asset[] = [];
+const noInstallations: Installation[] = [];
 export function Twin() {
   const assets = useAssets(),
     installations = useInstallations();
@@ -30,17 +34,9 @@ export function Twin() {
   const visible = (assets.data ?? []).filter((a) =>
     a.name.toLowerCase().includes(search.toLowerCase()),
   );
-  if (assets.isPending || installations.isPending) return <Loading />;
-  if (assets.isError || installations.isError)
-    return (
-      <ErrorState
-        error={assets.error ?? installations.error}
-        retry={() => {
-          void assets.refetch();
-          void installations.refetch();
-        }}
-      />
-    );
+  // The viewer is never gated on query state: unmounting it would destroy the WebGL
+  // context, the chosen base layer, ion terrain/buildings and the camera.
+  const failed = assets.isError || installations.isError;
   return (
     <div className="twin-layout">
       <div className="twin-main">
@@ -48,7 +44,7 @@ export function Twin() {
           <div>
             <span className="eyebrow">DIGITAL TWIN</span>
             <h1>
-              Explora la red <span>{assets.data.length} activos</span>
+              Explora la red <span>{assets.data?.length ?? '—'} activos</span>
             </h1>
           </div>
           <label className="search-box">
@@ -61,10 +57,19 @@ export function Twin() {
             />
           </label>
         </div>
+        {failed && (
+          <ErrorState
+            error={assets.error ?? installations.error}
+            retry={() => {
+              void assets.refetch();
+              void installations.refetch();
+            }}
+          />
+        )}
         <Suspense fallback={<Loading label="Inicializando motor geoespacial…" />}>
           <CesiumView
-            assets={assets.data}
-            installations={installations.data}
+            assets={assets.data ?? noAssets}
+            installations={installations.data ?? noInstallations}
             installationId={installationId}
             selectedId={selected}
             onSelect={select}
@@ -72,7 +77,9 @@ export function Twin() {
           />
         </Suspense>
         <div className="map-asset-strip">
-          {visible.length ? (
+          {assets.isPending ? (
+            <Loading />
+          ) : visible.length ? (
             visible.map((a) => (
               <button
                 data-testid={`map-asset-${a.id}`}
