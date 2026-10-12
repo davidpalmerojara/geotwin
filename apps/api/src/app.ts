@@ -71,7 +71,7 @@ export async function buildApp(
     openapi: {
       info: {
         title: 'GeoTwin Cloud API',
-        version: '1.0.0',
+        version: '0.1.0',
         description: 'Single organization infrastructure demo. Operational data are simulated.',
       },
     },

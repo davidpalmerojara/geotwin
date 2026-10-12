@@ -1,6 +1,6 @@
 {
   "name": "@geotwin/web",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@geotwin/shared": "1.0.0",
+    "@geotwin/shared": "0.1.0",
     "@radix-ui/react-dialog": "^1.1.0",
     "@radix-ui/react-slot": "^1.2.0",
     "@tanstack/react-query": "^5.90.0",
