@@ -1,0 +1,32 @@
+import type { Asset } from '@geotwin/shared';
+/** Spanish count with singular/plural noun: "1 sensor activo", "3 sensores activos". */
+export function count(n: number, singular: string, plural: string) {
+  return `${n} ${n === 1 ? singular : plural}`;
+}
+/** Hemisphere-aware coordinates: 41.65523° N, 4.73700° O (Spanish uses O for oeste). */
+export function coordinates(lat: number, lng: number, digits = 5) {
+  const ns = lat >= 0 ? 'N' : 'S';
+  const ew = lng >= 0 ? 'E' : 'O';
+  return `${Math.abs(lat).toFixed(digits)}° ${ns}, ${Math.abs(lng).toFixed(digits)}° ${ew}`;
+}
+export const assetTypeLabel: Record<Asset['type'], string> = {
+  pump: 'Bomba',
+  transformer: 'Transformador',
+  reservoir: 'Depósito',
+  gateway: 'Pasarela de datos',
+  valve: 'Válvula',
+  turbine: 'Turbina',
+};
+export const metricLabel = (metric: string) =>
+  metric === 'temperature'
+    ? 'Temperatura'
+    : metric === 'vibration'
+      ? 'Vibración'
+      : metric === 'pressure'
+        ? 'Presión'
+        : metric;
+/** Two-letter initials for an organization badge. */
+export function initials(name: string) {
+  const words = name.split(/\s+/).filter(Boolean);
+  return ((words[0]?.[0] ?? '') + (words[1]?.[0] ?? '')).toUpperCase() || '—';
+}

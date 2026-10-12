@@ -37,6 +37,7 @@ import { Crosshair, Layers, Mountain, Plus, Minus } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { loadIonEnvironment } from './ion-environment';
 import { fitDistance, frameOf, type LatLng } from './camera';
+import { coordinates } from '../../lib/format';
 function pnoaProvider() {
   const provider = new WebMapTileServiceImageryProvider({
     url: 'https://www.ign.es/wmts/pnoa-ma',
@@ -82,6 +83,7 @@ interface Props {
   assets: Asset[];
   installations: Installation[];
   installationId: string;
+  region: string;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onInstallation: (id: string) => void;
@@ -90,6 +92,7 @@ export default function CesiumView({
   assets,
   installations,
   installationId,
+  region,
   selectedId,
   onSelect,
   onInstallation,
@@ -295,6 +298,8 @@ export default function CesiumView({
     })(),
   );
   const framePoints = useMemo(() => JSON.parse(frameKey) as LatLng[], [frameKey]);
+  const placeCenter = useMemo(() => frameOf(framePoints)?.center, [framePoints]);
+  const place = installations.find((i) => i.id === installationId)?.name ?? region;
   useEffect(() => {
     selectedRef.current = selectedId;
   }, [selectedId]);
@@ -428,7 +433,8 @@ export default function CesiumView({
       <div className="map-top">
         <span className="map-tag">
           <span className="tiny-dot" />
-          VALLADOLID, ESPAÑA <b>41.6523° N / 4.7245° W</b>
+          {place.toUpperCase()}
+          {placeCenter && <b>{coordinates(placeCenter.lat, placeCenter.lng, 4)}</b>}
         </span>
         <span className="map-tag">
           {token ? 'ION READY' : 'BASIC MODE'} · {base} ·{' '}

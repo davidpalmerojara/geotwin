@@ -4,6 +4,7 @@ import { useAssets, useInstallations } from '../../hooks/data';
 import { useUI } from '../../stores/ui';
 import { Status, Loading, ErrorState, Empty, SectionHeading } from '../../components/common';
 import { Button } from '../../components/ui/button';
+import { assetTypeLabel, count } from '../../lib/format';
 export function Assets() {
   const assets = useAssets(),
     installations = useInstallations(),
@@ -42,7 +43,9 @@ export function Assets() {
             <option value="warning">Advertencia</option>
             <option value="critical">Crítico</option>
           </select>
-          <span className="text-xs text-slate-400">{visible?.length ?? '—'} activos</span>
+          <span className="text-xs text-slate-400">
+            {visible ? count(visible.length, 'activo', 'activos') : '—'}
+          </span>
         </div>
         {assets.isPending ? (
           <Loading />
@@ -71,7 +74,7 @@ export function Assets() {
                         <div>
                           <strong>{a.name}</strong>
                           <small>
-                            {a.type} · #{a.id.slice(-4)}
+                            {assetTypeLabel[a.type]} · #{a.id.slice(-4)}
                           </small>
                         </div>
                       </div>

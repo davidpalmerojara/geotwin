@@ -13,6 +13,8 @@ export const useAssets = () => {
 };
 export const useInstallations = () =>
   useQuery({ queryKey: ['geo', 'installations'], queryFn: api.installations, staleTime: 60000 });
+export const useOrganization = () =>
+  useQuery({ queryKey: ['geo', 'organization'], queryFn: api.organization, staleTime: 300000 });
 export const useSummary = () => {
   const id = useUI((s) => s.installationId);
   return useQuery({

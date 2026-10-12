@@ -1,11 +1,12 @@
 // Capability labels reflect the running API configuration.
 import { Database, Globe, Radio, ExternalLink, Lock } from 'lucide-react';
-import { useHealth } from '../hooks/data';
+import { useHealth, useOrganization } from '../hooks/data';
 import { useUI } from '../stores/ui';
 import { SectionHeading, ErrorState, Loading } from '../components/common';
 import { Button } from '../components/ui/button';
 export function Settings() {
   const health = useHealth(),
+    organization = useOrganization().data,
     connection = useUI((s) => s.connection);
   return (
     <div className="page">
@@ -62,7 +63,7 @@ export function Settings() {
           <section className="panel settings-card">
             <Lock size={24} />
             <h2>Organización única</h2>
-            <p>Valladolid Infrastructure Lab · Entorno de demostración local.</p>
+            <p>{organization?.name ?? '—'} · Entorno de demostración local.</p>
             <p>
               Este MVP no incluye autenticación ni aislamiento multiempresa. Añadir OIDC,
               autorización y políticas de acceso antes de exponerlo públicamente.

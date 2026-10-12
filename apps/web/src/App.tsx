@@ -14,7 +14,8 @@ import {
   WifiOff,
 } from 'lucide-react';
 import { useUI, type Page } from './stores/ui';
-import { useInstallations, useSummary } from './hooks/data';
+import { useInstallations, useOrganization, useSummary } from './hooks/data';
+import { count, initials } from './lib/format';
 import { useRealtime } from './hooks/realtime';
 import { Dashboard } from './features/dashboard/dashboard';
 import { Twin } from './features/digital-twin/twin';
@@ -36,7 +37,8 @@ export default function App() {
     installationId = useUI((s) => s.installationId),
     setInstallation = useUI((s) => s.setInstallation);
   const installations = useInstallations(),
-    summary = useSummary();
+    summary = useSummary(),
+    organization = useOrganization().data;
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -61,7 +63,8 @@ export default function App() {
         <div className="workspace-card">
           <Globe2 size={18} />
           <div>
-            Valladolid Network<small>Infrastructure Lab</small>
+            {organization?.region ?? '—'}
+            <small>{organization?.name ?? 'Cargando…'}</small>
           </div>
           <ChevronDown size={14} />
         </div>
@@ -101,9 +104,10 @@ export default function App() {
             </span>
           </div>
           <div className="profile">
-            <div>VL</div>
+            <div>{initials(organization?.name ?? '')}</div>
             <span>
-              Valladolid Lab<small>Organización de demostración</small>
+              {organization?.name ?? '—'}
+              <small>Organización de demostración</small>
             </span>
           </div>
         </div>
@@ -113,7 +117,7 @@ export default function App() {
           <div className="breadcrumb">
             Workspace
             <ChevronDown size={12} />
-            <strong>Valladolid Network</strong>
+            <strong>{organization?.name ?? '—'}</strong>
             <span className="demo-badge">DEMO</span>
           </div>
           <div className="topbar-right">
@@ -129,7 +133,9 @@ export default function App() {
             </span>
             <span className="sensor-count">
               <Activity size={14} />
-              {summary.data?.active_sensors ?? '—'} sensores activos
+              {summary.data
+                ? count(summary.data.active_sensors, 'sensor activo', 'sensores activos')
+                : '— sensores activos'}
             </span>
             <label className="installation-select">
               <select

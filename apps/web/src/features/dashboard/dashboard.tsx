@@ -9,7 +9,14 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { useAssets, useSummary, useAlerts, useInstallations } from '../../hooks/data';
+import {
+  useAssets,
+  useSummary,
+  useAlerts,
+  useInstallations,
+  useOrganization,
+} from '../../hooks/data';
+import { assetTypeLabel, coordinates, count } from '../../lib/format';
 import { Loading, ErrorState, SectionHeading, Status, Empty } from '../../components/common';
 import { useUI } from '../../stores/ui';
 import { Button } from '../../components/ui/button';
@@ -18,7 +25,8 @@ export function Dashboard() {
   const summary = useSummary(),
     assets = useAssets(),
     alerts = useAlerts(undefined, 'active'),
-    installations = useInstallations();
+    installations = useInstallations(),
+    region = useOrganization().data?.region;
   const setPage = useUI((s) => s.setPage),
     selectAsset = useUI((s) => s.selectAsset),
     setInstallation = useUI((s) => s.setInstallation);
@@ -30,7 +38,7 @@ export function Dashboard() {
     {
       label: 'Activos monitorizados',
       value: d.total_assets,
-      sub: `${d.installations} instalaciones conectadas`,
+      sub: count(d.installations, 'instalación conectada', 'instalaciones conectadas'),
       icon: Box,
       color: 'cyan',
     },
@@ -59,7 +67,7 @@ export function Dashboard() {
   return (
     <div className="page dashboard">
       <SectionHeading
-        eyebrow="OPERATIONS / VALLADOLID"
+        eyebrow={`OPERACIONES${region ? ` / ${region.split(',')[0]!.toUpperCase()}` : ''}`}
         title="Tu infraestructura. En perspectiva."
         description="Una visión compartida de cada activo, lectura e incidencia."
       >
@@ -180,9 +188,13 @@ export function Dashboard() {
           <div className="panel-heading">
             <div>
               <h2>Instalaciones</h2>
-              <p>Red de demostración · Valladolid, ES</p>
+              <p>Red de demostración{region ? ` · ${region}` : ''}</p>
             </div>
-            <span className="pill">{installations.data?.length ?? '—'} hubs</span>
+            <span className="pill">
+              {installations.data
+                ? count(installations.data.length, 'instalación', 'instalaciones')
+                : '—'}
+            </span>
           </div>
           {installations.isError ? (
             <ErrorState error={installations.error} />
@@ -200,7 +212,8 @@ export function Dashboard() {
                 <div>
                   <strong>{i.name}</strong>
                   <p>
-                    {i.asset_count} activos · {i.location.lat.toFixed(4)}° N
+                    {count(i.asset_count, 'activo', 'activos')} ·{' '}
+                    {coordinates(i.location.lat, i.location.lng, 4)}
                   </p>
                 </div>
                 <ArrowUpRight size={16} />
@@ -241,7 +254,7 @@ export function Dashboard() {
                 <div>
                   <strong>{a.name}</strong>
                   <p>
-                    {a.type} · {a.id.slice(-4)}
+                    {assetTypeLabel[a.type]} · {a.id.slice(-4)}
                   </p>
                 </div>
                 <Status status={a.status} />

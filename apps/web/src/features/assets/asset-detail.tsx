@@ -22,7 +22,8 @@ import {
 } from 'recharts';
 import { api } from '../../lib/api';
 import { time, date } from '../../lib/utils';
-import { useAlerts, useHealth, useSync } from '../../hooks/data';
+import { useAlerts, useHealth, useInstallations, useSync } from '../../hooks/data';
+import { assetTypeLabel, coordinates, metricLabel } from '../../lib/format';
 import { Status, Loading, ErrorState, Empty } from '../../components/common';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../components/ui/dialog';
@@ -134,6 +135,7 @@ function AssetInspector({ id }: { id: string }) {
   const sensors = useQuery({ queryKey: ['geo', 'sensors', id], queryFn: () => api.sensors(id) });
   const alerts = useAlerts(id, 'active'),
     health = useHealth(),
+    installations = useInstallations(),
     sync = useSync();
   const [sensorId, setSensorId] = useState(''),
     [incident, setIncident] = useState<Alert | null>(null),
@@ -169,6 +171,7 @@ function AssetInspector({ id }: { id: string }) {
       </aside>
     );
   const a = asset.data;
+  const installation = installations.data?.find((i) => i.id === a.installation_id);
   return (
     <aside className="detail-panel">
       <div className="detail-heading">
@@ -181,7 +184,10 @@ function AssetInspector({ id }: { id: string }) {
         </div>
         <div>
           <h2>{a.name}</h2>
-          <p>{a.type} · Valladolid</p>
+          <p>
+            {assetTypeLabel[a.type]}
+            {installation ? ` · ${installation.name}` : ''}
+          </p>
         </div>
         <Button
           aria-label="Editar activo"
@@ -198,7 +204,7 @@ function AssetInspector({ id }: { id: string }) {
       <Status status={a.status} />
       <div className="coordinates">
         <MapPin size={13} />
-        {a.location.lat.toFixed(5)}° N, {Math.abs(a.location.lng).toFixed(5)}° W
+        {coordinates(a.location.lat, a.location.lng)}
       </div>
       <div className="detail-section">
         <div className="detail-section-title">
@@ -221,13 +227,7 @@ function AssetInspector({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <span>
-                    {s.metric_type === 'temperature'
-                      ? 'Temperatura'
-                      : s.metric_type === 'vibration'
-                        ? 'Vibración'
-                        : 'Presión'}
-                  </span>
+                  <span>{metricLabel(s.metric_type)}</span>
                   <small>{s.latest_at ? time(s.latest_at) : 'Sin lectura'}</small>
                 </div>
                 <strong>

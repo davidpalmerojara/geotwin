@@ -1,6 +1,8 @@
 import { lazy, Suspense, useState } from 'react';
 import { Search, Box, MapPin, LocateFixed } from 'lucide-react';
-import { useAssets, useInstallations } from '../../hooks/data';
+import { useAssets, useInstallations, useOrganization } from '../../hooks/data';
+import { count } from '../../lib/format';
+import { frameOf } from './camera';
 import { useUI } from '../../stores/ui';
 import { Loading, ErrorState, Status, Empty } from '../../components/common';
 import { AssetDetail } from '../assets/asset-detail';
@@ -27,10 +29,11 @@ export function Twin() {
     queryFn: () => api.nearby(proximity!.lat, proximity!.lng, proximity!.radius),
     enabled: !!proximity,
   });
-  const center = installations.data?.find((i) => i.id === installationId)?.location ?? {
-    lat: 41.655,
-    lng: -4.737,
-  };
+  const region = useOrganization().data?.region ?? '';
+  const installation = installations.data?.find((i) => i.id === installationId);
+  // Proximity centre: the selected installation, or the middle of the whole network.
+  const center =
+    installation?.location ?? frameOf((installations.data ?? []).map((i) => i.location))?.center;
   const visible = (assets.data ?? []).filter((a) =>
     a.name.toLowerCase().includes(search.toLowerCase()),
   );
@@ -44,7 +47,8 @@ export function Twin() {
           <div>
             <span className="eyebrow">DIGITAL TWIN</span>
             <h1>
-              Explora la red <span>{assets.data?.length ?? '—'} activos</span>
+              Explora la red{' '}
+              <span>{assets.data ? count(assets.data.length, 'activo', 'activos') : '—'}</span>
             </h1>
           </div>
           <label className="search-box">
@@ -71,6 +75,7 @@ export function Twin() {
             assets={assets.data ?? noAssets}
             installations={installations.data ?? noInstallations}
             installationId={installationId}
+            region={region}
             selectedId={selected}
             onSelect={select}
             onInstallation={setInstallation}
@@ -100,7 +105,9 @@ export function Twin() {
           <div>
             <LocateFixed size={18} className="text-cyan-400" />
             <strong>Consulta espacial</strong>
-            <span>ST_DWithin · PostGIS · centro de instalación</span>
+            <span>
+              ST_DWithin · PostGIS · {installation ? 'centro de instalación' : 'centro de la red'}
+            </span>
           </div>
           <label>
             Radio{' '}
@@ -114,7 +121,12 @@ export function Twin() {
               <option value={5000}>5 km</option>
             </select>
           </label>
-          <Button size="sm" variant="outline" onClick={() => setProximity({ ...center, radius })}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!center}
+            onClick={() => center && setProximity({ ...center, radius })}
+          >
             Buscar cercanos
           </Button>
         </section>
@@ -128,7 +140,8 @@ export function Twin() {
               <>
                 <span>
                   <MapPin size={13} />
-                  {nearby.data.length} activos en {proximity.radius} m (toda la red)
+                  {count(nearby.data.length, 'activo', 'activos')} en {proximity.radius} m (toda la
+                  red)
                 </span>
                 {nearby.data.map((a) => (
                   <button

@@ -7,6 +7,7 @@ import {
   alertSchema,
   summarySchema,
   healthSchema,
+  organizationSchema,
 } from '@geotwin/shared';
 export function queryString(values: Record<string, string | number | undefined>) {
   const params = new URLSearchParams();
@@ -69,6 +70,7 @@ export const api = {
       `/assets/${id}/readings${queryString({ sensor_id, limit: 120 })}`,
       z.array(readingSchema),
     ),
+  organization: () => request('/organization', organizationSchema),
   alerts: (filters: { asset_id?: string; installation_id?: string; status?: string } = {}) =>
     request(`/alerts${queryString(filters)}`, z.array(alertSchema)),
   alert: (id: string) => request(`/alerts/${id}`, alertSchema),
