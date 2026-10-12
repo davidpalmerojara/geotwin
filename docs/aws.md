@@ -1,4 +1,6 @@
-# Preparación AWS (sin despliegue)
+# Plan de despliegue en AWS (no ejecutado)
+
+> Este documento es un plan. No se ha desplegado nada en AWS ni se ha usado una cuenta AWS para este proyecto.
 
 Se incluye `infra/aws/task-definition.example.json` como punto de partida, con placeholders; no se ha creado infraestructura ni probado una cuenta AWS. Las imágenes Docker de API y web son los artefactos de ejecución. No hay claves AWS en el repositorio.
 
