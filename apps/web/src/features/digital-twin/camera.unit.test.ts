@@ -17,7 +17,7 @@ describe('Camera framing', () => {
     expect(frame.radius).toBeLessThan(3500);
   });
   it('keeps a minimum radius for a single point and nothing for no points', () => {
-    expect(frameOf([pisuerga])).toEqual({ center: pisuerga, radius: 400 });
+    expect(frameOf([pisuerga])).toEqual({ center: pisuerga, radius: 450 });
     expect(frameOf([])).toBeUndefined();
   });
   it('backs off further on a portrait phone than on a landscape desktop', () => {

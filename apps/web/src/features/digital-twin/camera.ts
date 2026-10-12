@@ -18,7 +18,7 @@ export function distanceM(a: LatLng, b: LatLng) {
  * Centre and radius (metres) of a circle that contains every point, padded so that
  * markers, labels and installation areas near the edge stay inside the view.
  */
-export function frameOf(points: LatLng[], paddingM = 250, minRadiusM = 400) {
+export function frameOf(points: LatLng[], paddingM = 450, minRadiusM = 450) {
   if (!points.length) return undefined;
   const lats = points.map((p) => p.lat);
   const lngs = points.map((p) => p.lng);
