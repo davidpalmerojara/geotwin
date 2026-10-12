@@ -11,7 +11,7 @@ export function Settings() {
   return (
     <div className="page">
       <SectionHeading
-        eyebrow="WORKSPACE / SETTINGS"
+        eyebrow="ESPACIO DE TRABAJO / AJUSTES"
         title="Transparencia operativa"
         description="Configuración real del entorno y alcance de esta demostración."
       />

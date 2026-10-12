@@ -45,7 +45,7 @@ export function Twin() {
       <div className="twin-main">
         <div className="twin-toolbar">
           <div>
-            <span className="eyebrow">DIGITAL TWIN</span>
+            <span className="eyebrow">GEMELO DIGITAL</span>
             <h1>
               Explora la red{' '}
               <span>{assets.data ? count(assets.data.length, 'activo', 'activos') : '—'}</span>

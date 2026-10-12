@@ -115,7 +115,7 @@ export function AssetDetail({ id }: { id: string | null }) {
         <div className="empty-orbit">
           <Box size={32} />
         </div>
-        <span className="eyebrow">ASSET INSPECTOR</span>
+        <span className="eyebrow">INSPECTOR DE ACTIVOS</span>
         <h2>Cada activo cuenta una historia.</h2>
         <p>
           Selecciona un marcador o un activo para consultar sus sensores, histórico e incidencias.
@@ -175,7 +175,7 @@ function AssetInspector({ id }: { id: string }) {
   return (
     <aside className="detail-panel">
       <div className="detail-heading">
-        <span className="eyebrow">ASSET INSPECTOR</span>
+        <span className="eyebrow">INSPECTOR DE ACTIVOS</span>
         <span className="pill">#{a.id.slice(-4)}</span>
       </div>
       <div className="asset-hero">

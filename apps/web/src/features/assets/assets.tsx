@@ -18,7 +18,7 @@ export function Assets() {
   return (
     <div className="page">
       <SectionHeading
-        eyebrow="INVENTORY / ASSETS"
+        eyebrow="INVENTARIO / ACTIVOS"
         title="El inventario de tu red"
         description="Activos geolocalizados y estados operativos compartidos con el gemelo digital."
       />

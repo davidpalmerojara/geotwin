@@ -32,7 +32,7 @@ export function Alerts() {
   return (
     <div className="page">
       <SectionHeading
-        eyebrow="INCIDENT MANAGEMENT"
+        eyebrow="GESTIÓN DE INCIDENCIAS"
         title="Cada señal, una acción"
         description="Detecta anomalías, registra incidencias y conserva un historial auditable."
       >
@@ -71,7 +71,7 @@ export function Alerts() {
           <Empty
             text={
               status === 'active'
-                ? 'No hay incidencias activas. Puedes simular una desde Digital Twin.'
+                ? 'No hay incidencias activas. Puedes simular una desde el gemelo digital.'
                 : 'No hay incidencias resueltas todavía.'
             }
           />

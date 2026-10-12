@@ -72,7 +72,7 @@ export function Dashboard() {
         description="Una visión compartida de cada activo, lectura e incidencia."
       >
         <Button onClick={() => setPage('twin')}>
-          Abrir Digital Twin
+          Abrir gemelo digital
           <ArrowUpRight size={16} />
         </Button>
       </SectionHeading>
@@ -100,7 +100,7 @@ export function Dashboard() {
             </div>
             <span className="live-label">
               <Activity size={13} />
-              LIVE
+              EN DIRECTO
             </span>
           </div>
           <div className="chart-legend">

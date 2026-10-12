@@ -437,7 +437,7 @@ export default function CesiumView({
           {placeCenter && <b>{coordinates(placeCenter.lat, placeCenter.lng, 4)}</b>}
         </span>
         <span className="map-tag">
-          {token ? 'ION READY' : 'BASIC MODE'} · {base} ·{' '}
+          {token ? 'ION LISTO' : 'MODO BÁSICO'} · {base} ·{' '}
           {terrain === 'world' ? 'RELIEVE 3D' : 'GLOBO BÁSICO'}
         </span>
       </div>

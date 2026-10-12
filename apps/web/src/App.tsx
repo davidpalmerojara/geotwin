@@ -54,11 +54,11 @@ export default function App() {
             <Layers3 size={23} />
           </div>
           <div>
-            GeoTwin<span>CLOUD PLATFORM</span>
+            GeoTwin<span>GEMELO DIGITAL</span>
           </div>
         </a>
         <div className="workspace-label">
-          WORKSPACE <span>DEMO</span>
+          ESPACIO DE TRABAJO <span>DEMO</span>
         </div>
         <div className="workspace-card">
           <Globe2 size={18} />
@@ -68,7 +68,7 @@ export default function App() {
           </div>
           <ChevronDown size={14} />
         </div>
-        <div className="nav-label">PLATFORM</div>
+        <div className="nav-label">NAVEGACIÓN</div>
         <nav>
           {nav.map(([id, label, Icon]) => (
             <button
@@ -91,7 +91,7 @@ export default function App() {
           <div className="engine-card">
             <div>
               <Cloud size={17} />
-              Connected infrastructure
+              Infraestructura conectada
             </div>
             <p>
               Visibilidad espacial.
@@ -100,7 +100,7 @@ export default function App() {
             </p>
             <span>
               <Database size={12} />
-              Powered by PostGIS
+              Datos espaciales en PostGIS
             </span>
           </div>
           <div className="profile">
@@ -115,7 +115,7 @@ export default function App() {
       <div className="workspace">
         <header className="topbar">
           <div className="breadcrumb">
-            Workspace
+            Espacio de trabajo
             <ChevronDown size={12} />
             <strong>{organization?.name ?? '—'}</strong>
             <span className="demo-badge">DEMO</span>
@@ -186,7 +186,7 @@ export default function App() {
             DEMO · Instalaciones ficticias en coordenadas reales · Telemetría simulada
           </span>
           <a href="/api/docs" target="_blank" rel="noreferrer">
-            API documentation
+            Documentación de la API
             <ArrowUpRight size={12} />
           </a>
         </footer>
