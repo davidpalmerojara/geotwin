@@ -236,6 +236,16 @@ describe('Real API and PostgreSQL/PostGIS', () => {
       { status: 'healthy', n: 17 },
     ]);
   });
+  it('prunes readings older than the retention window and keeps recent ones', async () => {
+    await db.query(
+      `INSERT INTO sensor_readings(sensor_id,value,recorded_at)
+      SELECT id, baseline, now() - interval '25 hours' FROM sensors`,
+    );
+    const service = new TelemetryService(db, () => {});
+    expect(await service.pruneReadings(24)).toBe(36);
+    expect((await db.query('SELECT count(*)::int AS n FROM sensor_readings')).rows[0].n).toBe(2160);
+    expect(await service.pruneReadings(24)).toBe(0);
+  });
   it('creates a failure, broadcasts it, deduplicates it, then resolves it durably', async () => {
     const address = app.server.address();
     if (!address || typeof address === 'string') throw new Error('No listening port');

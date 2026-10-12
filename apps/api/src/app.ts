@@ -14,7 +14,7 @@ import { RealtimeHub } from './realtime/hub.js';
 import { TelemetryService } from './modules/telemetry-service.js';
 import { registerRoutes } from './modules/routes.js';
 import { AppError } from './modules/errors.js';
-import { startSimulator } from './simulator/runner.js';
+import { startRetention, startSimulator } from './simulator/runner.js';
 // Client errors keep their 4xx status (413, 415…); anything unexpected becomes a generic 500.
 export function errorStatus(error: unknown): number {
   if (error instanceof AppError) return error.statusCode;
@@ -33,7 +33,12 @@ function errorCode(error: unknown, status: number) {
 }
 export async function buildApp(
   db: Database,
-  options: { demo?: boolean; simulator?: boolean; logger?: boolean } = {},
+  options: {
+    demo?: boolean;
+    simulator?: boolean;
+    logger?: boolean;
+    retentionHours?: number;
+  } = {},
 ) {
   const app = Fastify({ logger: options.logger ?? true, bodyLimit: 16384, requestTimeout: 15000 });
   app.setValidatorCompiler(validatorCompiler);
@@ -96,12 +101,16 @@ export async function buildApp(
   const simulator = options.simulator ?? env.SIMULATOR_ENABLED;
   registerRoutes(app, db, telemetry, demo, simulator);
   await app.register(swaggerUI, { routePrefix: '/api/docs' });
+  const retentionHours = options.retentionHours ?? env.READINGS_RETENTION_HOURS;
   let stop: (() => Promise<void>) | undefined;
+  let stopRetention: (() => Promise<void>) | undefined;
   app.addHook('onReady', async () => {
     if (simulator) stop = startSimulator(telemetry, env.SIMULATOR_INTERVAL_MS, app.log);
+    if (retentionHours > 0) stopRetention = startRetention(telemetry, retentionHours, app.log);
   });
   app.addHook('preClose', async () => {
     await stop?.();
+    await stopRetention?.();
     hub.close();
   });
   return app;

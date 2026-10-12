@@ -246,6 +246,23 @@ export class TelemetryService {
     this.publish(result.events);
     return result.alert;
   }
+  /**
+   * Retention for the simulated history. Deletes per sensor through the
+   * (sensor_id, recorded_at) index, in bounded batches, outside the telemetry lock.
+   */
+  async pruneReadings(retentionHours: number, batchPerSensor = 2000) {
+    const result = await this.db.query(
+      `DELETE FROM sensor_readings WHERE id IN (
+        SELECT old.id FROM sensors s CROSS JOIN LATERAL (
+          SELECT id FROM sensor_readings
+          WHERE sensor_id=s.id AND recorded_at < now() - make_interval(hours => $1::int)
+          ORDER BY recorded_at LIMIT $2
+        ) old
+      )`,
+      [retentionHours, batchPerSensor],
+    );
+    return result.rowCount ?? 0;
+  }
 }
 export function alertMessage(
   sensor: Pick<Sensor, 'metric_type' | 'unit' | 'warning_threshold' | 'critical_threshold'>,

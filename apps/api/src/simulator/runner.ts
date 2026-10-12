@@ -26,3 +26,31 @@ export function startSimulator(
     await inFlight;
   };
 }
+// Deletes readings older than the retention window once at start and then every 10 minutes.
+export function startRetention(
+  service: TelemetryService,
+  retentionHours: number,
+  logger: FastifyBaseLogger,
+  everyMs = 600000,
+) {
+  let inFlight: Promise<void> | undefined;
+  const run = () => {
+    if (inFlight) return;
+    inFlight = service
+      .pruneReadings(retentionHours)
+      .then((deleted) => {
+        if (deleted) logger.info({ deleted, retentionHours }, 'Old readings pruned');
+      })
+      .catch((error) => logger.error({ err: error }, 'Readings retention failed'))
+      .finally(() => {
+        inFlight = undefined;
+      });
+  };
+  run();
+  const timer = setInterval(run, everyMs);
+  timer.unref();
+  return async () => {
+    clearInterval(timer);
+    await inFlight;
+  };
+}
