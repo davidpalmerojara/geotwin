@@ -26,8 +26,9 @@ SELECT ('30000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,
  CASE WHEN n%2=1 THEN 42 ELSE 2.4 END
 FROM generate_series(1,36) n ON CONFLICT DO NOTHING;
 -- Add a deterministic 30-minute history only to sensors without readings. Never overwrite operational data.
+-- The phase is the last four hex digits of the sensor UUID, as in apps/api/src/simulator/domain.ts.
 INSERT INTO sensor_readings(sensor_id,value,recorded_at)
-SELECT s.id,round((s.baseline*(1+0.12*sin(t.n*0.37+right(s.id::text,4)::int)))::numeric,2),
+SELECT s.id,round((s.baseline*(1+0.12*sin(t.n*0.37+('x'||right(s.id::text,4))::bit(16)::int)))::numeric,2),
  date_trunc('minute',now()) - (60-t.n)*interval '30 seconds'
 FROM sensors s CROSS JOIN generate_series(0,59) t(n)
 WHERE NOT EXISTS(SELECT 1 FROM sensor_readings r WHERE r.sensor_id=s.id)

@@ -7,12 +7,15 @@ export function evaluate(
   if (value >= sensor.warning_threshold) return 'warning';
   return 'healthy';
 }
+// The last four hex digits of the sensor UUID. database/seeds uses the same parsing,
+// so the seeded history and the live series share one phase per sensor.
+export const sensorSalt = (id: string) => Number.parseInt(id.slice(-4), 16);
 export function generatedValue(
   sensor: Sensor,
   sequence: number,
   override?: 'warning' | 'critical',
 ): number {
-  const salt = Number.parseInt(sensor.id.slice(-4), 16);
+  const salt = sensorSalt(sensor.id);
   const phase = sequence % 240;
   const mode =
     override ??

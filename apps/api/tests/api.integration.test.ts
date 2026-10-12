@@ -5,11 +5,13 @@ import { createPool } from '../src/db/pool.js';
 import { migrate, seed } from '../src/db/migrate.js';
 import { buildApp } from '../src/app.js';
 import { TelemetryService } from '../src/modules/telemetry-service.js';
+import { generatedValue } from '../src/simulator/domain.js';
 import type { Database } from '../src/db/pool.js';
 import {
   assetSchema,
   alertSchema,
   summarySchema,
+  sensorSchema,
   realtimeEventSchema,
   type RealtimeEvent,
 } from '@geotwin/shared';
@@ -245,6 +247,17 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     expect(await service.pruneReadings(24)).toBe(36);
     expect((await db.query('SELECT count(*)::int AS n FROM sensor_readings')).rows[0].n).toBe(2160);
     expect(await service.pruneReadings(24)).toBe(0);
+  });
+  it('seeds history with the same per-sensor phase as the live generator', async () => {
+    // 0x0010 = 16: a decimal parse (10) would give a different series.
+    const sensor = sensorSchema.parse(
+      (await app.inject('/api/sensors')).json().find((s: { id: string }) => s.id.endsWith('0010')),
+    );
+    const oldest = await db.query<{ value: number }>(
+      'SELECT value FROM sensor_readings WHERE sensor_id=$1 ORDER BY recorded_at LIMIT 1',
+      [sensor.id],
+    );
+    expect(oldest.rows[0]!.value).toBe(generatedValue(sensor, 0));
   });
   it('creates a failure, broadcasts it, deduplicates it, then resolves it durably', async () => {
     const address = app.server.address();
