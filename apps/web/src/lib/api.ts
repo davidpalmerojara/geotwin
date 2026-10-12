@@ -15,7 +15,19 @@ export function queryString(values: Record<string, string | number | undefined>)
   });
   return params.size ? `?${params}` : '';
 }
-async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+export async function request<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  init?: RequestInit,
+): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,
     headers: {
@@ -24,11 +36,22 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
       ...init?.headers,
     },
   });
-  const data: unknown = await response.json();
+  // A proxy (nginx 502, a gateway timeout) can answer with HTML or an empty body.
+  const text = await response.text();
+  let data: unknown;
+  try {
+    data = text ? JSON.parse(text) : undefined;
+  } catch {
+    data = undefined;
+  }
   if (!response.ok) {
     const result = z.object({ error: z.object({ message: z.string() }) }).safeParse(data);
-    throw new Error(result.success ? result.data.error.message : `Error HTTP ${response.status}`);
+    throw new ApiError(
+      response.status,
+      result.success ? result.data.error.message : `Error HTTP ${response.status}`,
+    );
   }
+  if (data === undefined) throw new ApiError(response.status, 'Respuesta no válida de la API');
   return schema.parse(data);
 }
 export const api = {
