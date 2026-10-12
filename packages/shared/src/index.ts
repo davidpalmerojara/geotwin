@@ -14,6 +14,11 @@ export const assetSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
 });
+export const organizationSchema = z.object({
+  id: uuid,
+  name: z.string(),
+  region: z.string().nullable(),
+});
 export const installationSchema = z.object({
   id: uuid,
   organization_id: uuid,
@@ -119,6 +124,7 @@ export const realtimeEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('sync:required'), data: z.object({ connected_at: z.string() }) }),
 ]);
 export type Asset = z.infer<typeof assetSchema>;
+export type Organization = z.infer<typeof organizationSchema>;
 export type Installation = z.infer<typeof installationSchema>;
 export type Sensor = z.infer<typeof sensorSchema>;
 export type Reading = z.infer<typeof readingSchema>;

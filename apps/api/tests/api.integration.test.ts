@@ -12,6 +12,7 @@ import {
   alertSchema,
   summarySchema,
   sensorSchema,
+  organizationSchema,
   realtimeEventSchema,
   type RealtimeEvent,
 } from '@geotwin/shared';
@@ -461,6 +462,10 @@ describe('Real API and PostgreSQL/PostGIS', () => {
       payload: '{"asset_id":',
     });
     expect(malformed.statusCode).toBe(400);
+  });
+  it('serves the organization and its place name from the database', async () => {
+    const organization = organizationSchema.parse((await app.inject('/api/organization')).json());
+    expect(organization.region).toBe('Valladolid, España');
   });
   it('returns the newest readings per asset in ascending time, per sensor when asked', async () => {
     const all = (await app.inject(`/api/assets/${assetId}/readings?limit=5`)).json();

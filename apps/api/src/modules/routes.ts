@@ -18,6 +18,7 @@ import {
   simulationBody,
   createAlertBody,
   updateAssetBody,
+  organizationSchema,
   uuid,
   type RealtimeEvent,
 } from '@geotwin/shared';
@@ -68,6 +69,17 @@ export function registerRoutes(
       },
     },
     async (req) => repository.summary(req.query.installation_id),
+  );
+  api.get(
+    '/api/organization',
+    {
+      schema: {
+        tags: ['Installations'],
+        description: 'The single demo organization and the place name the interface shows.',
+        response: { 200: organizationSchema, ...errors },
+      },
+    },
+    async () => (await repository.organization()) ?? notFound('Organización', 'f'),
   );
   api.get(
     '/api/installations',

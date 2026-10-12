@@ -1,5 +1,6 @@
 -- Fictional facilities / assets at real geographic coordinates. All telemetry is simulated.
-INSERT INTO organizations(id,name) VALUES('00000000-0000-4000-8000-000000000001','Valladolid Infrastructure Lab') ON CONFLICT DO NOTHING;
+INSERT INTO organizations(id,name,region) VALUES('00000000-0000-4000-8000-000000000001','Valladolid Infrastructure Lab','Valladolid, España')
+ON CONFLICT(id) DO UPDATE SET region=coalesce(organizations.region,excluded.region);
 INSERT INTO installations(id,organization_id,name,description,location) VALUES
 ('10000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','Pisuerga · Water Hub','Instalación ficticia de distribución de agua, entorno del Pisuerga.',ST_SetSRID(ST_MakePoint(-4.7370,41.6550),4326)),
 ('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','San Cristóbal · Energy Hub','Subestación ficticia en el entorno industrial de San Cristóbal.',ST_SetSRID(ST_MakePoint(-4.7060,41.6200),4326)),

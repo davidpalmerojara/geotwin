@@ -1,4 +1,12 @@
-import type { Asset, Installation, Sensor, Reading, Alert, Summary } from '@geotwin/shared';
+import type {
+  Asset,
+  Installation,
+  Organization,
+  Sensor,
+  Reading,
+  Alert,
+  Summary,
+} from '@geotwin/shared';
 import type { Database, Transaction } from '../db/pool.js';
 import { ORGANIZATION_ID } from '../config/env.js';
 export const assetColumns = `a.id,a.organization_id,a.installation_id,a.name,a.type,a.status,
@@ -39,6 +47,13 @@ export class Repository {
         RETURNING ${assetColumns}`,
         [name, id, ORGANIZATION_ID],
       )
+    ).rows[0];
+  }
+  async organization() {
+    return (
+      await this.db.query<Organization>('SELECT id,name,region FROM organizations WHERE id=$1', [
+        ORGANIZATION_ID,
+      ])
     ).rows[0];
   }
   async installations() {
