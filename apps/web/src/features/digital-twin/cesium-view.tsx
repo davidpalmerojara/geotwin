@@ -1,5 +1,5 @@
 // Workers and imagery assets are served from /cesium/ in dev and production.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Cartesian3,
   Cartesian2,
@@ -28,12 +28,15 @@ import {
   ClassificationType,
   sampleTerrainMostDetailed,
   HeadingPitchRange,
+  BoundingSphere,
+  PerspectiveFrustum,
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import type { Asset, Installation } from '@geotwin/shared';
 import { Crosshair, Layers, Mountain, Plus, Minus } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { loadIonEnvironment } from './ion-environment';
+import { fitDistance, frameOf, type LatLng } from './camera';
 function pnoaProvider() {
   const provider = new WebMapTileServiceImageryProvider({
     url: 'https://www.ign.es/wmts/pnoa-ma',
@@ -52,6 +55,29 @@ function pnoaProvider() {
   return provider;
 }
 const colors = { healthy: '#34d399', warning: '#fbbf24', critical: '#fb7185' };
+// Oblique view that fits every point on desktop and on a portrait phone.
+function flyToPoints(v: Viewer, points: LatLng[], duration: number) {
+  const frame = frameOf(points);
+  if (!frame || v.isDestroyed()) return;
+  const canvas = v.scene.canvas;
+  const aspect =
+    canvas.clientWidth && canvas.clientHeight ? canvas.clientWidth / canvas.clientHeight : 1;
+  const fov =
+    (v.camera.frustum instanceof PerspectiveFrustum ? v.camera.frustum.fov : undefined) ??
+    Math.PI / 3;
+  v.camera.flyToBoundingSphere(
+    new BoundingSphere(Cartesian3.fromDegrees(frame.center.lng, frame.center.lat, 0), frame.radius),
+    {
+      offset: new HeadingPitchRange(
+        0,
+        CesiumMath.toRadians(-55),
+        fitDistance(frame.radius, fov, aspect),
+      ),
+      duration,
+    },
+  );
+  v.scene.requestRender();
+}
 interface Props {
   assets: Asset[];
   installations: Installation[];
@@ -84,6 +110,8 @@ export default function CesiumView({
     undefined,
   );
   const baseGeneration = useRef(0);
+  const selectedRef = useRef(selectedId);
+  const framed = useRef(false);
   useEffect(() => {
     callbacks.current = { onSelect, onInstallation };
   }, [onSelect, onInstallation]);
@@ -114,15 +142,6 @@ export default function CesiumView({
       v.scene.globe.baseColor = Color.fromCssColorString('#172537');
       v.scene.globe.enableLighting = false;
       v.scene.globe.depthTestAgainstTerrain = true;
-      v.camera.flyTo({
-        destination: Cartesian3.fromDegrees(-4.727, 41.639, 10500),
-        orientation: {
-          heading: CesiumMath.toRadians(12),
-          pitch: CesiumMath.toRadians(-58),
-          roll: 0,
-        },
-        duration: 0,
-      });
       handler = new ScreenSpaceEventHandler(v.scene.canvas);
       handler.setInputAction((movement: { position: Cartesian2 }) => {
         const picked: unknown = v?.scene.pick(movement.position);
@@ -154,6 +173,7 @@ export default function CesiumView({
       handler?.destroy();
       if (v && !v.isDestroyed()) v.destroy();
       viewer.current = null;
+      framed.current = false;
       buildingsRef.current = undefined;
       if (ionLoading.current === v) ionLoading.current = null;
     };
@@ -244,31 +264,32 @@ export default function CesiumView({
     for (const entity of [...v.entities.values]) if (!ids.has(entity.id)) v.entities.remove(entity);
     v.scene.requestRender();
   }, [assets, installations, selectedId, ready]);
+  // Frame the selected installation (its assets and centre) or the whole network.
+  // Keyed on positions only, so status updates and renames never move the camera.
+  const frameKey = JSON.stringify(
+    (() => {
+      const installation = installations.find((i) => i.id === installationId);
+      const scoped = installation
+        ? assets.filter((a) => a.installation_id === installation.id)
+        : assets;
+      return [
+        ...scoped.map((a) => a.location),
+        ...(installation ? [installation.location] : installations.map((i) => i.location)),
+      ].map(({ lat, lng }) => ({ lat, lng }));
+    })(),
+  );
+  const framePoints = useMemo(() => JSON.parse(frameKey) as LatLng[], [frameKey]);
+  useEffect(() => {
+    selectedRef.current = selectedId;
+  }, [selectedId]);
   useEffect(() => {
     const v = viewer.current;
-    if (!v || !ready) return;
-    const installation = installations.find((i) => i.id === installationId);
-    if (installation)
-      v.camera.flyTo({
-        destination: Cartesian3.fromDegrees(
-          installation.location.lng,
-          installation.location.lat - 0.004,
-          1100,
-        ),
-        orientation: { heading: 0, pitch: CesiumMath.toRadians(-60), roll: 0 },
-        duration: 1,
-      });
-    else
-      v.camera.flyTo({
-        destination: Cartesian3.fromDegrees(-4.727, 41.639, 10500),
-        orientation: {
-          heading: CesiumMath.toRadians(12),
-          pitch: CesiumMath.toRadians(-58),
-          roll: 0,
-        },
-        duration: 1,
-      });
-  }, [installationId, installations, ready]);
+    if (!v || !ready || !framePoints.length) return;
+    // A selected asset has its own close-up; do not pull the camera away from it.
+    if (selectedRef.current && framed.current) return;
+    flyToPoints(v, framePoints, framed.current ? 1 : 0);
+    framed.current = true;
+  }, [framePoints, ready]);
   useEffect(() => {
     const v = viewer.current;
     if (!v || !selectedId || !ready) return;
@@ -428,13 +449,7 @@ export default function CesiumView({
           size="icon"
           title="Centrar red"
           aria-label="Centrar red"
-          onClick={() =>
-            viewer.current?.camera.flyTo({
-              destination: Cartesian3.fromDegrees(-4.727, 41.639, 10500),
-              orientation: { heading: 0, pitch: CesiumMath.toRadians(-58), roll: 0 },
-              duration: 1,
-            })
-          }
+          onClick={() => viewer.current && flyToPoints(viewer.current, framePoints, 1)}
         >
           <Crosshair size={17} />
         </Button>
