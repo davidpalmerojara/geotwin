@@ -1,0 +1,35 @@
+name: Verify GeoTwin Cloud
+on: [push, pull_request]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env: { POSTGRES_USER: geotwin, POSTGRES_PASSWORD: geotwin_local, POSTGRES_DB: geotwin }
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd "pg_isready -U geotwin -d geotwin"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run build -w @geotwin/shared
+      - run: npm run lint && npm run format:check && npm run typecheck && npm test
+      - run: npm run test:integration
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: playwright-results, path: test-results/ }
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d --build --wait
+      - run: curl --fail http://localhost:8080/api/health && curl --fail http://localhost:8080
+      - run: docker compose logs && docker compose down
+        if: always()

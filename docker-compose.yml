@@ -1,0 +1,55 @@
+name: geotwin-cloud
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    platform: linux/amd64
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-geotwin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-geotwin_local}
+      POSTGRES_DB: ${POSTGRES_DB:-geotwin}
+    ports: ['127.0.0.1:55432:5432']
+    volumes: ['pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-geotwin}:${POSTGRES_PASSWORD:-geotwin_local}@db:5432/${POSTGRES_DB:-geotwin}
+      HOST: 0.0.0.0
+      PORT: 3001
+      DEMO_MODE: ${DEMO_MODE:-true}
+      SIMULATOR_ENABLED: ${SIMULATOR_ENABLED:-true}
+      SIMULATOR_INTERVAL_MS: ${SIMULATOR_INTERVAL_MS:-5000}
+      CORS_ORIGIN: http://localhost:8080,http://127.0.0.1:8080
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ['127.0.0.1:3001:3001']
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_CESIUM_ION_TOKEN: ${VITE_CESIUM_ION_TOKEN:-}
+    depends_on:
+      api: { condition: service_healthy }
+    ports: ['127.0.0.1:8080:8080']
+    restart: unless-stopped
+volumes:
+  pgdata:
