@@ -30,6 +30,7 @@ import {
   HeadingPitchRange,
   BoundingSphere,
   PerspectiveFrustum,
+  JulianDate,
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import type { Asset, Installation } from '@geotwin/shared';
@@ -314,12 +315,18 @@ export default function CesiumView({
   useEffect(() => {
     const v = viewer.current;
     if (!v || !selectedId || !ready) return;
-    const entity = v.entities.getById(`asset:${selectedId}`);
-    if (entity)
-      void v.flyTo(entity, {
-        duration: 1,
-        offset: new HeadingPitchRange(0, CesiumMath.toRadians(-45), 650),
-      });
+    // Fly straight to the asset position. Viewer.flyTo(entity) waits for the entity's
+    // bounding sphere in a later render; with requestRenderMode that flight could stay
+    // pending until an unrelated update and then start from a stale view.
+    const position = v.entities
+      .getById(`asset:${selectedId}`)
+      ?.position?.getValue(JulianDate.now());
+    if (!position) return;
+    v.camera.flyToBoundingSphere(new BoundingSphere(position, 60), {
+      duration: 1,
+      offset: new HeadingPitchRange(0, CesiumMath.toRadians(-45), 650),
+    });
+    v.scene.requestRender();
   }, [selectedId, ready]);
   const toggleBase = async () => {
     const v = viewer.current;
