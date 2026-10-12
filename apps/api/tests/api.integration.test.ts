@@ -255,6 +255,29 @@ describe('Real API and PostgreSQL/PostGIS', () => {
       (await app.inject('/api/assets/20000000-0000-4000-8000-000000009999')).json().error.message,
     ).toBe('Activo no encontrado');
   });
+  it('keeps 4xx status codes for client errors', async () => {
+    const tooLarge = await app.inject({
+      method: 'POST',
+      url: '/api/alerts',
+      payload: { asset_id: assetId, severity: 'warning', message: 'x'.repeat(20000) },
+    });
+    expect(tooLarge.statusCode).toBe(413);
+    expect(tooLarge.json().error.code).toBe('PAYLOAD_TOO_LARGE');
+    const wrongType = await app.inject({
+      method: 'POST',
+      url: '/api/alerts',
+      headers: { 'content-type': 'application/xml' },
+      payload: '<alert/>',
+    });
+    expect(wrongType.statusCode).toBe(415);
+    const malformed = await app.inject({
+      method: 'POST',
+      url: '/api/alerts',
+      headers: { 'content-type': 'application/json' },
+      payload: '{"asset_id":',
+    });
+    expect(malformed.statusCode).toBe(400);
+  });
   it('does not expose the anomaly endpoint outside demo mode', async () => {
     const secure = await buildApp(db, { demo: false, simulator: false, logger: false });
     try {

@@ -15,6 +15,22 @@ import { TelemetryService } from './modules/telemetry-service.js';
 import { registerRoutes } from './modules/routes.js';
 import { AppError } from './modules/errors.js';
 import { startSimulator } from './simulator/runner.js';
+// Client errors keep their 4xx status (413, 415…); anything unexpected becomes a generic 500.
+export function errorStatus(error: unknown): number {
+  if (error instanceof AppError) return error.statusCode;
+  if (typeof error !== 'object' || error === null) return 500;
+  if ('validation' in error && error.validation) return 400;
+  const status = 'statusCode' in error ? Number(error.statusCode) : NaN;
+  return Number.isInteger(status) && status >= 400 && status < 500 ? status : 500;
+}
+function errorCode(error: unknown, status: number) {
+  if (error instanceof AppError) return error.code;
+  if (status === 400) return 'VALIDATION_ERROR';
+  if (status === 413) return 'PAYLOAD_TOO_LARGE';
+  if (status === 415) return 'UNSUPPORTED_MEDIA_TYPE';
+  if (status < 500) return 'BAD_REQUEST';
+  return 'INTERNAL_ERROR';
+}
 export async function buildApp(
   db: Database,
   options: { demo?: boolean; simulator?: boolean; logger?: boolean } = {},
@@ -23,24 +39,14 @@ export async function buildApp(
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   app.setErrorHandler((error, req, reply) => {
-    app.log.error({ err: error, requestId: req.id }, 'Request failed');
-    const validation = typeof error === 'object' && error !== null && 'validation' in error;
-    const httpStatus =
-      typeof error === 'object' && error !== null && 'statusCode' in error
-        ? error.statusCode
-        : undefined;
-    const status =
-      error instanceof AppError ? error.statusCode : validation || httpStatus === 400 ? 400 : 500;
+    const status = errorStatus(error);
+    if (status >= 500) app.log.error({ err: error, requestId: req.id }, 'Request failed');
+    else app.log.info({ err: error, requestId: req.id }, 'Request rejected');
     reply.code(status).send({
       error: {
-        code:
-          error instanceof AppError
-            ? error.code
-            : status === 400
-              ? 'VALIDATION_ERROR'
-              : 'INTERNAL_ERROR',
+        code: errorCode(error, status),
         message:
-          status === 500
+          status >= 500
             ? 'Error interno. Consulta el registro del servidor.'
             : error instanceof Error
               ? error.message

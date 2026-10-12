@@ -37,6 +37,8 @@ export function registerRoutes(
     400: errorSchema,
     404: errorSchema,
     409: errorSchema,
+    413: errorSchema,
+    415: errorSchema,
     500: errorSchema,
     503: errorSchema,
   };
