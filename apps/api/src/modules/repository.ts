@@ -5,6 +5,8 @@ export const assetColumns = `a.id,a.organization_id,a.installation_id,a.name,a.t
  json_build_object('lat',ST_Y(a.location),'lng',ST_X(a.location)) AS location,a.created_at,a.updated_at`;
 export const alertColumns = `al.*,a.name AS asset_name`;
 type Queryable = Database | Transaction;
+// The search box matches literal text: % and _ are not wildcards for the user.
+export const escapeLike = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`);
 export class Repository {
   constructor(public db: Database) {}
   async assets(filters: { installation_id?: string; status?: string; search?: string } = {}) {
@@ -12,12 +14,12 @@ export class Repository {
       await this.db.query<Asset>(
         `SELECT ${assetColumns} FROM assets a
       WHERE a.organization_id=$1 AND ($2::uuid IS NULL OR a.installation_id=$2)
-      AND ($3::text IS NULL OR a.status=$3) AND ($4::text IS NULL OR a.name ILIKE '%'||$4||'%') ORDER BY a.name`,
+      AND ($3::text IS NULL OR a.status=$3) AND ($4::text IS NULL OR a.name ILIKE '%'||$4||'%' ESCAPE '\\') ORDER BY a.name`,
         [
           ORGANIZATION_ID,
           filters.installation_id ?? null,
           filters.status ?? null,
-          filters.search ?? null,
+          filters.search === undefined ? null : escapeLike(filters.search),
         ],
       )
     ).rows;

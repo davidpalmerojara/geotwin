@@ -93,13 +93,18 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     expect(result.rows.some((r) => r.indexdef.includes('USING gist (location)'))).toBe(true);
     expect(result.rows.some((r) => r.indexdef.includes('geography'))).toBe(true);
   });
-  it('treats hostile search input as data', async () => {
+  it('treats hostile search input as data and LIKE wildcards as literal text', async () => {
     const response = await app.inject(
       `/api/assets?search=${encodeURIComponent("'; DROP TABLE assets; --")}`,
     );
     expect(response.statusCode).toBe(200);
     expect(response.json()).toHaveLength(0);
     expect((await app.inject('/api/assets')).json()).toHaveLength(18);
+    for (const wildcard of ['%', '_', '\\'])
+      expect(
+        (await app.inject(`/api/assets?search=${encodeURIComponent(wildcard)}`)).json(),
+      ).toHaveLength(0);
+    expect((await app.inject('/api/assets?search=pump')).json()).toHaveLength(3);
   });
   it('persists deterministic ticks and emits only after commit', async () => {
     const events: RealtimeEvent[] = [];
