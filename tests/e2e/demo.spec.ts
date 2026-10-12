@@ -24,7 +24,7 @@ test('dashboard → 3D twin → persisted anomaly → resolved incident', async 
   await observer.goto('/');
   await expect(observer.getByTestId('connection')).toContainText('Tiempo real');
   await expect(observer.getByTestId('active-alerts')).toContainText('00');
-  await page.getByRole('button', { name: 'Digital Twin', exact: true }).click();
+  await page.getByRole('button', { name: 'Gemelo digital', exact: true }).click();
   await expect(page.getByTestId('cesium-view')).toHaveAttribute('data-ready', 'true', {
     timeout: 30000,
   });
@@ -70,13 +70,18 @@ test('dashboard → 3D twin → persisted anomaly → resolved incident', async 
       (a: { id: string; resolved_at: string }) => a.id === alert.id && !!a.resolved_at,
     ),
   ).toBe(true);
-  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await page.getByRole('button', { name: 'Resumen', exact: true }).click();
   await expect(page.getByTestId('active-alerts')).toContainText('00');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByTestId('active-alerts')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+  // Icon-only navigation on a phone still exposes each destination by name.
+  for (const name of ['Resumen', 'Gemelo digital', 'Activos', 'Alertas', 'Ajustes'])
+    await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Alertas', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Cada señal, una acción' })).toBeVisible();
   if (process.env.CAPTURE_DEMO)
     await page.screenshot({ path: 'docs/screenshots/mobile.png', fullPage: true });
   expect(errors).toEqual([]);

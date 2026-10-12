@@ -22,11 +22,11 @@ import { Assets } from './features/assets/assets';
 import { Alerts } from './features/alerts/alerts';
 import { Settings } from './pages/settings';
 const nav: [Page, string, typeof Box][] = [
-  ['overview', 'Overview', LayoutDashboard],
-  ['twin', 'Digital Twin', Layers3],
-  ['assets', 'Assets', Box],
-  ['alerts', 'Alerts', Bell],
-  ['settings', 'Settings', Settings2],
+  ['overview', 'Resumen', LayoutDashboard],
+  ['twin', 'Gemelo digital', Layers3],
+  ['assets', 'Activos', Box],
+  ['alerts', 'Alertas', Bell],
+  ['settings', 'Ajustes', Settings2],
 ];
 export default function App() {
   useRealtime();
@@ -73,9 +73,10 @@ export default function App() {
               key={id}
               onClick={() => setPage(id)}
               aria-current={page === id ? 'page' : undefined}
+              title={label}
             >
-              <Icon size={18} />
-              <span>{label}</span>
+              <Icon size={18} aria-hidden="true" />
+              <span className="nav-text">{label}</span>
               {id === 'alerts' && !!summary.data?.active_alerts && (
                 <b>{summary.data.active_alerts}</b>
               )}

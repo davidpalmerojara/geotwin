@@ -1450,10 +1450,19 @@ tr:hover td {
   .workspace-label,
   .workspace-card,
   .nav-label,
-  nav button > span,
+  .nav-active-dot,
   nav b,
   .sidebar-bottom {
     display: none;
+  }
+  /* Icon-only navigation: the label stays in the accessibility tree. */
+  .nav-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .brand-icon {
     width: 47px;
