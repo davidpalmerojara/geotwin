@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { realtimeEventSchema } from '@geotwin/shared';
+import { realtimeEventSchema, type RealtimeEvent } from '@geotwin/shared';
+import { applyRealtimeEvents } from './realtime-cache';
 import { useUI } from '../stores/ui';
 export function useRealtime() {
   const client = useQueryClient();
@@ -11,6 +12,7 @@ export function useRealtime() {
     let socket: WebSocket | undefined,
       retry: ReturnType<typeof setTimeout> | undefined,
       flush: ReturnType<typeof setTimeout> | undefined;
+    let pending: RealtimeEvent[] = [];
     const sync = () => {
       void client.invalidateQueries({ queryKey: ['geo'] });
     };
@@ -37,11 +39,14 @@ export function useRealtime() {
             sync();
             return;
           }
-          // A tick contains many readings. Batch refreshes and always recover authoritative REST state.
+          // A tick carries dozens of readings: apply them to the cache in one 200 ms batch.
+          pending.push(parsed.data);
           if (!flush)
             flush = setTimeout(() => {
               flush = undefined;
-              sync();
+              const batch = pending;
+              pending = [];
+              applyRealtimeEvents(client, batch);
             }, 200);
         } catch {
           /* Invalid external messages never replace validated API data. */
