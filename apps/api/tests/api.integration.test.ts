@@ -93,6 +93,12 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     expect(result.rows.some((r) => r.indexdef.includes('USING gist (location)'))).toBe(true);
     expect(result.rows.some((r) => r.indexdef.includes('geography'))).toBe(true);
   });
+  it('keeps a single btree on readings (sensor_id, recorded_at)', async () => {
+    const result = await db.query<{ indexname: string }>(
+      "SELECT indexname FROM pg_indexes WHERE tablename='sensor_readings' AND indexdef LIKE '%(sensor_id, recorded_at%'",
+    );
+    expect(result.rows).toHaveLength(1);
+  });
   it('treats hostile search input as data and LIKE wildcards as literal text', async () => {
     const response = await app.inject(
       `/api/assets?search=${encodeURIComponent("'; DROP TABLE assets; --")}`,
