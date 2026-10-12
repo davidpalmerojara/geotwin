@@ -59,12 +59,12 @@ No necesitas cuenta de Cesium para el flujo principal. La aplicación arranca co
 
 PNOA necesita conexión a internet. Se conservan créditos de IGN-CNIG y su licencia CC-BY 4.0; [servicio oficial](https://pnoa.ign.es/pnoa-imagen/visualizadores-y-servicios-web). El botón **Alternar cartografía** cambia a la cartografía Natural Earth de baja resolución incluida localmente con Cesium, manteniendo selección y navegación. Sin ion no hay terreno de alta resolución ni edificios fotogramétricos. Los volúmenes de colores son representaciones **demo** de activos, y los círculos de instalación son áreas orientativas, no límites catastrales.
 
-Opcionalmente configura `VITE_CESIUM_ION_TOKEN` y reconstruye la web. El botón **Edificios 3D** carga Cesium OSM Buildings, sujeto a permisos, conexión y cobertura. Un error conserva el visor básico. Una variable `VITE_*` es **pública en el bundle**: utiliza exclusivamente un token ion de lectura, restringido a los assets y dominios necesarios; nunca un token privado con permisos de escritura.
+Opcionalmente configura `VITE_CESIUM_ION_TOKEN` y reconstruye la web. El botón **Edificios 3D** carga conjuntamente **Cesium World Terrain** y **Cesium OSM Buildings**. El token necesita lectura de **ambos assets** (terreno: 1; edificios: 96188) y autorización de la URL utilizada, por ejemplo `http://localhost:8080`. Si falta permiso para el terreno, los edificios no se muestran sobre el globo básico. Marcadores, volúmenes y áreas se ajustan al suelo mediante referencias de altura de Cesium; no se desplaza artificialmente el tileset. Un error conserva el visor básico. Una variable `VITE_*` es **pública en el bundle**: utiliza exclusivamente un token ion de lectura, restringido a los assets y dominios necesarios; nunca un token privado con permisos de escritura.
 
 ## Tests
 
 ```bash
-npm test                      # 5 pruebas unitarias del dominio y contratos
+npm test                      # 8 pruebas unitarias del dominio, contratos y carga de ion
 npm run test:integration       # crea/migra geotwin_test; 13 pruebas con PostGIS real
 npx playwright install chromium
 npm run test:e2e               # arranca API y Vite para el flujo real en Chromium

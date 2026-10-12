@@ -54,7 +54,7 @@ export function Settings() {
             <h2>Visualización geoespacial</h2>
             <p>
               {import.meta.env.VITE_CESIUM_ION_TOKEN
-                ? 'Cesium ion configurado. Edificios 3D disponibles según permisos y cobertura.'
+                ? 'Cesium ion configurado. Edificios 3D y relieve requieren lectura de Cesium OSM Buildings y Cesium World Terrain.'
                 : 'Modo básico sin token: globo elipsoidal, PNOA y activos 3D. Sin terreno de alta resolución ni edificios ion.'}
             </p>
             <p>El control de capas permite cartografía local de baja resolución sin conexión.</p>

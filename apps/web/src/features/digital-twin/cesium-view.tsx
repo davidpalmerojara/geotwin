@@ -22,12 +22,18 @@ import {
   buildModuleUrl,
   Ion,
   createOsmBuildingsAsync,
+  createWorldTerrainAsync,
+  Cartographic,
+  HeightReference,
+  ClassificationType,
+  sampleTerrainMostDetailed,
   HeadingPitchRange,
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import type { Asset, Installation } from '@geotwin/shared';
 import { Crosshair, Layers, Mountain, Plus, Minus } from 'lucide-react';
 import { Button } from '../../components/ui/button';
+import { loadIonEnvironment } from './ion-environment';
 function pnoaProvider() {
   const provider = new WebMapTileServiceImageryProvider({
     url: 'https://www.ign.es/wmts/pnoa-ma',
@@ -70,6 +76,8 @@ export default function CesiumView({
     [base, setBase] = useState('PNOA'),
     [buildings, setBuildings] = useState<'off' | 'loading' | 'on' | 'error'>('off');
   const [mapMessage, setMapMessage] = useState('');
+  const [terrain, setTerrain] = useState<'ellipsoid' | 'world'>('ellipsoid');
+  const ionLoading = useRef<Viewer | null>(null);
   const [hover, setHover] = useState<{ name: string; x: number; y: number } | null>(null);
   const token = import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined;
   const buildingsRef = useRef<Awaited<ReturnType<typeof createOsmBuildingsAsync>> | undefined>(
@@ -100,9 +108,12 @@ export default function CesiumView({
         maximumRenderTimeChange: Infinity,
       });
       viewer.current = v;
+      setTerrain('ellipsoid');
+      setBuildings('off');
       v.scene.backgroundColor = Color.fromCssColorString('#090e17');
       v.scene.globe.baseColor = Color.fromCssColorString('#172537');
       v.scene.globe.enableLighting = false;
+      v.scene.globe.depthTestAgainstTerrain = true;
       v.camera.flyTo({
         destination: Cartesian3.fromDegrees(-4.727, 41.639, 10500),
         orientation: {
@@ -144,6 +155,7 @@ export default function CesiumView({
       if (v && !v.isDestroyed()) v.destroy();
       viewer.current = null;
       buildingsRef.current = undefined;
+      if (ionLoading.current === v) ionLoading.current = null;
     };
   }, [token]);
   useEffect(() => {
@@ -158,10 +170,13 @@ export default function CesiumView({
       if (existing) {
         existing.name = a.name;
         existing.position = new ConstantPositionProperty(
-          Cartesian3.fromDegrees(a.location.lng, a.location.lat, 45),
+          Cartesian3.fromDegrees(a.location.lng, a.location.lat, 0),
         );
         if (existing.point) existing.point.color = new ConstantProperty(color);
-        if (existing.box) existing.box.material = new ColorMaterialProperty(color.withAlpha(0.55));
+        if (existing.box) {
+          existing.box.material = new ColorMaterialProperty(color.withAlpha(0.55));
+          existing.box.outlineColor = new ConstantProperty(color);
+        }
         if (existing.label) {
           existing.label.text = new ConstantProperty(a.name);
           existing.label.show = new ConstantProperty(selectedId === a.id);
@@ -170,8 +185,9 @@ export default function CesiumView({
         v.entities.add({
           id,
           name: a.name,
-          position: Cartesian3.fromDegrees(a.location.lng, a.location.lat, 45),
+          position: Cartesian3.fromDegrees(a.location.lng, a.location.lat, 0),
           point: {
+            heightReference: HeightReference.CLAMP_TO_TERRAIN,
             pixelSize: 13,
             color,
             outlineColor: Color.WHITE,
@@ -179,12 +195,14 @@ export default function CesiumView({
             disableDepthTestDistance: Infinity,
           },
           box: {
+            heightReference: HeightReference.CLAMP_TO_TERRAIN,
             dimensions: new Cartesian3(22, 22, 55),
             material: color.withAlpha(0.55),
             outline: true,
             outlineColor: color,
           },
           label: {
+            heightReference: HeightReference.CLAMP_TO_TERRAIN,
             text: a.name,
             font: '13px sans-serif',
             show: selectedId === a.id,
@@ -206,14 +224,13 @@ export default function CesiumView({
           name: i.name,
           position: Cartesian3.fromDegrees(i.location.lng, i.location.lat),
           ellipse: {
-            height: 0,
+            classificationType: ClassificationType.TERRAIN,
             semiMajorAxis: 210,
             semiMinorAxis: 210,
             material: Color.CYAN.withAlpha(0.08),
-            outline: true,
-            outlineColor: Color.CYAN.withAlpha(0.35),
           },
           label: {
+            heightReference: HeightReference.CLAMP_TO_TERRAIN,
             text: i.name,
             font: '12px sans-serif',
             fillColor: Color.CYAN,
@@ -286,7 +303,7 @@ export default function CesiumView({
   };
   const toggleBuildings = async () => {
     const v = viewer.current;
-    if (!v || !token) return;
+    if (!v || !token || ionLoading.current === v) return;
     if (buildingsRef.current) {
       buildingsRef.current.show = !buildingsRef.current.show;
       setBuildings(buildingsRef.current.show ? 'on' : 'off');
@@ -294,21 +311,63 @@ export default function CesiumView({
       return;
     }
     setBuildings('loading');
+    setMapMessage('');
+    ionLoading.current = v;
     try {
-      const tiles = await createOsmBuildingsAsync();
+      const environment = await loadIonEnvironment(
+        createWorldTerrainAsync,
+        createOsmBuildingsAsync,
+      );
       if (v.isDestroyed()) {
-        tiles.destroy();
+        environment.buildings.destroy();
         return;
       }
-      v.scene.primitives.add(tiles);
-      buildingsRef.current = tiles;
+      // Never translate the building tileset: its elevations are already aligned to World Terrain.
+      v.terrainProvider = environment.terrain;
+      v.scene.primitives.add(environment.buildings);
+      buildingsRef.current = environment.buildings;
+      setTerrain('world');
       setBuildings('on');
       v.scene.requestRender();
-    } catch {
-      setBuildings('error');
-      setMapMessage(
-        'No se pudieron cargar edificios ion. Comprueba los permisos del token y la cobertura.',
-      );
+
+      // Loading relief can put an existing close-up camera below the newly raised ground.
+      const position = Cartographic.fromCartesian(v.camera.positionWC);
+      const cameraPosition = Cartesian3.clone(v.camera.positionWC);
+      try {
+        const [surface] = await sampleTerrainMostDetailed(environment.terrain, [
+          Cartographic.clone(position),
+        ]);
+        if (
+          !v.isDestroyed() &&
+          surface &&
+          Number.isFinite(surface.height) &&
+          Cartesian3.distance(v.camera.positionWC, cameraPosition) < 1 &&
+          position.height < surface.height + 100
+        ) {
+          v.camera.flyTo({
+            destination: Cartesian3.fromRadians(
+              position.longitude,
+              position.latitude,
+              surface.height + 500,
+            ),
+            orientation: { heading: v.camera.heading, pitch: v.camera.pitch, roll: v.camera.roll },
+            duration: 1,
+          });
+        }
+      } catch {
+        // The scene still refines terrain normally if the optional camera-height query fails.
+      }
+    } catch (failure) {
+      if (!v.isDestroyed()) {
+        setBuildings('error');
+        setMapMessage(
+          failure instanceof Error
+            ? failure.message
+            : 'No se pudieron cargar el terreno y los edificios.',
+        );
+      }
+    } finally {
+      if (ionLoading.current === v) ionLoading.current = null;
     }
   };
   if (error)
@@ -321,14 +380,22 @@ export default function CesiumView({
     );
   return (
     <div className="map-shell">
-      <div ref={container} className="cesium-host" data-testid="cesium-view" data-ready={ready} />
+      <div
+        ref={container}
+        className="cesium-host"
+        data-testid="cesium-view"
+        data-ready={ready}
+        data-terrain={terrain}
+        data-buildings={buildings}
+      />
       <div className="map-top">
         <span className="map-tag">
           <span className="tiny-dot" />
           VALLADOLID, ESPAÑA <b>41.6523° N / 4.7245° W</b>
         </span>
         <span className="map-tag">
-          {token ? 'ION READY' : 'BASIC MODE'} · {base}
+          {token ? 'ION READY' : 'BASIC MODE'} · {base} ·{' '}
+          {terrain === 'world' ? 'RELIEVE 3D' : 'GLOBO BÁSICO'}
         </span>
       </div>
       <div className="map-controls">
@@ -386,10 +453,11 @@ export default function CesiumView({
           disabled={!token || buildings === 'loading'}
           title={
             token
-              ? 'Edificios 3D de Cesium ion'
+              ? 'Edificios OSM y terreno 3D de Cesium ion'
               : 'Configura VITE_CESIUM_ION_TOKEN para edificios 3D'
           }
           aria-label="Edificios 3D"
+          aria-pressed={buildings === 'on'}
           onClick={() => void toggleBuildings()}
         >
           <Mountain size={17} />

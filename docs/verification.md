@@ -39,7 +39,7 @@ Resultado final:
 - `E2E_BASE_URL=http://localhost:8080 npm run test:e2e`: **1/1 correcto sobre los contenedores de producción**, en 26,8 segundos. Verifica persistencia, cambio visual a crítico, notificación a segundo cliente y resolución.
 - Lint, TypeScript estricto, formato y build de producción: **correctos**. Auditoría de dependencias npm de producción: **0 vulnerabilidades** en la revisión realizada.
 
-Los edificios ion no se verificaron porque no se suministró token. El aviso de tamaño del bundle Cesium (~4 MB minificados) se conserva; se carga mediante import dinámico. La CI está preparada, no se ha ejecutado en GitHub.
+En la verificación inicial no se disponía de token ion. La comprobación posterior con terreno y edificios reales se detalla al final de este documento. El aviso de tamaño del bundle Cesium (~4 MB minificados) se conserva; se carga mediante import dinámico. La CI está preparada, no se ha ejecutado en GitHub.
 
 La demo queda arrancada localmente en **http://localhost:8080**. No se ha publicado en internet ni ejecutado la plantilla AWS. Para detenerla conservando el volumen: `docker compose stop`.
 
@@ -62,3 +62,9 @@ La API local de los tests necesita 3001 libre: si la instancia Compose está act
 ## Pendiente hacia producción
 
 Autenticación, autorización y aislamiento multiempresa (P1), infraestructura AWS real autorizada y validada, retención/particionado, observabilidad, limitación de peticiones y estrategia de difusión para múltiples réplicas. Importación GeoJSON y análisis avanzado en P2. La app se presenta expresamente como demo local de una organización.
+
+## Corrección de edificios flotantes
+
+Los edificios OSM necesitan Cesium World Terrain porque sus cotas están referidas a ese relieve, según la [guía de Cesium](https://cesium.com/learn/cesiumjs-learn/cesiumjs-interactive-building/). Se corrigió la activación conjunta de ambas capas, el ajuste de activos/etiquetas al terreno y la protección de cámara al cambiar de globo básico a relieve. El token configurado permite lectura de ambos assets desde `http://localhost:8080` (HTTP 200).
+
+Se añadieron tres pruebas de carga de ion: denegación de terreno, orden de carga y fallo de edificios sin devolver un entorno parcial. `npm test`: **8/8** correctas; TypeScript y lint correctos. `docker compose build web && docker compose up -d --no-deps web`: correcto. Se comprobó en el navegador de la instancia Docker la selección de activos, la instalación Pisuerga y la activación conjunta de edificios y relieve. El visor indica `RELIEVE 3D`, `data-terrain=world` y `data-buildings=on`; la vista cercana muestra edificios apoyados sobre el terreno. Evidencia: [captura del visor](screenshots/terrain-buildings.jpg). Esta corrección no modifica la API ni los datos operativos existentes.
