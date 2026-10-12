@@ -17,10 +17,13 @@ export default defineConfig({
     }),
   ],
   define: { CESIUM_BASE_URL: JSON.stringify('/cesium/') },
+  // WEB_PORT / API_PORT only matter when 5173 or 3001 are taken on the host.
   server: {
-    port: 5173,
+    port: Number(process.env.WEB_PORT ?? 5173),
     strictPort: true,
-    proxy: { '/api': { target: 'http://127.0.0.1:3001', ws: true } },
+    proxy: {
+      '/api': { target: `http://127.0.0.1:${process.env.API_PORT ?? 3001}`, ws: true },
+    },
   },
   build: {
     chunkSizeWarningLimit: 1800,
