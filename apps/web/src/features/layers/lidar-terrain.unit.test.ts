@@ -5,6 +5,7 @@ import {
   buildTerrain,
   decodeDtm,
   FAR_END_M,
+  fillNearest,
   FAR_START_M,
   insidePolygon,
   sampleGrid,
@@ -119,6 +120,94 @@ describe('LiDAR ground model as terrain', () => {
     expect(insidePolygon(-4.7201, 41.5799, dtmA.footprint)).toBe(false);
     expect(terrainHeight(terrain, -4.72, 41.5799)).toBeCloseTo(750, 3);
     expect(terrainHeight(terrain, -4.725, 41.575)).toBeCloseTo(755, 3);
+  });
+
+  it('continues a rotated footprint smoothly across all its edges (no values from far along a row)', () => {
+    // A UTM square seen in lng/lat is turned by the meridian convergence (about 1° here): turned
+    // 4° to make the effect plain. Ground: a plane rising 2 cm per metre eastwards, 1 cm north.
+    const width = 121,
+      height = 121,
+      west = -4.73,
+      south = 41.57,
+      span = 0.012;
+    const lat0 = south + span / 2,
+      lng0 = west + span / 2;
+    const mLng = 111_132 * Math.cos((lat0 * Math.PI) / 180);
+    const turn = (4 * Math.PI) / 180,
+      half = 380;
+    const toLngLat = (x: number, y: number): [number, number] => [
+      lng0 + (x * Math.cos(turn) - y * Math.sin(turn)) / mLng,
+      lat0 + (x * Math.sin(turn) + y * Math.cos(turn)) / 111_132,
+    ];
+    const plane = (lng: number, lat: number) =>
+      750 + 0.02 * (lng - lng0) * mLng + 0.01 * (lat - lat0) * 111_132;
+    const footprint = [
+      toLngLat(-half, -half),
+      toLngLat(half, -half),
+      toLngLat(half, half),
+      toLngLat(-half, half),
+    ];
+    const meta: DtmMeta = {
+      ...grid().meta,
+      width,
+      height,
+      west,
+      south,
+      east: west + span,
+      north: south + span,
+      offset: 700,
+      cell_m: 8,
+      footprint,
+    };
+    const buffer = new ArrayBuffer(width * height * 2);
+    const view = new DataView(buffer);
+    for (let r = 0; r < height; r++)
+      for (let c = 0; c < width; c++) {
+        const lng = west + (span * c) / (width - 1),
+          lat = south + span - (span * r) / (height - 1);
+        const inside = insidePolygon(lng, lat, footprint);
+        view.setUint16(
+          (r * width + c) * 2,
+          inside ? Math.round((plane(lng, lat) - 700) / 0.01) : 65535,
+          true,
+        );
+      }
+    const dtm = decodeDtm(meta, buffer);
+    expect(dtm.filled.every(Number.isFinite)).toBe(true);
+    // Nothing to fill from: stays empty.
+    expect(fillNearest(new Float32Array([NaN, NaN]), { ...meta, width: 2, height: 1 })).toEqual(
+      new Float32Array([NaN, NaN]),
+    );
+    const terrain = buildTerrain([dtm])!;
+    // Across each edge: 1 m inside against 1 m and 30 m outside, at 40 places per edge.
+    const corners = [
+      [-half, -half],
+      [half, -half],
+      [half, half],
+      [-half, half],
+    ] as const;
+    let worst = 0,
+      worstFar = 0;
+    for (let e = 0; e < 4; e++) {
+      const [ax, ay] = corners[e]!,
+        [bx, by] = corners[(e + 1) % 4]!;
+      const length = Math.hypot(bx - ax, by - ay);
+      const nx = (by - ay) / length,
+        ny = -(bx - ax) / length; // outward normal of a counter-clockwise square
+      for (let k = 1; k < 40; k++) {
+        const x = ax + ((bx - ax) * k) / 40,
+          y = ay + ((by - ay) * k) / 40;
+        const at = (m: number) => terrainHeight(terrain, ...toLngLat(x + nx * m, y + ny * m));
+        const edge = plane(...toLngLat(x, y));
+        worst = Math.max(worst, Math.abs(at(1) - at(-1)), Math.abs(at(1) - edge));
+        // 30 m out the blend towards the base has barely started (smoothstep of 30/BLEND_M).
+        worstFar = Math.max(worstFar, Math.abs(at(30) - at(-1)));
+      }
+    }
+    // With 8 m cells on a 2 cm/m slope the bilinear error alone is about 0.15 m. The old fill
+    // along rows gave 1.0 m and 8.9 m here.
+    expect(worst).toBeLessThan(0.3);
+    expect(worstFar).toBeLessThan(0.5);
   });
 
   it('builds heightmap tiles north to south, sunk below the ground, and flat when far away', () => {

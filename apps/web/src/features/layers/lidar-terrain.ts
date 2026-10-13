@@ -24,7 +24,7 @@ export interface DtmGrid {
   meta: DtmMeta;
   /** Heights in metres, row 0 north; NaN where the grid has no data. */
   heights: Float32Array;
-  /** Same grid with every gap filled from its row neighbours, for clamped edge sampling. */
+  /** Same grid with every gap filled from the nearest cell with data, for sampling at the edges. */
   filled: Float32Array;
   /** Footprint corners (lng, lat) in order: the area really measured. */
   footprint: [number, number][];
@@ -44,38 +44,71 @@ export function decodeDtm(meta: DtmMeta, data: ArrayBuffer): DtmGrid {
   return {
     meta,
     heights,
-    filled: fillRows(heights, meta.width, meta.height),
+    filled: fillNearest(heights, meta),
     footprint: meta.footprint,
   };
 }
 
-/** Copies `heights` with each NaN replaced by the nearest value in its row (or column). */
-function fillRows(heights: Float32Array, width: number, height: number) {
+/**
+ * Copies `heights` with each NaN replaced by the value of the nearest cell with data, measured in
+ * metres on the ground (a two-pass nearest-neighbour transform over the whole box). Outside a
+ * rotated footprint this carries the closest edge outwards, instead of a value from far along the
+ * same row of the box.
+ */
+export function fillNearest(heights: Float32Array, meta: DtmMeta) {
+  const { width, height, west, east, south, north } = meta;
+  const n = width * height;
   const out = Float32Array.from(heights);
-  for (let r = 0; r < height; r++) fillLine(out, r * width, 1, width);
-  for (let c = 0; c < width; c++) fillLine(out, c, width, height);
-  return out;
-}
-function fillLine(a: Float32Array, start: number, step: number, count: number) {
-  let last = NaN;
-  const forward: number[] = [];
-  for (let i = 0; i < count; i++) {
-    const v = a[start + i * step]!;
-    if (Number.isFinite(v)) last = v;
-    forward.push(last);
-  }
-  last = NaN;
-  for (let i = count - 1; i >= 0; i--) {
-    const at = start + i * step;
-    const v = a[at]!;
-    if (Number.isFinite(v)) {
-      last = v;
-      continue;
+  const source = new Int32Array(n).fill(-1);
+  const d2 = new Float64Array(n).fill(Infinity);
+  let any = false;
+  for (let i = 0; i < n; i++)
+    if (Number.isFinite(heights[i])) {
+      source[i] = i;
+      d2[i] = 0;
+      any = true;
     }
-    const f = forward[i]!;
-    a[at] =
-      Number.isFinite(f) && Number.isFinite(last) ? (f + last) / 2 : Number.isFinite(f) ? f : last;
+  if (!any) return out;
+  // Metres between nodes, east-west and north-south.
+  const sx =
+    ((east - west) / (width - 1)) *
+    M_PER_DEG_LAT *
+    Math.cos(((south + north) / 2) * (Math.PI / 180));
+  const sy = ((north - south) / (height - 1)) * M_PER_DEG_LAT;
+  const offer = (i: number, c: number, r: number, nc: number, nr: number) => {
+    if (nc < 0 || nr < 0 || nc >= width || nr >= height) return;
+    const s = source[nr * width + nc]!;
+    if (s < 0) return;
+    const dx = (c - (s % width)) * sx,
+      dy = (r - Math.floor(s / width)) * sy;
+    const d = dx * dx + dy * dy;
+    if (d < d2[i]!) {
+      d2[i] = d;
+      source[i] = s;
+    }
+  };
+  for (let r = 0; r < height; r++) {
+    for (let c = 0; c < width; c++) {
+      const i = r * width + c;
+      offer(i, c, r, c - 1, r);
+      offer(i, c, r, c - 1, r - 1);
+      offer(i, c, r, c, r - 1);
+      offer(i, c, r, c + 1, r - 1);
+    }
+    for (let c = width - 1; c >= 0; c--) offer(r * width + c, c, r, c + 1, r);
   }
+  for (let r = height - 1; r >= 0; r--) {
+    for (let c = width - 1; c >= 0; c--) {
+      const i = r * width + c;
+      offer(i, c, r, c + 1, r);
+      offer(i, c, r, c + 1, r + 1);
+      offer(i, c, r, c, r + 1);
+      offer(i, c, r, c - 1, r + 1);
+    }
+    for (let c = 0; c < width; c++) offer(r * width + c, c, r, c - 1, r);
+  }
+  for (let i = 0; i < n; i++) if (!Number.isFinite(out[i])) out[i] = heights[source[i]!]!;
+  return out;
 }
 
 /** Bilinear sample of a grid at (lng, lat); NaN outside the grid or where it has no data. */
@@ -169,40 +202,49 @@ export function buildTerrain(grids: DtmGrid[]): LidarTerrain | undefined {
 /** Ellipsoidal height of the terrain at (lng, lat), in metres (before TERRAIN_SINK_M). */
 export function terrainHeight(terrain: LidarTerrain, lng: number, lat: number) {
   let nearest: DtmGrid | undefined,
-    distance = Infinity;
+    edge: [number, number] | undefined,
+    distance = Infinity,
+    gapInside = NaN;
   for (const grid of terrain.grids) {
-    const d = distanceToGrid(grid, lng, lat);
-    if (d === 0 && insidePolygon(lng, lat, grid.footprint)) {
+    const box = distanceToGrid(grid, lng, lat);
+    if (box === 0 && insidePolygon(lng, lat, grid.footprint)) {
       const v = sampleGrid(grid, lng, lat);
       if (Number.isFinite(v)) return v;
+      // Inside, between nodes without data (the edge cells): unless a neighbour has data here.
+      gapInside = sampleGrid(grid, lng, lat, grid.filled);
+      continue;
     }
-    if (d < distance) {
-      distance = d;
+    // Near a grid, the distance to its footprint (a slightly rotated square in lng/lat).
+    if (box < BLEND_M * 1.5) {
+      const near = nearestOnFootprint(grid, lng, lat);
+      if (near.distance < distance) {
+        distance = near.distance;
+        nearest = grid;
+        edge = near.point;
+      }
+    } else if (box < distance) {
+      distance = box;
       nearest = grid;
+      edge = undefined;
     }
   }
+  if (Number.isFinite(gapInside)) return gapInside;
   if (!nearest) return 0;
-  // Outside every footprint: the closest grid's edge, blended into the base plane.
-  if (distance < BLEND_M * 1.5) {
-    const { west, east, south, north } = nearest.meta;
-    const edge = sampleGrid(
-      nearest,
-      Math.min(east, Math.max(west, lng)),
-      Math.min(north, Math.max(south, lat)),
-      nearest.filled,
-    );
-    const outside = Math.max(distance, distanceOutside(nearest, lng, lat));
-    const w = smoothstep(outside / BLEND_M);
-    return Number.isFinite(edge) ? edge * (1 - w) + terrain.base * w : terrain.base;
+  // Outside every footprint: the height at the closest point of the nearest footprint's edge,
+  // blended into the base plane.
+  if (edge) {
+    const h = sampleGrid(nearest, edge[0], edge[1], nearest.filled);
+    const w = smoothstep(distance / BLEND_M);
+    return Number.isFinite(h) ? h * (1 - w) + terrain.base * w : terrain.base;
   }
   return terrain.base * (1 - smoothstep((distance - FAR_START_M) / (FAR_END_M - FAR_START_M)));
 }
 
-/** Metres from (lng, lat) to the grid's footprint when it lies in the box but not the footprint. */
-function distanceOutside(grid: DtmGrid, lng: number, lat: number) {
-  if (insidePolygon(lng, lat, grid.footprint)) return 0;
+/** The closest point (lng, lat) of a grid's footprint outline and its distance in metres. */
+export function nearestOnFootprint(grid: DtmGrid, lng: number, lat: number) {
   const mLng = M_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
-  let best = Infinity;
+  let distance = Infinity,
+    point: [number, number] = [lng, lat];
   const fp = grid.footprint;
   for (let i = 0; i < fp.length; i++) {
     const [ax, ay] = fp[i]!,
@@ -212,9 +254,13 @@ function distanceOutside(grid: DtmGrid, lng: number, lat: number) {
     const vx = (bx - ax) * mLng,
       vy = (by - ay) * M_PER_DEG_LAT;
     const t = Math.max(0, Math.min(1, (px * vx + py * vy) / (vx * vx + vy * vy || 1)));
-    best = Math.min(best, Math.hypot(px - t * vx, py - t * vy));
+    const d = Math.hypot(px - t * vx, py - t * vy);
+    if (d < distance) {
+      distance = d;
+      point = [ax + t * (bx - ax), ay + t * (by - ay)];
+    }
   }
-  return best;
+  return { point, distance };
 }
 
 /**
