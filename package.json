@@ -12,8 +12,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -k -n api,web \"npm run dev -w @geotwin/api\" \"npm run dev -w @geotwin/web\"",
-    "build": "npm run build -w @geotwin/shared && npm run build -w @geotwin/api && npm run build -w @geotwin/web",
+    "dev": "concurrently -k -n api,worker,web \"npm run dev -w @geotwin/api\" \"npm run dev -w @geotwin/worker\" \"npm run dev -w @geotwin/web\"",
+    "build": "npm run build -w @geotwin/shared -w @geotwin/storage && npm run build -w @geotwin/api && npm run build -w @geotwin/worker && npm run build -w @geotwin/web",
     "typecheck": "npm run typecheck --workspaces",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -25,9 +25,9 @@
     "db:seed": "tsx apps/api/src/db/cli.ts seed",
     "db:test": "tsx apps/api/src/db/cli.ts test",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
-    "predev": "npm run build -w @geotwin/shared",
-    "pretest": "npm run build -w @geotwin/shared",
-    "pretest:integration": "npm run build -w @geotwin/shared"
+    "predev": "npm run build -w @geotwin/shared -w @geotwin/storage",
+    "pretest": "npm run build -w @geotwin/shared -w @geotwin/storage",
+    "pretest:integration": "npm run build -w @geotwin/shared -w @geotwin/storage"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
