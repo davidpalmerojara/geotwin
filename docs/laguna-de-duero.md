@@ -2,7 +2,7 @@
 
 El escenario por defecto de la demo está en **Laguna de Duero (Valladolid)** y usa **ocho hojas reales de PNOA-LiDAR** (3.ª cobertura) procesadas por el mismo camino que cualquier subida: API → almacenamiento → cola pg-boss → worker → 3D Tiles. Las instalaciones y los activos son **ficticios** y su telemetría es **simulada**; solo su posición y su altura de montaje se han tomado de la nube de puntos. No son los sistemas reales del municipio.
 
-![Torres de Torrelago en la nube LiDAR real, en color RGB](screenshots/laguna-torrelago.jpg)
+![Torrelago en la nube LiDAR real, en color RGB, con calidad Alta](screenshots/laguna-torrelago.jpg)
 
 ## Los datos
 
@@ -62,6 +62,23 @@ Medido en este entorno (4 CPU, `TILER_JOBS=3`, almacenamiento local, rejilla ofi
 - **Densidad**: se dibujan todos los puntos que no son solape ni ruido; no se aclara la nube. Quitar el solape, además de limpiar la imagen, ahorra un 25 % de espacio.
 - El MDT tarda 0,2 s por hoja y ocupa 0,5 MB. «Celdas con suelo» es la parte de la malla con puntos de clase 2; el resto (edificios, la laguna, sombras) se rellena.
 
+## Cómo se dibuja la nube
+
+Es LiDAR **aéreo**: unos 8 puntos/m² con el solape y 5-6 sin él, tomados desde un avión, con el color de una ortofoto cenital. Las cubiertas, el suelo abierto y las copas quedan bien; las fachadas reciben pocos puntos y los patios estrechos y las calles entre bloques altos, ninguno. Alrededor de Torrelago (600 × 600 m), el **19,5 %** de las celdas de 1 m no tiene ningún punto dibujado, y solo un 5 % de esas celdas vacías (el 1 % del total) tenía puntos de solape: el hueco es del vuelo, no de quitar el solape. Por eso de cerca la nube no puede parecerse a un escaneo terrestre, y las capturas y el vídeo se hacen a media altura o en cenital. En los huecos se ve el mapa de fondo sobre el relieve (aquí, el atlas local de baja resolución; con la ortofoto PNOA, la imagen real).
+
+El visor la dibuja así (detalle técnico en [architecture.md](architecture.md#capas-y-medición-en-el-visor)):
+
+- **Puntos redondos** con el borde algo más oscuro, en lugar de cuadrados.
+- **Tamaño**: la atenuación de Cesium da a cada punto el tamaño de la separación de su nivel de detalle, hasta un máximo de 4 px en escritorio (3 en el móvil). Con 3 px quedaban huecos a media distancia; con 5-6, de cerca, los discos parecen escamas.
+- **Sin contornos**: el _eye-dome lighting_ oscurecía cada borde de edificio y de árbol, y la nube parecía un dibujo. Ahora está apagado; la casilla «Realzar bordes (EDL)» lo enciende, más suave que antes.
+- **Calidad** Baja, Media o Alta (error en pantalla 16, 12 o 3 y caché de 64, 128 o 256 MB por capa). Los móviles empiezan en Baja y el resto en Media; las capturas de esta página son en Alta.
+
+Antes y después, con la misma cámara y calidad Alta (izquierda, puntos cuadrados con EDL fuerte; derecha, la versión actual):
+
+![Torrelago antes y después del cambio de dibujo de la nube](screenshots/laguna-antes-despues.jpg)
+
+Las dos capturas se hicieron con un renderizador por software, que en una vista oblicua no termina de cargar todas las teselas en los 5 minutos de espera. Con el mismo tiempo, la de la derecha cargó más (la glorieta del centro sale en ella y no en la de la izquierda), en parte porque ya no se lee la GPU en cada fotograma (ver [architecture.md](architecture.md#capas-y-medición-en-el-visor)); la diferencia de aspecto en lo que sí está cargado (bloques en primer plano, torres) es la del cambio de dibujo.
+
 ## Comprobación del datum vertical con los datos reales
 
 Hecha aparte del código del worker: la ondulación N se ha leído directamente del GeoTIFF oficial `es_ign_egm08-rednap.tif` con interpolación bilineal propia, y las alturas elipsoidales de los puntos se han calculado desde sus coordenadas ECEF en las teselas servidas con una fórmula iterativa propia sobre GRS80 (pyproj solo empareja cada punto con el original en planta).
@@ -99,6 +116,10 @@ Hechas con la herramienta **Medir** del visor (clics sobre lo dibujado) y contra
 | Avenida al sur de Torrelago, entre dos glorietas                | 301,3 m horizontal, desnivel −0,46 m   | 301,26 m de geodésica (pyproj, WGS84) entre los dos puntos picados                                                                                                                                              |
 | Superficie de la laguna (polígono de 28 vértices por la orilla) | 36.919 m² (3,69 ha), perímetro 929,9 m | 36.919,4 m² y 929,9 m con pyproj para los mismos vértices. Zona sin retornos en la nube: 34.204 m² de agua; el polígono incluye además la isla y el embarcadero                                                 |
 
+Repetidas el 13/10/2026 con los puntos redondos de 4 px y calidad Alta (el clic tiene que seguir cayendo en los discos dibujados): torre **−41,7 m** de desnivel y 38,5 m en horizontal (38,47 m con pyproj entre los dos puntos picados); laguna **36.935 m²** y 927,3 m de perímetro, frente a 36.941 m² y 927,4 m con pyproj para los mismos 28 vértices (la herramienta proyecta al plano tangente; pyproj calcula sobre el elipsoide).
+
+![Medición de la altura de una torre de Torrelago](screenshots/laguna-medicion-torre.jpg)
+
 ![Medición del área de la laguna](screenshots/laguna-medicion.jpg)
 
 Un clic toma la profundidad de lo dibujado: sobre una nube a 3 px por punto, el punto picado puede quedar unos 30 cm por delante del punto LiDAR (en la torre, el suelo picado quedó 27 cm por encima de los puntos de suelo). Las alturas de la tabla son las de la nube, no las de un plano de proyecto.
@@ -109,6 +130,7 @@ Un clic cae sobre lo primero que se ve en ese píxel: la copa de un árbol, un c
 
 - Fuera de las ocho hojas el terreno es un **plano orientativo** a la altura mediana del MDT, que se funde con el borde de los datos en 400 m y vuelve al elipsoide a 30-60 km. Donde falta la hoja 355-4604 se ve ese plano.
 - La laguna no tiene superficie de agua: en la nube es un hueco y en el MDT una superficie interpolada desde la orilla.
+- Densidad de LiDAR aéreo: las fachadas tienen pocos puntos y los patios estrechos ninguno (ver [Cómo se dibuja la nube](#cómo-se-dibuja-la-nube)). La capa opcional [Fotorrealista (Google)](fotorrealista.md) da el aspecto real del entorno, pero no es un dato medido de este proyecto.
 - Sin ion, la ortofoto PNOA del IGN no se pudo cargar en este entorno (red bloqueada); las capturas usan el mapa local de baja resolución bajo la nube.
 - En las capturas, hechas con un renderizador por software (SwiftShader), las teselas lejanas aún no habían cargado su máximo detalle; con una GPU cargan en segundos.
 - Una hoja de 2 × 2 km o más densa multiplica tiempos y disco de forma aproximadamente lineal; la subida pasa por la API (150 MiB por defecto).

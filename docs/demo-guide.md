@@ -12,8 +12,10 @@ Antes: arranca Compose, comprueba `/api/health`, deja el token ion vacío para e
 **Nube de puntos y medición (60 s más, opcional).**
 
 1. **Capas.** Abre el panel: ocho hojas `PNOA_…` listas, con sus puntos, los de solape descartados y la ondulación del geoide aplicada. Señala la atribución de PNOA-LiDAR en los créditos del visor. Si quieres enseñar el pipeline en directo, arrastra la nube **sintética** `apps/worker/tests/fixtures/synthetic-laguna-duero.laz`: verás _En cola_, _Procesando N %_ con su etapa y _Lista_, empujados por WebSocket desde el worker.
-2. **Estilos.** Acércate a las torres de Torrelago y cambia entre **RGB**, **Altura** y **Clasificación**; desmarca **Suelo** para dejar edificios y árboles.
+2. **Estilos.** Pon **Calidad** en **Alta**, mira las torres de Torrelago desde media altura (no pegado a las fachadas: el LiDAR aéreo apenas tiene puntos en ellas) y cambia entre **RGB**, **Altura** y **Clasificación**; desmarca **Suelo** para dejar edificios y árboles.
 3. **Medir.** Pulsa la regla y haz clic en la cubierta de una torre y en el suelo de al lado: unos 42 m de desnivel. Cambia a **Área** y rodea la laguna: unas 3,7 ha. Comenta que las distancias horizontales son geodésicas sobre WGS84 y que el relieve es el modelo del terreno sacado de la propia nube.
+
+**Fotorrealista (Google), opcional.** Solo en local y con tu propio token (no en una demo pública, por la cuota y las condiciones del plan gratuito de Cesium ion): el botón del edificio pone la malla de Google bajo los activos; vuelve a pulsarlo para regresar a la vista LiDAR. Ver [fotorrealista.md](fotorrealista.md).
 
 Para demostrar resincronización: abre dos pestañas, genera el fallo en una y observa la otra. Interrumpe temporalmente la red de una pestaña, resuelve desde la segunda y restaura la conexión: la primera consulta REST tras reconectar y recupera el estado vigente.
 
