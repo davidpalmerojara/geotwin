@@ -17,8 +17,10 @@ export function distanceM(a: LatLng, b: LatLng) {
 /**
  * Centre and radius (metres) of a circle that contains every point, padded so that
  * markers, labels and installation areas near the edge stay inside the view.
+ * By default the padding grows with the frame (20 %, between 120 and 450 m): the whole
+ * network keeps room for its labels and one installation (a 210 m area) fills the view.
  */
-export function frameOf(points: LatLng[], paddingM = 450, minRadiusM = 450) {
+export function frameOf(points: LatLng[], paddingM?: number, minRadiusM = 300) {
   if (!points.length) return undefined;
   const lats = points.map((p) => p.lat);
   const lngs = points.map((p) => p.lng);
@@ -27,7 +29,8 @@ export function frameOf(points: LatLng[], paddingM = 450, minRadiusM = 450) {
     lng: (Math.min(...lngs) + Math.max(...lngs)) / 2,
   };
   const radius = Math.max(...points.map((p) => distanceM(center, p)));
-  return { center, radius: Math.max(minRadiusM, radius + paddingM) };
+  const padding = paddingM ?? Math.min(450, Math.max(120, radius * 0.2));
+  return { center, radius: Math.max(minRadiusM, radius + padding) };
 }
 /**
  * Camera distance that fits a sphere of `radius` in a perspective frustum.
