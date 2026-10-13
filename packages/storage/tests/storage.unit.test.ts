@@ -63,6 +63,9 @@ describe('Storage', () => {
     );
     expect(s3).toBeInstanceOf(S3Storage);
     expect(() => storageEnvSchema.parse({ STORAGE_DRIVER: 'ftp' })).toThrow();
+    expect(storageEnvSchema.parse({ S3_ENDPOINT: '', S3_ACCESS_KEY_ID: '' }).S3_ENDPOINT).toBe(
+      undefined,
+    );
   });
 });
 describe('waitForStorage', () => {

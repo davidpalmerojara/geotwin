@@ -344,15 +344,17 @@ export async function waitForStorage(storage: Storage, attempts = 15, firstDelay
 }
 
 const boolean = z.enum(['true', 'false']).transform((v) => v === 'true');
+// An empty value in .env means "not set".
+const unset = (v: unknown) => (v === '' ? undefined : v);
 export const storageEnvSchema = z.object({
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   STORAGE_LOCAL_DIR: z.string().default('data/storage'),
   S3_BUCKET: z.string().default('geotwin'),
   S3_REGION: z.string().default('eu-south-2'),
-  S3_ENDPOINT: z.url().optional(),
+  S3_ENDPOINT: z.preprocess(unset, z.url().optional()),
   S3_FORCE_PATH_STYLE: boolean.default(false),
-  S3_ACCESS_KEY_ID: z.string().optional(),
-  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.preprocess(unset, z.string().optional()),
+  S3_SECRET_ACCESS_KEY: z.preprocess(unset, z.string().optional()),
   S3_CREATE_BUCKET: boolean.default(false),
 });
 export type StorageEnv = z.infer<typeof storageEnvSchema>;
