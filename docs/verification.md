@@ -45,9 +45,29 @@ Con API y Vite locales, simulador activo y atlas local:
 - La cámara encuadra toda la red a 1440×900 y a 390×844. Capturas actualizadas en [`screenshots/`](screenshots/).
 - `POST /api/alerts` con un cuerpo de 20 KB devuelve 413; `search=%` y `search=_` devuelven una lista vacía.
 
+## Pipeline LiDAR (rama `feat/lidar-pipeline`)
+
+Entorno local del 13/10/2026: Node 22.22, PostgreSQL 16.13 + PostGIS 3.4.2 nativos, Python 3.13 con `apps/worker/python/requirements-dev.txt`, 4 CPU. Sin Docker local: MinIO y las imágenes se prueban en GitHub Actions. Todas las nubes usadas son **sintéticas**.
+
+| Fecha      | Revisión  | Entorno                                                                                  | Comprobación                                                                                                                            | Resultado |
+| ---------- | --------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 13/10/2026 | `082a832` | GitHub Actions: Python 3.13, rejilla EGM08-REDNAP de `cdn.proj.org`, MinIO `pgsty/minio` | Job `checks`: unitarias, pytest, integración (pipeline con py3dtiles real y driver S3 contra MinIO), build y E2E                        | Correcto  |
+| 13/10/2026 | `082a832` | GitHub Actions, Docker Compose completo (db, MinIO, API, worker, web)                    | Job `docker`: `scripts/smoke-layer.sh` sube el LAZ sintético por nginx, el worker lo convierte y se sirve el `tileset.json`             | Correcto  |
+| 13/10/2026 | rama      | Local                                                                                    | `npm test` 54/54; `npm run test:integration` 34/34 (+1 de S3 sin servidor); `pytest` 13/13, con la rejilla oficial                      | Correcto  |
+| 13/10/2026 | rama      | Local, servidor S3 `moto` (emulador compatible)                                          | Contrato del driver S3 y recorrido completo API → worker → teselas con `STORAGE_DRIVER=s3` y corrección por rejilla (N = 53,106 m)      | Correcto  |
+| 13/10/2026 | rama      | Local, API y worker como procesos separados, almacenamiento local, `TILER_JOBS=3`        | Hoja sintética de 12 M de puntos (LAZ de 86 MB): subida 0,7 s; conversión 66 s; 1.372 ficheros y 187 MB de teselas; worker ≤ 3,4 GB PSS | Correcto  |
+| 13/10/2026 | rama      | Igual                                                                                    | Worker matado a mitad de conversión: el job quedó en reintento y, al arrancar otro worker, terminó la capa sin intervención             | Correcto  |
+
+Lo que cubren las pruebas nuevas:
+
+- **Unitarias.** Detección LAS/LAZ por la cabecera (firma, versión, formato de punto) y streaming con SHA-256 sin emitir nada si el fichero no es LAS; ondulación EGM96 en Laguna de Duero frente al valor de PROJ (53,60 m) y frente al oficial EGM08-REDNAP (53,11 m, error entre 0,4 y 0,6 m); orden de prioridad de los métodos verticales; contrato del almacenamiento local (escritura atómica, claves inseguras rechazadas); configuración; máquina de estados del job con un conversor simulado (éxito, fichero dañado sin reintento, error inesperado con reintento y fallo en el último intento, caída del conversor, timeout que mata el proceso, borrado a mitad de proceso, reproceso que sustituye la ejecución anterior).
+- **Python (pytest).** Lectura de cabecera, CRS y clases; CRS por defecto si el fichero no lo trae; LAZ truncado y fichero no LAS con error legible; coordenadas que no encajan con el CRS; desplazamiento de alturas por cabecera; conversión real con RGB, clasificación y alturas elipsoidales comprobadas al centímetro; ruta exacta con la rejilla; LAZ de varios bloques sin bloqueo.
+- **Integración.** Subida → cola → worker → `ready` con progreso por WebSocket, metadatos, cabeceras de caché, `ETag` y 304; duplicado 409; tipo por contenido 415; tamaño 413 con y sin `Content-Length`; LAZ dañado → `failed` con mensaje legible; reproceso con y sin ondulación manual y URL nueva; borrado de fila y objetos con evento; rutas de teselas que intentan salir de la carpeta; OpenAPI del multipart.
+
 ## Límites del entorno
 
 - No hay despliegue público ni recursos en AWS; [aws.md](aws.md) es un plan.
 - La ortofoto PNOA necesita conexión con `ign.es`; el atlas local funciona sin red. Las pruebas automáticas usan el atlas local.
 - El terreno y los edificios de Cesium ion necesitan un token propio y no se prueban en CI.
 - El chunk de Cesium supera el límite de aviso de Vite; se carga bajo demanda al abrir el gemelo digital.
+- No se ha probado todavía con una hoja PNOA-LiDAR real (los servidores del CNIG no eran accesibles desde este entorno); las cifras de rendimiento son de una nube sintética del mismo tamaño.
