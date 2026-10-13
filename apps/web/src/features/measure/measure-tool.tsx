@@ -199,7 +199,9 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
                 <dd>{points.length > 1 ? formatLength(result.distance3d) : '—'}</dd>
               </div>
               <div>
-                <dt>Sobre el terreno</dt>
+                <dt title="Geodésica sobre el elipsoide WGS84, sin contar el desnivel">
+                  Horizontal
+                </dt>
                 <dd>{points.length > 1 ? formatLength(result.ground) : '—'}</dd>
               </div>
               <div>
@@ -222,14 +224,20 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
         </dl>
         <p className={`measure-hint ${miss ? 'warn' : ''}`}>
           {miss
-            ? 'Ahí no hay nada que medir: apunta a la nube, al terreno o al mapa.'
+            ? 'Ahí no hay nada que medir: apunta a la nube o al mapa.'
             : points.length < needed
-              ? `Haz clic en el mapa o usa «Punto en el centro» (${points.length}/${needed} puntos).`
-              : `${points.length} puntos. Sigue añadiendo o deshaz con Retroceso.`}
+              ? `Clic en el mapa o «Centro» (${points.length}/${needed} puntos)`
+              : `${points.length} puntos · Retroceso deshace, Esc cierra`}
         </p>
         <div className="measure-actions">
-          <Button size="sm" variant="outline" onClick={addCentre}>
-            <Crosshair size={13} /> Punto en el centro
+          <Button
+            size="sm"
+            variant="outline"
+            aria-label="Añadir punto en el centro"
+            title="Añade el punto bajo la cruz central (con las flechas mueves el mapa)"
+            onClick={addCentre}
+          >
+            <Crosshair size={13} /> Centro
           </Button>
           <Button size="sm" variant="ghost" disabled={!points.length} onClick={undo}>
             <Undo2 size={13} /> Deshacer
