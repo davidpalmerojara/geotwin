@@ -12,6 +12,7 @@ import {
   Color,
   ColorMaterialProperty,
   CustomDataSource,
+  Entity,
   LabelStyle,
   PolygonHierarchy,
   ScreenSpaceEventHandler,
@@ -22,6 +23,7 @@ import {
 import { Crosshair, Ruler, Shapes, Trash2, Undo2, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { formatArea, formatHeight, formatLength, measure } from './geodesy';
+import { renderUntil } from './render-until';
 
 type Mode = 'distance' | 'area';
 const accent = Color.fromCssColorString('#22d3ee');
@@ -36,26 +38,12 @@ function pick(viewer: Viewer, position: Cartesian2) {
   return scene.camera.pickEllipsoid(position, scene.globe.ellipsoid);
 }
 
-/**
- * Lines and polygons of entities are built asynchronously, and in request-render mode Cesium
- * only asks for a frame the first time a data source becomes ready: keep rendering for a moment
- * so a new line or polygon appears without waiting for the next camera move.
- */
-function renderForAWhile(viewer: Viewer, ms = 1200) {
-  const until = performance.now() + ms;
-  const tick = () => {
-    if (viewer.isDestroyed()) return;
-    viewer.scene.requestRender();
-    if (performance.now() < until) requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
-}
-
 export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClose: () => void }) {
   const [mode, setMode] = useState<Mode>('distance');
   const [points, setPoints] = useState<Cartesian3[]>([]);
   const [miss, setMiss] = useState(false);
   const source = useRef<CustomDataSource | null>(null);
+  const stopRendering = useRef<() => void>(undefined);
   const result = useMemo(() => measure(points, mode), [points, mode]);
 
   const add = useCallback(
@@ -84,6 +72,7 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
     );
     viewer.scene.canvas.style.cursor = 'crosshair';
     return () => {
+      stopRendering.current?.();
       handler.destroy();
       if (!viewer.isDestroyed()) {
         viewer.dataSources.remove(ds, true);
@@ -131,26 +120,31 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
         },
       }),
     );
+    const shapes: Entity[] = [];
     if (points.length > 1) {
       const line = mode === 'area' && points.length > 2 ? [...points, points[0]!] : points;
-      ds.entities.add({
-        polyline: {
-          positions: line,
-          width: 2.5,
-          arcType: ArcType.NONE,
-          material: accent,
-          depthFailMaterial: new ColorMaterialProperty(accent.withAlpha(0.45)),
-        },
-      });
+      shapes.push(
+        ds.entities.add({
+          polyline: {
+            positions: line,
+            width: 2.5,
+            arcType: ArcType.NONE,
+            material: accent,
+            depthFailMaterial: new ColorMaterialProperty(accent.withAlpha(0.45)),
+          },
+        }),
+      );
     }
     if (mode === 'area' && points.length > 2)
-      ds.entities.add({
-        polygon: {
-          hierarchy: new PolygonHierarchy(points),
-          perPositionHeight: true,
-          material: accent.withAlpha(0.18),
-        },
-      });
+      shapes.push(
+        ds.entities.add({
+          polygon: {
+            hierarchy: new PolygonHierarchy(points),
+            perPositionHeight: true,
+            material: accent.withAlpha(0.18),
+          },
+        }),
+      );
     const last = points.at(-1);
     const text =
       mode === 'area'
@@ -178,7 +172,15 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
         },
       });
     viewer.scene.requestRender();
-    if (points.length > 1) renderForAWhile(viewer);
+    // Lines and polygons are built asynchronously and, in request-render mode, Cesium does not
+    // ask for a frame when they are done: keep drawing until they are, so they never go missing.
+    stopRendering.current?.();
+    stopRendering.current = shapes.length
+      ? renderUntil(
+          () => !viewer.isDestroyed() && viewer.scene.requestRender(),
+          () => viewer.isDestroyed() || viewer.dataSourceDisplay.ready,
+        )
+      : undefined;
   }, [points, mode, result, viewer]);
 
   const switchMode = (next: Mode) => {
