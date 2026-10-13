@@ -176,8 +176,9 @@ export async function processLayer(job: LayerJobContext, deps: Deps): Promise<Ou
     log.info({ layerId: layer.id, files: files.length, bytes: total }, 'Layer ready');
     return 'ready';
   } catch (error) {
-    if (error instanceof LayerGoneError) {
-      // Deleted meanwhile: the API removed the row and its objects; drop what we uploaded.
+    // Deleted meanwhile (DELETE also cancels the job, which aborts us): the API removed the row
+    // and its objects, so drop whatever this attempt uploaded afterwards.
+    if (error instanceof LayerGoneError || !(await repo.find(layer.id).catch(() => layer))) {
       await storage.deletePrefix(layerPrefix(layer.id)).catch(() => undefined);
       log.info({ layerId: layer.id }, 'Layer deleted while processing');
       return 'skipped';

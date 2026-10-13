@@ -191,6 +191,19 @@ describe('Layer job state machine', () => {
     expect(await processLayer(job(), deps(repo))).toBe('skipped');
     expect(await storage.list(`layers/${LAYER}/`)).toEqual([]);
   });
+  it('treats a cancellation after a delete as a skip and removes leftovers', async () => {
+    process.env.FAKE_LIDAR_MODE = 'slow';
+    const controller = new AbortController();
+    const repo = new FakeRepo();
+    setTimeout(() => {
+      repo.row = null; // DELETE /api/layers/:id removes the row, then cancels the job
+      controller.abort(new Error('cancelled'));
+    }, 300);
+    await storage.put(`layers/${LAYER}/tiles/run/late.pnts`, Readable.from(['x']));
+    expect(await processLayer(job({ signal: controller.signal }), deps(repo))).toBe('skipped');
+    expect(await storage.list(`layers/${LAYER}/`)).toEqual([]);
+    expect(repo.log.some((l) => l.startsWith('fail') || l === 'requeue')).toBe(false);
+  });
   it('honours a worker-wide override and passes the grid only when configured', async () => {
     const repo = new FakeRepo();
     await processLayer(job(), deps(repo, { GEOID_OFFSET_M: 51.25 }));

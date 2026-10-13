@@ -120,7 +120,7 @@ Opcionalmente configura `VITE_CESIUM_ION_TOKEN` y reconstruye la web. El botón 
 ## Tests
 
 ```bash
-npm test                      # 54 pruebas unitarias: dominio, contratos, ion, cámara, caché realtime, cliente API, formato,
+npm test                      # 55 pruebas unitarias: dominio, contratos, ion, cámara, caché realtime, cliente API, formato,
                               # detección LAS/LAZ, geoide, almacenamiento, configuración y estados del worker
 npm run test:integration       # crea/migra geotwin_test; 34 pruebas con PostGIS real, 8 de ellas del pipeline LiDAR
 python -m pytest apps/worker/python/tests   # 13 pruebas: lectura, conversión real con py3dtiles y alturas
