@@ -26,7 +26,7 @@ import {
   type ColorMode,
   type Quality,
 } from './point-style';
-import { mebibytes, validateFile } from './upload';
+import { mebibytes, quietMinutes, validateFile } from './upload';
 
 const stageLabel: Record<LayerStage, string> = {
   queued: 'en cola',
@@ -375,6 +375,16 @@ function LayerRow({ layer, onDelete }: { layer: Layer; onDelete: () => void }) {
     toggle = useLayerView((s) => s.toggle),
     flyTo = useLayerView((s) => s.requestFlyTo);
   const isReady = layer.status === 'ready';
+  // When did this tab last see the layer move? A coarse clock (10 s) is enough for minutes.
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setClock(Date.now()), 10_000);
+    return () => clearInterval(timer);
+  }, []);
+  const step = `${layer.status}:${layer.stage}:${layer.progress}`;
+  const [seen, setSeen] = useState({ step, at: clock });
+  if (seen.step !== step) setSeen({ step, at: clock });
+  const quiet = layer.status === 'processing' ? quietMinutes(seen.at, clock) : null;
   return (
     <li className="layer-row" data-testid={`layer-${layer.id}`} data-status={layer.status}>
       <div className="layer-row-head">
@@ -398,6 +408,12 @@ function LayerRow({ layer, onDelete }: { layer: Layer; onDelete: () => void }) {
             aria-label={`Progreso de ${layer.name}: ${stageLabel[layer.stage]}`}
           />
           <small className="layer-meta">{stageLabel[layer.stage]}</small>
+          {quiet !== null && (
+            <small className="layer-quiet" role="status">
+              Sin noticias del worker desde hace {quiet} min. Si se ha detenido, la tarea se
+              reintentará cuando vuelva a estar en marcha.
+            </small>
+          )}
         </>
       )}
       {layer.status === 'failed' && <p className="layer-error">{layer.error}</p>}

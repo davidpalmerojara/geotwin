@@ -12,7 +12,7 @@ import {
   rampBounds,
   shadingFor,
 } from './point-style';
-import { mebibytes, validateFile } from './upload';
+import { mebibytes, QUIET_AFTER_MS, quietMinutes, validateFile } from './upload';
 
 const centre = { lat: 41.58295, lng: -4.7191 };
 // What Cesium substitutes for a point cloud's built-in and batch-table variables.
@@ -170,5 +170,16 @@ describe('Upload checks', () => {
       '«grande.laz» ocupa 190,7 MiB y el límite es 150 MiB.',
     );
     expect(mebibytes(56123)).toBe('0,1 MiB');
+  });
+});
+
+describe('A processing layer with no news from the worker', () => {
+  it('stays quiet while progress keeps arriving and then counts whole minutes', () => {
+    const start = 1_000_000;
+    expect(quietMinutes(start, start)).toBeNull();
+    expect(quietMinutes(start, start + QUIET_AFTER_MS - 1)).toBeNull();
+    expect(quietMinutes(start, start + QUIET_AFTER_MS)).toBe(1);
+    // The verified crash: the bar stayed frozen for about 2.3 minutes before the retry.
+    expect(quietMinutes(start, start + 140_000)).toBe(2);
   });
 });

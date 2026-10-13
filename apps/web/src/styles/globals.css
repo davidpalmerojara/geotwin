@@ -1866,6 +1866,11 @@ tr:hover td {
   font-size: 11px;
   padding: 6px 8px;
 }
+.layer-quiet {
+  font-size: 9px;
+  line-height: 1.5;
+  color: #fcd34d;
+}
 .layer-message,
 .layer-error {
   display: flex;
