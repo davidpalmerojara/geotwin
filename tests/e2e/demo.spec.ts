@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { mkdir } from 'node:fs/promises';
 test('dashboard → 3D twin → persisted anomaly → resolved incident', async ({
   page,
   request,
@@ -17,10 +16,6 @@ test('dashboard → 3D twin → persisted anomaly → resolved incident', async 
     page.getByRole('heading', { name: 'Tu infraestructura. En perspectiva.' }),
   ).toBeVisible();
   await expect(page.getByTestId('connection')).toContainText('Tiempo real');
-  if (process.env.CAPTURE_DEMO) {
-    await mkdir('docs/screenshots', { recursive: true });
-    await page.screenshot({ path: 'docs/screenshots/overview.png', fullPage: true });
-  }
   const observer = await context.newPage();
   await observer.goto('/');
   await expect(observer.getByTestId('connection')).toContainText('Tiempo real');
@@ -56,8 +51,6 @@ test('dashboard → 3D twin → persisted anomaly → resolved incident', async 
     'rgb(251, 113, 133)',
   );
   await page.mouse.move(1200, 30);
-  if (process.env.CAPTURE_DEMO)
-    await page.screenshot({ path: 'docs/screenshots/digital-twin.png', fullPage: true });
   const active = await request.get(`/api/alerts?asset_id=${assetId}&status=active`);
   const alert = (await active.json())[0];
   expect(alert.severity).toBe('critical');
@@ -85,8 +78,6 @@ test('dashboard → 3D twin → persisted anomaly → resolved incident', async 
     await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Alertas', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Cada señal, una acción' })).toBeVisible();
-  if (process.env.CAPTURE_DEMO)
-    await page.screenshot({ path: 'docs/screenshots/mobile.png', fullPage: true });
   // A shared link opens the same installation and asset; Back returns to the previous page.
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(link);
