@@ -78,8 +78,7 @@ const INSTALLATION_FONT = '12px sans-serif';
 const LABEL_PAD_X = 7,
   LABEL_HEIGHT = 26;
 // What floats over the map: installation labels keep clear of it.
-const MAP_FURNITURE =
-  '.map-controls, .map-top .map-tag, .map-bottom, .map-hint, [data-map-overlay]';
+const MAP_FURNITURE = '.map-controls, .map-top .map-tag, .map-bottom, .map-hint';
 /**
  * The last flight the viewer made on its own (framing a place or the selected asset). When the
  * ground under it changes (the LiDAR terrain arrives after the first frame) it is flown again,
@@ -435,19 +434,19 @@ export default function CesiumView({
       if (v.isDestroyed()) return;
       const rect = v.scene.canvas.getBoundingClientRect();
       const shell = container.current?.parentElement;
-      const blocked = [...(shell?.querySelectorAll(MAP_FURNITURE) ?? [])]
-        .filter(
-          (el) => !el.matches('[data-map-overlay]') || getComputedStyle(el).position === 'absolute',
-        )
-        .map((el) => {
-          const b = el.getBoundingClientRect();
-          return {
-            left: b.left - rect.left,
-            right: b.right - rect.left,
-            top: b.top - rect.top,
-            bottom: b.bottom - rect.top,
-          };
-        });
+      // The map's own controls, and panels floating over it from outside (the «Capas» panel).
+      const floating = [...document.querySelectorAll('[data-map-overlay]')].filter(
+        (el) => getComputedStyle(el).position === 'absolute',
+      );
+      const blocked = [...(shell?.querySelectorAll(MAP_FURNITURE) ?? []), ...floating].map((el) => {
+        const b = el.getBoundingClientRect();
+        return {
+          left: b.left - rect.left,
+          right: b.right - rect.left,
+          top: b.top - rect.top,
+          bottom: b.bottom - rect.top,
+        };
+      });
       const current = installationIdRef.current;
       const ordered = [...installationsRef.current].sort(
         (a, b) => Number(b.id === current) - Number(a.id === current),
@@ -470,7 +469,22 @@ export default function CesiumView({
           });
         else placement.set(i.id, null);
       }
-      for (const [id, offset] of placeLabels(anchors, blocked, rect)) placement.set(id, offset);
+      // Asset markers (13 px dots) are left uncovered whenever there is another spot.
+      const markers: ScreenBox[] = [];
+      for (const a of assetsRef.current) {
+        const at = SceneTransforms.worldToWindowCoordinates(
+          v.scene,
+          Cartesian3.fromDegrees(
+            a.location.lng,
+            a.location.lat,
+            groundRef.current(a.location.lng, a.location.lat) +
+              (reliefRef.current ? a.mount_height_m : 0),
+          ),
+        );
+        if (at) markers.push({ left: at.x - 9, right: at.x + 9, top: at.y - 9, bottom: at.y + 9 });
+      }
+      for (const [id, offset] of placeLabels(anchors, blocked, rect, markers))
+        placement.set(id, offset);
       let changed = false;
       const now = JulianDate.now();
       for (const [id, offset] of placement) {

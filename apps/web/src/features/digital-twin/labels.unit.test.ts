@@ -58,4 +58,14 @@ describe('Installation labels on the map', () => {
         expect(apart).toBe(true);
       }
   });
+  it('keeps markers uncovered when it can, and covers them rather than hide the label', () => {
+    const marker = { left: 192, right: 208, top: 242, bottom: 258 };
+    const free = placeLabels([label('a', 200, 200)], [], view, [marker]).get('a')!;
+    expect(free.y).not.toBe(50);
+    const full = { left: 0, right: 390, top: 140, bottom: 300 };
+    expect(placeLabels([label('a', 200, 200)], [], view, [full]).get('a')).toEqual({
+      x: 0,
+      y: 50,
+    });
+  });
 });

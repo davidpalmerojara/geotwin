@@ -23,46 +23,52 @@ const overlaps = (a: ScreenBox, b: ScreenBox) =>
 /**
  * Places each label (in order of priority) at the first free spot: below or above its anchor,
  * slid sideways past whatever is in the way as long as it still spans its anchor, and inside the
- * view. A label with no free spot is hidden rather than drawn on top of another.
+ * view. `soft` obstacles (the asset markers) are avoided when possible and covered only when there
+ * is no other spot. A label with no free spot is hidden rather than drawn on top of another.
  */
 export function placeLabels(
   anchors: LabelAnchor[],
   blocked: ScreenBox[],
   view: { width: number; height: number },
+  soft: ScreenBox[] = [],
   offsets = LABEL_OFFSETS,
 ) {
   const placed: ScreenBox[] = [];
   const result = new Map<string, LabelOffset>();
-  for (const a of anchors) {
-    let chosen: LabelOffset = null;
-    const inView = a.x >= 0 && a.x <= view.width && a.y >= 0 && a.y <= view.height;
-    for (const dy of inView ? offsets : []) {
+  const spot = (a: LabelAnchor, avoid: ScreenBox[]): LabelOffset => {
+    for (const dy of offsets) {
       const top = a.y + dy - a.height / 2,
         bottom = top + a.height;
       if (top < 0 || bottom > view.height) continue;
       // Centred on the anchor, pulled inside the view, then slid past each obstacle in turn.
       const centred = Math.min(Math.max(a.x - a.width / 2, 0), view.width - a.width);
       const lefts = [centred];
-      for (const b of [...blocked, ...placed])
+      for (const b of avoid)
         if (b.bottom > top && b.top < bottom) lefts.push(b.right + GAP, b.left - GAP - a.width);
-      const fits = (left: number) => {
+      const left = lefts.find((left) => {
         const box = { left, right: left + a.width, top, bottom };
         return (
           left >= 0 &&
           box.right <= view.width &&
           left <= a.x &&
           box.right >= a.x &&
-          !blocked.some((b) => overlaps(box, b)) &&
-          !placed.some((p) => overlaps(box, p))
+          !avoid.some((b) => overlaps(box, b))
         );
-      };
-      const left = lefts.find(fits);
+      });
       if (left === undefined) continue;
       placed.push({ left, right: left + a.width, top, bottom });
-      chosen = { x: left + a.width / 2 - a.x, y: dy };
-      break;
+      return { x: left + a.width / 2 - a.x, y: dy };
     }
-    result.set(a.id, chosen);
+    return null;
+  };
+  for (const a of anchors) {
+    const inView = a.x >= 0 && a.x <= view.width && a.y >= 0 && a.y <= view.height;
+    result.set(
+      a.id,
+      inView
+        ? (spot(a, [...blocked, ...placed, ...soft]) ?? spot(a, [...blocked, ...placed]))
+        : null,
+    );
   }
   return result;
 }
