@@ -112,6 +112,90 @@ export const createAlertBody = z.object({
   message: z.string().trim().min(5).max(500),
 });
 export const updateAssetBody = z.object({ name: z.string().trim().min(1).max(100) });
+// LiDAR layers: uploaded LAS/LAZ point clouds that a worker converts to 3D Tiles.
+export const layerStatus = z.enum(['queued', 'processing', 'ready', 'failed']);
+export const layerStage = z.enum([
+  'queued',
+  'downloading',
+  'inspecting',
+  'tiling',
+  'uploading',
+  'done',
+]);
+export const verticalDatum = z.enum(['orthometric', 'ellipsoidal']);
+// How orthometric heights became ellipsoidal ones (see docs/architecture.md).
+export const geoidMethod = z.enum(['egm08_rednap_grid', 'egm96_centre', 'override', 'none']);
+export const epsgCode = z.string().regex(/^EPSG:\d{4,6}$/, 'Usa el formato EPSG:25830');
+export const layerSchema = z.object({
+  id: uuid,
+  organization_id: uuid,
+  name: z.string(),
+  kind: z.literal('pointcloud'),
+  status: layerStatus,
+  stage: layerStage,
+  progress: z.number().int().min(0).max(100),
+  error: z.string().nullable(),
+  source: z.object({
+    filename: z.string(),
+    format: z.enum(['las', 'laz']),
+    size_bytes: z.number().int(),
+    sha256: z.string(),
+  }),
+  crs_in: z.string(),
+  vertical: z.object({
+    datum: verticalDatum,
+    // Requested override in metres (null: computed by the worker).
+    override_m: z.number().nullable(),
+    // Geoid undulation N actually applied (h = H + N), null until processed.
+    geoid_offset_m: z.number().nullable(),
+    method: geoidMethod.nullable(),
+  }),
+  point_count: z.number().int().nullable(),
+  point_format: z.number().int().nullable(),
+  // [west, south, east, north] in degrees (WGS84).
+  bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),
+  center: locationSchema.nullable(),
+  // Heights as stored in the source file (orthometric for PNOA).
+  height_range_m: z.object({ min: z.number(), max: z.number() }).nullable(),
+  tileset_url: z.string().nullable(),
+  attribution: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export const layerProgressSchema = z.object({
+  id: uuid,
+  status: layerStatus,
+  stage: layerStage,
+  progress: z.number().int().min(0).max(100),
+});
+export const layerUploadQuery = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  crs_in: epsgCode.default('EPSG:25830'),
+  vertical_datum: verticalDatum.default('orthometric'),
+  geoid_offset_m: z.coerce.number().min(-150).max(150).optional(),
+  attribution: z.string().trim().min(1).max(500).optional(),
+});
+export const layerTileParams = z.object({ id: uuid, '*': z.string().min(1).max(512) });
+// Queue contract shared by the API (producer) and the worker (consumer).
+export const LAYER_QUEUE = 'layer-process';
+export const layerJobSchema = z.object({ layer_id: uuid });
+// pg-boss queue defaults; the worker can raise the timeout and retries through its environment.
+export const LAYER_QUEUE_DEFAULTS = {
+  retryLimit: 2,
+  retryDelay: 30,
+  retryBackoff: true,
+  retryDelayMax: 600,
+  expireInSeconds: 1800,
+  heartbeatSeconds: 60,
+  deleteAfterSeconds: 7 * 24 * 3600,
+} as const;
+// Postgres NOTIFY channel the worker and the API use to fan events out to every API replica.
+export const REALTIME_CHANNEL = 'geotwin_events';
+// NOTIFY payloads are kept small (Postgres caps them at 8000 bytes): the API reads the row itself.
+export const layerNotificationSchema = z.union([
+  layerProgressSchema.extend({ event: z.literal('progress') }),
+  z.object({ event: z.enum(['created', 'ready', 'failed', 'deleted']), id: uuid }),
+]);
 export const realtimeEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('sensor:reading'), data: readingSchema }),
   z.object({
@@ -122,6 +206,11 @@ export const realtimeEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('alert:created'), data: alertSchema }),
   z.object({ type: z.literal('alert:resolved'), data: alertSchema }),
   z.object({ type: z.literal('sync:required'), data: z.object({ connected_at: z.string() }) }),
+  z.object({ type: z.literal('layer:created'), data: layerSchema }),
+  z.object({ type: z.literal('layer:progress'), data: layerProgressSchema }),
+  z.object({ type: z.literal('layer:ready'), data: layerSchema }),
+  z.object({ type: z.literal('layer:failed'), data: layerSchema }),
+  z.object({ type: z.literal('layer:deleted'), data: z.object({ id: uuid }) }),
 ]);
 export type Asset = z.infer<typeof assetSchema>;
 export type Organization = z.infer<typeof organizationSchema>;
@@ -132,3 +221,9 @@ export type Alert = z.infer<typeof alertSchema>;
 export type Summary = z.infer<typeof summarySchema>;
 export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
 export type AssetStatus = z.infer<typeof assetStatus>;
+export type Layer = z.infer<typeof layerSchema>;
+export type LayerProgress = z.infer<typeof layerProgressSchema>;
+export type LayerStage = z.infer<typeof layerStage>;
+export type GeoidMethod = z.infer<typeof geoidMethod>;
+export type LayerJob = z.infer<typeof layerJobSchema>;
+export type LayerNotification = z.infer<typeof layerNotificationSchema>;
