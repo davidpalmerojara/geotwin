@@ -41,6 +41,8 @@ import { fitInView, frameOf, type LatLng } from './camera';
 import { coveredByOverlays, shiftedRight, viewerFov } from './overlays';
 import { coordinates } from '../../lib/format';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
+import { useLidarTerrain } from '../layers/lidar-terrain-provider';
+import { terrainHeight, type LidarTerrain } from '../layers/lidar-terrain';
 import { useLayerView } from '../../stores/layers';
 import { useMeasure } from '../../stores/measure';
 // The measuring tool is only downloaded when it is first opened.
@@ -63,10 +65,16 @@ function pnoaProvider() {
   return provider;
 }
 type DevWindow = Window & { __geotwinViewer?: Viewer };
+/** Ellipsoidal ground height (m) used to aim the camera: the LiDAR terrain, or 0 on the globe. */
+type Ground = (lng: number, lat: number) => number;
+const groundOf =
+  (terrain: LidarTerrain | undefined): Ground =>
+  (lng, lat) =>
+    terrain ? terrainHeight(terrain, lng, lat) : 0;
 const colors = { healthy: '#34d399', warning: '#fbbf24', critical: '#fb7185' };
 // Oblique view that fits every point on desktop and on a portrait phone, in the part of the map
 // that floating panels (the «Capas» panel) leave visible.
-function flyToPoints(v: Viewer, points: LatLng[], duration: number) {
+function flyToPoints(v: Viewer, points: LatLng[], duration: number, ground: Ground) {
   const frame = frameOf(points);
   if (!frame || v.isDestroyed()) return;
   const canvas = v.scene.canvas;
@@ -77,7 +85,11 @@ function flyToPoints(v: Viewer, points: LatLng[], duration: number) {
   v.camera.flyToBoundingSphere(
     shiftedRight(
       new BoundingSphere(
-        Cartesian3.fromDegrees(frame.center.lng, frame.center.lat, 0),
+        Cartesian3.fromDegrees(
+          frame.center.lng,
+          frame.center.lat,
+          ground(frame.center.lng, frame.center.lat),
+        ),
         frame.radius,
       ),
       heading,
@@ -120,7 +132,20 @@ export default function CesiumView({
   const ionLoading = useRef<Viewer | null>(null);
   const measuring = useMeasure((s) => s.active),
     setMeasuring = useMeasure((s) => s.setActive);
-  usePointCloudLayers(ready ? viewer.current : null, ready, terrain === 'world');
+  const lidarOption = useLayerView((s) => s.lidarTerrain);
+  const lidar = useLidarTerrain(
+    ready ? viewer.current : null,
+    ready,
+    lidarOption && terrain !== 'world',
+  );
+  // The LiDAR ground under the globe: clouds, assets and imagery share real heights.
+  const lidarOn = lidarOption && terrain !== 'world' && !!lidar.terrain;
+  const ground = useMemo(
+    () => groundOf(lidarOn ? lidar.terrain : undefined),
+    [lidarOn, lidar.terrain],
+  );
+  const groundRef = useRef(ground);
+  usePointCloudLayers(ready ? viewer.current : null, ready, terrain === 'world' || lidarOn);
   const cloudsShown = useLayerView(
     (s) => Object.entries(s.render).filter(([id, r]) => r === 'shown' && !s.hidden[id]).length,
   );
@@ -133,6 +158,10 @@ export default function CesiumView({
   );
   const baseGeneration = useRef(0);
   const selectedRef = useRef(selectedId);
+  const assetsRef = useRef(assets);
+  useEffect(() => {
+    assetsRef.current = assets;
+  }, [assets]);
   const framed = useRef(false);
   useEffect(() => {
     callbacks.current = { onSelect, onInstallation };
@@ -333,23 +362,28 @@ export default function CesiumView({
     selectedRef.current = selectedId;
   }, [selectedId]);
   useEffect(() => {
+    groundRef.current = ground;
+  }, [ground]);
+  useEffect(() => {
     const v = viewer.current;
     if (!v || !ready || !framePoints.length) return;
     // A selected asset has its own close-up; do not pull the camera away from it.
     if (selectedRef.current && framed.current) return;
-    flyToPoints(v, framePoints, framed.current ? 1 : 0);
+    flyToPoints(v, framePoints, framed.current ? 1 : 0, groundRef.current);
     framed.current = true;
-  }, [framePoints, ready]);
+    // The LiDAR terrain arrives after the first frame: aim again at the ground once it is there.
+  }, [framePoints, ready, lidarOn]);
   useEffect(() => {
     const v = viewer.current;
     if (!v || !selectedId || !ready) return;
     // Fly straight to the asset position. Viewer.flyTo(entity) waits for the entity's
     // bounding sphere in a later render; with requestRenderMode that flight could stay
     // pending until an unrelated update and then start from a stale view.
-    const position = v.entities
-      .getById(`asset:${selectedId}`)
-      ?.position?.getValue(JulianDate.now());
-    if (!position) return;
+    const asset = assetsRef.current.find((a) => a.id === selectedId);
+    const entity = v.entities.getById(`asset:${selectedId}`)?.position?.getValue(JulianDate.now());
+    if (!asset || !entity) return;
+    const { lng, lat } = asset.location;
+    const position = Cartesian3.fromDegrees(lng, lat, groundRef.current(lng, lat));
     v.camera.flyToBoundingSphere(new BoundingSphere(position, 60), {
       duration: 1,
       offset: new HeadingPitchRange(0, CesiumMath.toRadians(-45), 650),
@@ -488,7 +522,7 @@ export default function CesiumView({
         className="cesium-host"
         data-testid="cesium-view"
         data-ready={ready}
-        data-terrain={terrain}
+        data-terrain={terrain === 'world' ? 'world' : lidarOn ? 'lidar' : 'ellipsoid'}
         data-buildings={buildings}
         data-pointclouds={cloudsShown}
         data-color-mode={colorMode}
@@ -505,7 +539,7 @@ export default function CesiumView({
         </span>
         <span className="map-tag">
           {token ? 'ION LISTO' : 'MODO BÁSICO'} · {base} ·{' '}
-          {terrain === 'world' ? 'RELIEVE 3D' : 'GLOBO BÁSICO'}
+          {terrain === 'world' ? 'RELIEVE 3D' : lidarOn ? 'RELIEVE LIDAR' : 'GLOBO BÁSICO'}
         </span>
       </div>
       <div className="map-controls">
@@ -538,7 +572,9 @@ export default function CesiumView({
           size="icon"
           title="Centrar red"
           aria-label="Centrar red"
-          onClick={() => viewer.current && flyToPoints(viewer.current, framePoints, 1)}
+          onClick={() =>
+            viewer.current && flyToPoints(viewer.current, framePoints, 1, groundRef.current)
+          }
         >
           <Crosshair size={17} />
         </Button>

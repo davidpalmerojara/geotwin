@@ -30,11 +30,12 @@ import {
   QUALITY_SSE,
   shadingFor,
 } from './point-style';
+import { SharedCredits } from './shared-credits';
 
 interface Loaded {
   url: string;
   tileset?: Cesium3DTileset;
-  credit?: Credit;
+  attribution?: string;
   creditShown: boolean;
   // Last style and placement applied: restyling recompiles shaders, so skip identical ones.
   styleKey?: string;
@@ -97,7 +98,7 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
             target.tileset = tileset;
             // The layer may have been hidden while its tileset.json was loading.
             tileset.show = !useLayerView.getState().hidden[id];
-            if (layer.attribution) target.credit = new Credit(escapeHtml(layer.attribution), true);
+            if (layer.attribution) target.attribution = layer.attribution;
             viewer.scene.primitives.add(tileset);
             tileset.tileFailed.addEventListener(() => setRender(id, 'error'));
             setRender(id, 'shown');
@@ -217,10 +218,24 @@ function apply(viewer: Viewer, layer: Layer, entry: Loaded, view: Display, onTer
   syncCredit(viewer, entry, tileset.show);
 }
 
+// One counter per viewer: layers with the same attribution share a single on-screen credit.
+const viewerCredits = new WeakMap<Viewer, SharedCredits<Credit>>();
+function creditsOf(viewer: Viewer) {
+  let credits = viewerCredits.get(viewer);
+  if (!credits) {
+    credits = new SharedCredits<Credit>(
+      (c) => viewer.creditDisplay.addStaticCredit(c),
+      (c) => viewer.creditDisplay.removeStaticCredit(c),
+    );
+    viewerCredits.set(viewer, credits);
+  }
+  return credits;
+}
 function syncCredit(viewer: Viewer, entry: Loaded, visible: boolean) {
-  if (!entry.credit || entry.creditShown === visible) return;
-  if (visible) viewer.creditDisplay.addStaticCredit(entry.credit);
-  else viewer.creditDisplay.removeStaticCredit(entry.credit);
+  const text = entry.attribution;
+  if (!text || entry.creditShown === visible) return;
+  if (visible) creditsOf(viewer).show(text, () => new Credit(escapeHtml(text), true));
+  else creditsOf(viewer).hide(text);
   entry.creditShown = visible;
 }
 

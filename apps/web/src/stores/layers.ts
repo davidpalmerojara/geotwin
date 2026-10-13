@@ -21,6 +21,8 @@ interface LayerViewState {
   quality: Quality;
   // Draw at the real ellipsoidal height even on the bare globe (no relief terrain).
   realHeight: boolean;
+  // Use the layers' ground models (DTM) as the globe's terrain when there is no ion terrain.
+  lidarTerrain: boolean;
   // A fly-to request; `n` makes repeated requests for the same layer distinct.
   flyTo: { id: string; n: number } | null;
   render: Record<string, RenderState>;
@@ -30,6 +32,7 @@ interface LayerViewState {
   setPointSize: (size: number) => void;
   setQuality: (quality: Quality) => void;
   setRealHeight: (value: boolean) => void;
+  setLidarTerrain: (value: boolean) => void;
   requestFlyTo: (id: string) => void;
   setRender: (id: string, state: RenderState | null) => void;
 }
@@ -40,6 +43,7 @@ export const useLayerView = create<LayerViewState>((set) => ({
   pointSize: 3,
   quality: 'medium',
   realHeight: false,
+  lidarTerrain: true,
   flyTo: null,
   render: {},
   toggle: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),
@@ -48,6 +52,7 @@ export const useLayerView = create<LayerViewState>((set) => ({
   setPointSize: (pointSize) => set({ pointSize }),
   setQuality: (quality) => set({ quality }),
   setRealHeight: (realHeight) => set({ realHeight }),
+  setLidarTerrain: (lidarTerrain) => set({ lidarTerrain }),
   requestFlyTo: (id) => set((s) => ({ flyTo: { id, n: (s.flyTo?.n ?? 0) + 1 } })),
   setRender: (id, state) =>
     set((s) => {

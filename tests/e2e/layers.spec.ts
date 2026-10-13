@@ -52,6 +52,16 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   const credits = page.locator('.cesium-widget-credits');
   await expect(credits).toContainText(attribution);
 
+  // Its ground (class 2) became the globe's terrain; switching it off goes back to the ellipsoid.
+  await expect(map).toHaveAttribute('data-terrain', 'lidar', { timeout: 30000 });
+  await expect(page.locator('.map-top')).toContainText('RELIEVE LIDAR');
+  const relief = panel.getByRole('checkbox', { name: /Relieve del LiDAR/ });
+  await relief.uncheck();
+  await expect(map).toHaveAttribute('data-terrain', 'ellipsoid');
+  await expect(panel.getByText('Altura real sobre el globo básico')).toBeVisible();
+  await relief.check();
+  await expect(map).toHaveAttribute('data-terrain', 'lidar');
+
   // Hide and show again; the credit follows the visibility.
   await row.getByRole('button', { name: `Ocultar ${name}` }).click();
   await expect(map).toHaveAttribute('data-pointclouds', '0');
@@ -97,7 +107,7 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   // scrolled into view instead of appearing out of sight above the list.
   const body = panel.locator('#layers-body');
   await body.evaluate((element) => element.scrollTo(0, element.scrollHeight));
-  await expect(panel.getByText('Altura real sobre el globo básico')).toBeInViewport();
+  await expect(panel.getByText('Relieve del LiDAR')).toBeInViewport();
   await panel
     .getByLabel('Fichero LAS o LAZ')
     .setInputFiles({ name: 'notas.txt', mimeType: 'text/plain', buffer: Buffer.from('hola') });
@@ -110,6 +120,7 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   await page.getByRole('button', { name: 'Borrar capa' }).click();
   await expect(row).toBeHidden();
   await expect(map).toHaveAttribute('data-pointclouds', '0');
+  await expect(map).toHaveAttribute('data-terrain', 'ellipsoid');
   await expect(credits).not.toContainText(attribution);
   const remaining = await (await request.get('/api/layers')).json();
   expect(remaining.some((l: { name: string }) => l.name === name)).toBe(false);

@@ -150,6 +150,7 @@ export function LayersPanel() {
     }
   };
   const single = ready.filter((l) => !view.hidden[l.id]);
+  const withGround = ready.filter((l) => l.terrain_url).length;
   const range = single.length === 1 ? ellipsoidalRange(single[0]!) : undefined;
   const limitText = limits ? `hasta ${mebibytes(limits.max_upload_bytes, 0)}` : '';
 
@@ -327,20 +328,39 @@ export function LayersPanel() {
                 </select>
               </label>
             </div>
-            <label className="layer-check">
-              <input
-                type="checkbox"
-                checked={view.realHeight}
-                onChange={(e) => view.setRealHeight(e.target.checked)}
-              />
-              <span>
-                Altura real sobre el globo básico
-                <small>
-                  Sin relieve 3D, el globo es el elipsoide (h = 0) y la nube se baja hasta él para
-                  verla sobre el mapa. Distancias y desniveles no cambian.
-                </small>
-              </span>
-            </label>
+            {withGround > 0 && (
+              <label className="layer-check">
+                <input
+                  type="checkbox"
+                  checked={view.lidarTerrain}
+                  onChange={(e) => view.setLidarTerrain(e.target.checked)}
+                />
+                <span>
+                  Relieve del LiDAR
+                  <small>
+                    El suelo de {count(withGround, 'capa', 'capas')} (clase 2, malla de 2 m) hace de
+                    terreno: mapa, activos y nubes quedan a su altura real. Fuera de la cobertura es
+                    un plano orientativo. Con el relieve de Cesium ion se usa ese.
+                  </small>
+                </span>
+              </label>
+            )}
+            {!(withGround > 0 && view.lidarTerrain) && (
+              <label className="layer-check">
+                <input
+                  type="checkbox"
+                  checked={view.realHeight}
+                  onChange={(e) => view.setRealHeight(e.target.checked)}
+                />
+                <span>
+                  Altura real sobre el globo básico
+                  <small>
+                    Sin relieve, el globo es el elipsoide (h = 0) y la nube se baja hasta él para
+                    verla sobre el mapa. Distancias y desniveles no cambian.
+                  </small>
+                </span>
+              </label>
+            )}
           </div>
         )}
       </div>
@@ -420,6 +440,8 @@ function LayerRow({ layer, onDelete }: { layer: Layer; onDelete: () => void }) {
       {isReady && (
         <small className="layer-meta">
           {layer.point_count !== null && `${number(layer.point_count)} puntos · `}
+          {!!layer.excluded?.points &&
+            `${number(layer.excluded.points)} de solape o ruido fuera (clases ${layer.excluded.classes.join(', ')}) · `}
           {mebibytes(layer.source.size_bytes)} {layer.source.format.toUpperCase()} · {layer.crs_in}
           {layer.vertical.method &&
             ` · N ${number(layer.vertical.geoid_offset_m ?? 0, 2)} m (${methodLabel[layer.vertical.method]})`}
