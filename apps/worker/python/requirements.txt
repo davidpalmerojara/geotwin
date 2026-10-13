@@ -1,0 +1,7 @@
+# Worker conversion toolchain (Python 3.11-3.13). Pinned: a new py3dtiles can change the output.
+py3dtiles==12.1.1
+laspy==2.7.0
+lazrs==0.8.2
+pyproj==3.8.0
+numpy==2.3.5
+numba==0.63.1
