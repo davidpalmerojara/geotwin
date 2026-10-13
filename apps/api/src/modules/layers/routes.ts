@@ -33,11 +33,10 @@ export async function notifyLayer(client: Transaction, payload: LayerNotificatio
   await client.query('SELECT pg_notify($1, $2)', [REALTIME_CHANNEL, JSON.stringify(payload)]);
 }
 function tooLarge(max: number) {
-  return new AppError(
-    413,
-    'PAYLOAD_TOO_LARGE',
-    `El fichero supera el límite de ${Math.round(max / 1024 ** 2)} MB.`,
-  );
+  const mib = max / 1024 ** 2;
+  // Same unit as the interface and the docs (MiB); small limits keep a decimal (Spanish comma).
+  const size = mib >= 10 ? String(Math.round(mib)) : mib.toFixed(1).replace('.', ',');
+  return new AppError(413, 'PAYLOAD_TOO_LARGE', `El fichero supera el límite de ${size} MiB.`);
 }
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';

@@ -12,7 +12,7 @@ import {
   rampBounds,
   shadingFor,
 } from './point-style';
-import { megabytes, validateFile } from './upload';
+import { mebibytes, validateFile } from './upload';
 
 const centre = { lat: 41.58295, lng: -4.7191 };
 // What Cesium substitutes for a point cloud's built-in and batch-table variables.
@@ -167,8 +167,8 @@ describe('Upload checks', () => {
     expect(validateFile({ name: 'nube.e57', size: 10 })).toMatch(/no es un fichero .las o .laz/);
     expect(validateFile({ name: 'nube.laz', size: 0 })).toMatch(/vacío/);
     expect(validateFile({ name: 'grande.laz', size: 2e8 }, 157286400)).toBe(
-      '«grande.laz» ocupa 190,7 MB y el límite es 150 MB.',
+      '«grande.laz» ocupa 190,7 MiB y el límite es 150 MiB.',
     );
-    expect(megabytes(56123)).toBe('0,1 MB');
+    expect(mebibytes(56123)).toBe('0,1 MiB');
   });
 });

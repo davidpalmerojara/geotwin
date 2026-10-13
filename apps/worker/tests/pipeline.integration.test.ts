@@ -242,7 +242,10 @@ describe.skipIf(!pythonReady)('LiDAR pipeline: upload → queue → worker → 3
     // Over the limit with a Content-Length: rejected before reading the body.
     const big = await upload(las, 'grande.las');
     expect(big.status).toBe(413);
-    expect((await big.json()).error).toMatchObject({ code: 'PAYLOAD_TOO_LARGE' });
+    expect((await big.json()).error).toMatchObject({
+      code: 'PAYLOAD_TOO_LARGE',
+      message: 'El fichero supera el límite de 0,1 MiB.',
+    });
     // Over the limit while streaming (chunked, no Content-Length): stopped mid-upload.
     const boundary = 'geotwin-boundary';
     const head = Buffer.from(

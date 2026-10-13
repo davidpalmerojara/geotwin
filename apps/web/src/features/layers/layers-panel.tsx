@@ -26,7 +26,7 @@ import {
   type ColorMode,
   type Quality,
 } from './point-style';
-import { megabytes, validateFile } from './upload';
+import { mebibytes, validateFile } from './upload';
 
 const stageLabel: Record<LayerStage, string> = {
   queued: 'en cola',
@@ -151,7 +151,7 @@ export function LayersPanel() {
   };
   const single = ready.filter((l) => !view.hidden[l.id]);
   const range = single.length === 1 ? ellipsoidalRange(single[0]!) : undefined;
-  const limitText = limits ? `hasta ${megabytes(limits.max_upload_bytes, 0)}` : '';
+  const limitText = limits ? `hasta ${mebibytes(limits.max_upload_bytes, 0)}` : '';
 
   return (
     <section
@@ -404,7 +404,7 @@ function LayerRow({ layer, onDelete }: { layer: Layer; onDelete: () => void }) {
       {isReady && (
         <small className="layer-meta">
           {layer.point_count !== null && `${number(layer.point_count)} puntos · `}
-          {megabytes(layer.source.size_bytes)} {layer.source.format.toUpperCase()} · {layer.crs_in}
+          {mebibytes(layer.source.size_bytes)} {layer.source.format.toUpperCase()} · {layer.crs_in}
           {layer.vertical.method &&
             ` · N ${number(layer.vertical.geoid_offset_m ?? 0, 2)} m (${methodLabel[layer.vertical.method]})`}
         </small>

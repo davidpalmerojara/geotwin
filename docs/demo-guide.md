@@ -12,7 +12,7 @@ Antes: arranca Compose, comprueba `/api/health`, deja el token ion vacío para e
 **Capas LiDAR y medición (60 s más, opcional).** Antes, sube una vez la nube **sintética** `apps/worker/tests/fixtures/synthetic-laguna-duero.laz` desde el panel **Capas** del gemelo (o déjala para hacerlo en directo: tarda unos segundos). Explica que no son datos medidos y que una hoja real de PNOA-LiDAR sigue el mismo camino.
 
 1. **Subida y progreso.** Arrastra el fichero al panel: verás _En cola_, _Procesando N %_ con su etapa y _Lista_, empujados por WebSocket desde el worker. La cámara vuela a la nube, a unos 7 km al sur de las instalaciones.
-2. **Estilos.** Cambia entre **RGB**, **Altura** (leyenda en metros elipsoidales) y **Clasificación**, y desmarca **Suelo** para dejar edificios, árboles y agua. Señala la atribución en los créditos del visor y que desaparece al ocultar la capa.
+2. **Estilos.** Cambia entre **RGB**, **Altura** (con una sola capa visible, la leyenda da sus alturas elipsoidales en metros) y **Clasificación**, y desmarca **Suelo** para dejar edificios, árboles y agua. Señala la atribución en los créditos del visor y que desaparece al ocultar la capa.
 3. **Medir.** Pulsa la regla y haz clic en un tejado y en el suelo de al lado: 3D, horizontal y desnivel (unos 7-9 m en el edificio grande). Cambia a **Área** y rodea el tejado. Comenta que las distancias horizontales son geodésicas sobre WGS84 y que con el globo básico la nube se dibuja apoyada en el elipsoide sin alterar las medidas.
 
 Para demostrar resincronización: abre dos pestañas, genera el fallo en una y observa la otra. Interrumpe temporalmente la red de una pestaña, resuelve desde la segunda y restaura la conexión: la primera consulta REST tras reconectar y recupera el estado vigente.

@@ -34,7 +34,7 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   await expect(page.locator('.map-top')).toContainText('Local');
 
   const panel = page.getByRole('region', { name: 'Capas LiDAR' });
-  await expect(panel.getByText(/hasta 150 MB/)).toBeVisible();
+  await expect(panel.getByText(/hasta 150 MiB/)).toBeVisible();
   await panel.getByText('Nombre y atribución (opcional)').click();
   await panel.getByLabel('Nombre', { exact: true }).fill(name);
   await panel.getByLabel('Atribución').fill(attribution);
