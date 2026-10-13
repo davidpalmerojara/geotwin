@@ -294,7 +294,9 @@ export function LayersPanel() {
             </fieldset>
             <div className="layer-sliders">
               <label>
-                Tamaño de punto <b>{view.pointSize} px</b>
+                <span>
+                  Tamaño de punto <b>{view.pointSize} px</b>
+                </span>
                 <input
                   type="range"
                   min={1}

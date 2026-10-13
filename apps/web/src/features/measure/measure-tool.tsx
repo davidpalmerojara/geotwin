@@ -36,6 +36,21 @@ function pick(viewer: Viewer, position: Cartesian2) {
   return scene.camera.pickEllipsoid(position, scene.globe.ellipsoid);
 }
 
+/**
+ * Lines and polygons of entities are built asynchronously, and in request-render mode Cesium
+ * only asks for a frame the first time a data source becomes ready: keep rendering for a moment
+ * so a new line or polygon appears without waiting for the next camera move.
+ */
+function renderForAWhile(viewer: Viewer, ms = 1200) {
+  const until = performance.now() + ms;
+  const tick = () => {
+    if (viewer.isDestroyed()) return;
+    viewer.scene.requestRender();
+    if (performance.now() < until) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
 export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClose: () => void }) {
   const [mode, setMode] = useState<Mode>('distance');
   const [points, setPoints] = useState<Cartesian3[]>([]);
@@ -163,6 +178,7 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
         },
       });
     viewer.scene.requestRender();
+    if (points.length > 1) renderForAWhile(viewer);
   }, [points, mode, result, viewer]);
 
   const switchMode = (next: Mode) => {
@@ -191,7 +207,11 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
             <X size={15} />
           </Button>
         </div>
-        <dl className="measure-results" aria-live="polite" data-testid="measure-results">
+        <dl
+          className={`measure-results ${mode === 'area' ? 'two' : ''}`}
+          aria-live="polite"
+          data-testid="measure-results"
+        >
           {mode === 'distance' ? (
             <>
               <div>

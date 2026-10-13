@@ -474,7 +474,7 @@ export default function CesiumView({
       </div>
     );
   return (
-    <div className="map-shell">
+    <div className={`map-shell ${measuring ? 'measuring' : ''}`}>
       <div
         ref={container}
         className="cesium-host"
