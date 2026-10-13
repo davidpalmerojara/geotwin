@@ -125,3 +125,24 @@ for (const width of [1280, 1440])
     expect(own).toHaveLength(1);
     expect(hidden({ ...one, markers: own })).toEqual([]);
   });
+
+test('on a phone the measuring panel leaves the map credits (CC-BY) readable', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/gemelo');
+  await expect(page.getByTestId('cesium-view')).toHaveAttribute('data-ready', 'true', {
+    timeout: 30000,
+  });
+  await page.getByRole('button', { name: 'Medir', exact: true }).click();
+  const tool = page.getByRole('region', { name: 'Medir' });
+  await expect(tool).toBeVisible();
+  const credits = page.locator('.cesium-viewer-bottom');
+  await expect(credits).toContainText('CC-BY');
+  // The panel docks once the credits are laid out; compare their boxes after it settles.
+  await expect
+    .poll(async () => {
+      const [a, b] = [await tool.boundingBox(), await credits.boundingBox()];
+      return !!a && !!b && a.y + a.height <= b.y;
+    })
+    .toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

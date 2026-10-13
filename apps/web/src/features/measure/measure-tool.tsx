@@ -44,6 +44,7 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
   const [miss, setMiss] = useState(false);
   const source = useRef<CustomDataSource | null>(null);
   const stopRendering = useRef<() => void>(undefined);
+  const panel = useRef<HTMLElement>(null);
   const result = useMemo(() => measure(points, mode), [points, mode]);
 
   const add = useCallback(
@@ -82,6 +83,24 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
       source.current = null;
     };
   }, [viewer, add]);
+
+  // Dock the panel just above the viewer credits, which wrap to several lines on a phone: the
+  // CC-BY attributions (PNOA, PNOA-LiDAR) must stay readable while measuring.
+  useEffect(() => {
+    const credits = viewer.bottomContainer as HTMLElement;
+    const dock = () => {
+      const element = panel.current,
+        shell = element?.offsetParent;
+      if (!element || !shell) return;
+      const gap = shell.getBoundingClientRect().bottom - credits.getBoundingClientRect().top;
+      element.style.bottom = `${Math.max(0, Math.ceil(gap)) + 8}px`;
+    };
+    dock();
+    const observer = new ResizeObserver(dock);
+    observer.observe(credits);
+    if (panel.current?.offsetParent) observer.observe(panel.current.offsetParent);
+    return () => observer.disconnect();
+  }, [viewer]);
 
   // Keyboard: Esc closes, Backspace / Delete / Ctrl+Z undo (not while typing in a field).
   useEffect(() => {
@@ -191,7 +210,7 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
   return (
     <>
       <div className="measure-crosshair" aria-hidden="true" />
-      <section className="measure-panel" aria-label="Medir">
+      <section className="measure-panel" aria-label="Medir" ref={panel}>
         <div className="measure-head">
           <div className="segmented" role="group" aria-label="Tipo de medida">
             <button
