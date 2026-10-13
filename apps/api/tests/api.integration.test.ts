@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from 'vitest';
 import WebSocket from 'ws';
+import { connect } from 'node:net';
 import type { FastifyInstance } from 'fastify';
 import { createPool } from '../src/db/pool.js';
 import { migrate, seed } from '../src/db/migrate.js';
@@ -479,6 +480,23 @@ describe('Real API and PostgreSQL/PostGIS', () => {
       payload: '{"asset_id":',
     });
     expect(malformed.statusCode).toBe(400);
+  });
+  it("answers malformed HTTP with the API error envelope, not Node's own", async () => {
+    const address = app.server.address();
+    if (!address || typeof address === 'string') throw new Error('No listening port');
+    const raw = await new Promise<string>((resolve, reject) => {
+      const socket = connect(address.port, '127.0.0.1', () =>
+        socket.write('NOT HTTP AT ALL\r\n\r\n'),
+      );
+      let data = '';
+      socket.on('data', (chunk) => (data += chunk));
+      socket.on('close', () => resolve(data));
+      socket.on('error', reject);
+    });
+    expect(raw).toMatch(/^HTTP\/1\.1 400 Bad Request\r\n/);
+    const body = JSON.parse(raw.slice(raw.indexOf('\r\n\r\n') + 4));
+    expect(body).toMatchObject({ error: { code: 'BAD_REQUEST' } });
+    expect(body.error.request_id).toMatch(/^[0-9a-f-]{36}$/);
   });
   it('sends baseline security headers, also on errors', async () => {
     for (const path of ['/api/health', '/api/assets/not-a-uuid', '/api/no-such-route']) {

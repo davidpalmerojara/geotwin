@@ -273,6 +273,32 @@ describe.skipIf(!pythonReady)('LiDAR pipeline: upload → queue → worker → 3
     expect(rows.rows[0].n).toBe(0);
   }, 60000);
 
+  it('answers 400, keeping nothing, when the multipart body is cut short', async () => {
+    const boundary = 'geotwin-cut';
+    // Headers and part of the file, then the body ends without the closing boundary, as when a
+    // client gives up mid-upload behind a proxy that completes the request.
+    const body = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="c.laz"\r\n` +
+          'Content-Type: application/octet-stream\r\n\r\n',
+      ),
+      laz.subarray(0, 20000),
+    ]);
+    const response = await fetch(`${base}/api/layers`, {
+      method: 'POST',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      body: new Uint8Array(body),
+    });
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toMatchObject({
+      code: 'INCOMPLETE_UPLOAD',
+      message: expect.stringMatching(/se cortó/),
+    });
+    expect(await storage.list('layers/')).toEqual([]);
+    const rows = await db.query('SELECT count(*)::int AS n FROM layers');
+    expect(rows.rows[0].n).toBe(0);
+  });
+
   it('marks a corrupt file as failed with a readable message', async () => {
     const broken = laz.subarray(0, Math.floor(laz.length / 2));
     const { created, done } = await uploadAndWait(broken, 'roto.laz');

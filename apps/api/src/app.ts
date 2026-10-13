@@ -1,4 +1,7 @@
 import Fastify from 'fastify';
+import { randomUUID } from 'node:crypto';
+import { STATUS_CODES } from 'node:http';
+import type { Duplex } from 'node:stream';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
@@ -22,21 +25,56 @@ import { registerLayerRoutes } from './modules/layers/routes.js';
 import { LayerQueue } from './modules/layers/queue.js';
 import { LayerRepository } from './modules/layers/repository.js';
 import { startPgRelay } from './realtime/pg-relay.js';
+/**
+ * The client stopped sending mid-upload: it closed the connection (Node's request "aborted") or
+ * the multipart body ended before its closing boundary (busboy). A client fault, not a 500.
+ */
+export function isIncompleteUpload(error: unknown) {
+  if (typeof error !== 'object' || error === null || !('message' in error)) return false;
+  const message = String(error.message);
+  if (/unexpected end of multipart data|unexpected end of form/i.test(message)) return true;
+  return message === 'aborted' && 'code' in error && error.code === 'ECONNRESET';
+}
 // Client errors keep their 4xx status (413, 415…); anything unexpected becomes a generic 500.
 export function errorStatus(error: unknown): number {
   if (error instanceof AppError) return error.statusCode;
   if (typeof error !== 'object' || error === null) return 500;
+  if (isIncompleteUpload(error)) return 400;
   if ('validation' in error && error.validation) return 400;
   const status = 'statusCode' in error ? Number(error.statusCode) : NaN;
   return Number.isInteger(status) && status >= 400 && status < 500 ? status : 500;
 }
 function errorCode(error: unknown, status: number) {
   if (error instanceof AppError) return error.code;
+  if (isIncompleteUpload(error)) return 'INCOMPLETE_UPLOAD';
   if (status === 400) return 'VALIDATION_ERROR';
   if (status === 413) return 'PAYLOAD_TOO_LARGE';
   if (status === 415) return 'UNSUPPORTED_MEDIA_TYPE';
   if (status < 500) return 'BAD_REQUEST';
   return 'INTERNAL_ERROR';
+}
+/**
+ * Malformed HTTP that never becomes a request (for example bytes left over after a body shorter
+ * than its Content-Length): the same error envelope as every other API error, not Node's own.
+ */
+export function clientErrorHandler(error: NodeJS.ErrnoException, socket: Duplex) {
+  if (error.code === 'ECONNRESET' || socket.destroyed) return;
+  const [status, code, message] =
+    error.code === 'ERR_HTTP_REQUEST_TIMEOUT'
+      ? [408, 'REQUEST_TIMEOUT', 'La petición tardó demasiado en llegar.']
+      : error.code === 'HPE_HEADER_OVERFLOW'
+        ? [431, 'HEADERS_TOO_LARGE', 'Las cabeceras de la petición son demasiado grandes.']
+        : [400, 'BAD_REQUEST', 'Petición HTTP mal formada.'];
+  const body = JSON.stringify({ error: { code, message, request_id: randomUUID() } });
+  if (socket.writable)
+    socket.write(
+      `HTTP/1.1 ${status} ${STATUS_CODES[status]}\r\n` +
+        'Content-Type: application/json; charset=utf-8\r\n' +
+        `Content-Length: ${Buffer.byteLength(body)}\r\n` +
+        'X-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n' +
+        body,
+    );
+  socket.destroy(error);
 }
 export async function buildApp(
   db: Database,
@@ -55,6 +93,7 @@ export async function buildApp(
     logger: options.logger ?? true,
     bodyLimit: 16384,
     requestTimeout: env.REQUEST_TIMEOUT_MS,
+    clientErrorHandler,
   });
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -68,9 +107,11 @@ export async function buildApp(
         message:
           status >= 500
             ? 'Error interno. Consulta el registro del servidor.'
-            : error instanceof Error
-              ? error.message
-              : 'Solicitud inválida',
+            : isIncompleteUpload(error)
+              ? 'La subida se cortó antes de terminar. Vuelve a enviar el fichero.'
+              : error instanceof Error
+                ? error.message
+                : 'Solicitud inválida',
         request_id: req.id,
       },
     });
