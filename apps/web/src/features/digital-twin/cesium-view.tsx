@@ -37,7 +37,7 @@ import type { Asset, Installation } from '@geotwin/shared';
 import { Crosshair, Layers, Mountain, Plus, Minus, Ruler } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { loadIonEnvironment } from './ion-environment';
-import { fitInView, frameOf, type LatLng } from './camera';
+import { fitInView, frameOf, samePose, type LatLng } from './camera';
 import { coveredByOverlays, shiftedRight, viewerFov } from './overlays';
 import { coordinates } from '../../lib/format';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
@@ -65,6 +65,37 @@ function pnoaProvider() {
   return provider;
 }
 type DevWindow = Window & { __geotwinViewer?: Viewer };
+/**
+ * The last flight the viewer made on its own (framing a place or the selected asset). When the
+ * ground under it changes (the LiDAR terrain arrives after the first frame) it is flown again,
+ * but only while the camera is still where that flight left it: a user's moves are never undone.
+ */
+interface AutoFlight {
+  state: 'flying' | 'landed';
+  redo: () => void;
+  /** Where the flight left the camera: position on the ground and orientation. */
+  pose?: [number, number, number, number];
+}
+// Position (lng, lat in radians) and orientation, but not height: Cesium may lift a camera that
+// ends up below newly loaded terrain, and that is not a move by the user.
+const poseOf = (v: Viewer): [number, number, number, number] => {
+  const c = v.camera.positionCartographic;
+  return [c.longitude, c.latitude, v.camera.heading, v.camera.pitch];
+};
+/** Starts a flight of the viewer's own and remembers it in `last`, so it can be flown again. */
+function flyOnOwn(
+  last: { current: AutoFlight | null },
+  v: Viewer,
+  fly: (complete: () => void) => void,
+) {
+  const flight: AutoFlight = { state: 'flying', redo: () => flyOnOwn(last, v, fly) };
+  last.current = flight;
+  fly(() => {
+    if (last.current !== flight || v.isDestroyed()) return;
+    flight.state = 'landed';
+    flight.pose = poseOf(v);
+  });
+}
 /** Ellipsoidal ground height (m) used to aim the camera: the LiDAR terrain, or 0 on the globe. */
 type Ground = (lng: number, lat: number) => number;
 const groundOf =
@@ -77,7 +108,13 @@ const assetBox = (a: Asset) =>
   a.mount_height_m > 0 ? new Cartesian3(6, 6, 4) : new Cartesian3(9, 9, 14);
 // Oblique view that fits every point on desktop and on a portrait phone, in the part of the map
 // that floating panels (the «Capas» panel) leave visible.
-function flyToPoints(v: Viewer, points: LatLng[], duration: number, ground: Ground) {
+function flyToPoints(
+  v: Viewer,
+  points: LatLng[],
+  duration: number,
+  ground: Ground,
+  complete?: () => void,
+) {
   const frame = frameOf(points);
   if (!frame || v.isDestroyed()) return;
   const canvas = v.scene.canvas;
@@ -101,6 +138,7 @@ function flyToPoints(v: Viewer, points: LatLng[], duration: number, ground: Grou
     {
       offset: new HeadingPitchRange(heading, CesiumMath.toRadians(-55), view.distance),
       duration,
+      complete,
     },
   );
   v.scene.requestRender();
@@ -366,39 +404,60 @@ export default function CesiumView({
   useEffect(() => {
     selectedRef.current = selectedId;
   }, [selectedId]);
+  const autoFlight = useRef<AutoFlight | null>(null);
   useEffect(() => {
     groundRef.current = ground;
+    // The LiDAR terrain usually arrives after the first flight, which then aimed at the
+    // ellipsoid (hundreds of metres under the real ground): fly it again on the real ground,
+    // unless the user has moved the camera since.
+    const v = viewer.current,
+      flight = autoFlight.current;
+    if (!v || v.isDestroyed() || !flight) return;
+    if (flight.state === 'landed' && !samePose(flight.pose!, poseOf(v))) {
+      autoFlight.current = null;
+      return;
+    }
+    flight.redo();
   }, [ground]);
   useEffect(() => {
     const v = viewer.current;
     if (!v || !ready || !framePoints.length) return;
     // A selected asset has its own close-up; do not pull the camera away from it.
     if (selectedRef.current && framed.current) return;
-    flyToPoints(v, framePoints, framed.current ? 1 : 0, groundRef.current);
+    // The first framing is instant; later ones (another place, the real ground) fly for 1 s.
+    let duration = framed.current ? 1 : 0;
+    flyOnOwn(autoFlight, v, (complete) => {
+      flyToPoints(v, framePoints, duration, groundRef.current, complete);
+      duration = 1;
+    });
     framed.current = true;
-    // The LiDAR terrain arrives after the first frame: aim again at the ground once it is there.
-  }, [framePoints, ready, lidarOn]);
+  }, [framePoints, ready]);
+  // Whether the selected asset is already loaded: a shared link can open before the asset list.
+  const selectedLoaded = assets.some((a) => a.id === selectedId);
   useEffect(() => {
     const v = viewer.current;
-    if (!v || !selectedId || !ready) return;
+    if (!v || !selectedId || !ready || !selectedLoaded) return;
     // Fly straight to the asset position. Viewer.flyTo(entity) waits for the entity's
     // bounding sphere in a later render; with requestRenderMode that flight could stay
     // pending until an unrelated update and then start from a stale view.
-    const asset = assetsRef.current.find((a) => a.id === selectedId);
-    const entity = v.entities.getById(`asset:${selectedId}`)?.position?.getValue(JulianDate.now());
-    if (!asset || !entity) return;
-    const { lng, lat } = asset.location;
-    const position = Cartesian3.fromDegrees(
-      lng,
-      lat,
-      groundRef.current(lng, lat) + asset.mount_height_m,
-    );
-    v.camera.flyToBoundingSphere(new BoundingSphere(position, 60), {
-      duration: 1,
-      offset: new HeadingPitchRange(0, CesiumMath.toRadians(-45), 650),
+    if (!v.entities.getById(`asset:${selectedId}`)?.position?.getValue(JulianDate.now())) return;
+    flyOnOwn(autoFlight, v, (complete) => {
+      const asset = assetsRef.current.find((a) => a.id === selectedId);
+      if (!asset) return;
+      const { lng, lat } = asset.location;
+      const position = Cartesian3.fromDegrees(
+        lng,
+        lat,
+        groundRef.current(lng, lat) + asset.mount_height_m,
+      );
+      v.camera.flyToBoundingSphere(new BoundingSphere(position, 60), {
+        duration: 1,
+        offset: new HeadingPitchRange(0, CesiumMath.toRadians(-45), 650),
+        complete,
+      });
+      v.scene.requestRender();
     });
-    v.scene.requestRender();
-  }, [selectedId, ready]);
+  }, [selectedId, ready, selectedLoaded]);
   const toggleBase = async () => {
     const v = viewer.current;
     if (!v) return;

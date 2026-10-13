@@ -108,3 +108,16 @@ export function coveredRight(canvas: ScreenBox, overlays: ScreenBox[]) {
   }
   return covered;
 }
+
+/**
+ * Whether two camera poses [longitude, latitude, heading, pitch] (radians) are the same: about
+ * 0.5 m on the ground and 0.05° of rotation. Height is left out on purpose, as Cesium lifts a
+ * camera that ends up below newly loaded terrain without the user moving it.
+ */
+export function samePose(a: readonly number[], b: readonly number[]) {
+  const turn = (x: number) => Math.abs(Math.atan2(Math.sin(x), Math.cos(x)));
+  return (
+    a.length === b.length &&
+    a.every((x, i) => (i < 2 ? Math.abs(x - b[i]!) < 1e-7 : turn(x - b[i]!) < 1e-3))
+  );
+}

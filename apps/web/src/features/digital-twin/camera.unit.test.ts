@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { aimShift, coveredRight, distanceM, fitDistance, fitInView, frameOf } from './camera';
+import {
+  aimShift,
+  coveredRight,
+  distanceM,
+  fitDistance,
+  fitInView,
+  frameOf,
+  samePose,
+} from './camera';
 const pisuerga = { lat: 41.655, lng: -4.737 };
 const sanCristobal = { lat: 41.62, lng: -4.706 };
 const campus = { lat: 41.663, lng: -4.713 };
@@ -123,5 +131,16 @@ describe('Framing beside a floating panel', () => {
     expect(coveredRight(canvas, [leftTool])).toBe(0);
     expect(coveredRight(canvas, [leftTool, open, collapsed])).toBe(318);
     expect(coveredRight(canvas, [])).toBe(0);
+  });
+  it('tells a camera the user has moved from one only lifted above the terrain', () => {
+    const landed = [-0.0824, 0.7258, 0, -0.785];
+    // Same place and orientation (height is not part of the pose): not moved.
+    expect(samePose(landed, [...landed])).toBe(true);
+    // Heading 0 and a full turn are the same orientation.
+    expect(samePose(landed, [-0.0824, 0.7258, 2 * Math.PI - 1e-6, -0.785])).toBe(true);
+    // Panned a few metres (1e-6 rad ≈ 6 m), turned or tilted: moved.
+    expect(samePose(landed, [-0.0824 + 1e-6, 0.7258, 0, -0.785])).toBe(false);
+    expect(samePose(landed, [-0.0824, 0.7258, 0.1, -0.785])).toBe(false);
+    expect(samePose(landed, [-0.0824, 0.7258, 0, -0.6])).toBe(false);
   });
 });
