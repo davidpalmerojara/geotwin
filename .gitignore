@@ -8,3 +8,10 @@ playwright-report/
 test-results/
 *.log
 .DS_Store
+# Local object storage (STORAGE_DRIVER=local)
+data/
+# Python
+__pycache__/
+.venv/
+.pytest_cache/
+.geoid/

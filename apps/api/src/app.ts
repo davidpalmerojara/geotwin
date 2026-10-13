@@ -3,18 +3,25 @@ import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
 import websocket from '@fastify/websocket';
+import multipart from '@fastify/multipart';
+import { createStorage, waitForStorage, type Storage } from '@geotwin/storage';
+import { layerNotificationSchema, type RealtimeEvent } from '@geotwin/shared';
 import {
   validatorCompiler,
   serializerCompiler,
   jsonSchemaTransform,
 } from 'fastify-type-provider-zod';
 import type { Database } from './db/pool.js';
-import { env } from './config/env.js';
+import { env, repoRoot } from './config/env.js';
 import { RealtimeHub } from './realtime/hub.js';
 import { TelemetryService } from './modules/telemetry-service.js';
 import { registerRoutes } from './modules/routes.js';
 import { AppError } from './modules/errors.js';
 import { startRetention, startSimulator } from './simulator/runner.js';
+import { registerLayerRoutes } from './modules/layers/routes.js';
+import { LayerQueue } from './modules/layers/queue.js';
+import { LayerRepository } from './modules/layers/repository.js';
+import { startPgRelay } from './realtime/pg-relay.js';
 // Client errors keep their 4xx status (413, 415…); anything unexpected becomes a generic 500.
 export function errorStatus(error: unknown): number {
   if (error instanceof AppError) return error.statusCode;
@@ -38,9 +45,17 @@ export async function buildApp(
     simulator?: boolean;
     logger?: boolean;
     retentionHours?: number;
+    storage?: Storage;
+    maxUploadBytes?: number;
   } = {},
 ) {
-  const app = Fastify({ logger: options.logger ?? true, bodyLimit: 16384, requestTimeout: 15000 });
+  // JSON bodies stay capped at 16 KB; LAS/LAZ uploads are streamed by @fastify/multipart with
+  // their own limit. The request timeout must allow tens of MB on a slow link.
+  const app = Fastify({
+    logger: options.logger ?? true,
+    bodyLimit: 16384,
+    requestTimeout: env.REQUEST_TIMEOUT_MS,
+  });
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   app.setErrorHandler((error, req, reply) => {
@@ -81,8 +96,27 @@ export async function buildApp(
         description: 'Single organization infrastructure demo. Operational data are simulated.',
       },
     },
-    transform: jsonSchemaTransform,
+    transform: (input) => {
+      const output = jsonSchemaTransform(input);
+      // The upload is streamed (not validated as a JSON body); document its multipart field.
+      if (input.url === '/api/layers' && input.route.method === 'POST')
+        return {
+          ...output,
+          schema: {
+            ...output.schema,
+            body: {
+              type: 'object',
+              required: ['file'],
+              properties: {
+                file: { type: 'string', format: 'binary', description: 'LAS or LAZ file' },
+              },
+            },
+          },
+        };
+      return output;
+    },
   });
+  await app.register(multipart);
   await app.register(websocket, { options: { maxPayload: 16384 } });
   const hub = new RealtimeHub();
   const telemetry = new TelemetryService(db, hub.publish);
@@ -106,17 +140,66 @@ export async function buildApp(
   const demo = options.demo ?? env.DEMO_MODE;
   const simulator = options.simulator ?? env.SIMULATOR_ENABLED;
   registerRoutes(app, db, telemetry, hub.publish, demo, simulator);
+  const storage = options.storage ?? createStorage(env, repoRoot);
+  const queue = new LayerQueue(db.options.connectionString ?? env.DATABASE_URL);
+  registerLayerRoutes(app, {
+    db,
+    storage,
+    queue,
+    maxUploadBytes: options.maxUploadBytes ?? env.LAYER_UPLOAD_MAX_BYTES,
+  });
+  // Layer events come from the worker process (or another API replica) through Postgres NOTIFY.
+  const layers = new LayerRepository(db);
+  let relayed = Promise.resolve();
+  const relayLayerEvent = async (payload: string) => {
+    const parsed = layerNotificationSchema.safeParse(JSON.parse(payload));
+    if (!parsed.success) return;
+    const message = parsed.data;
+    let event: RealtimeEvent | undefined;
+    if (message.event === 'progress') {
+      const { id, status, stage, progress } = message;
+      event = { type: 'layer:progress', data: { id, status, stage, progress } };
+    } else if (message.event === 'deleted')
+      event = { type: 'layer:deleted', data: { id: message.id } };
+    else {
+      const layer = await layers.get(message.id);
+      if (!layer) return;
+      if (message.event === 'created') event = { type: 'layer:created', data: layer };
+      else if (message.event === 'ready') event = { type: 'layer:ready', data: layer };
+      else event = { type: 'layer:failed', data: layer };
+    }
+    hub.publish([event]);
+  };
+  let relay: ReturnType<typeof startPgRelay> | undefined;
   await app.register(swaggerUI, { routePrefix: '/api/docs' });
   const retentionHours = options.retentionHours ?? env.READINGS_RETENTION_HOURS;
   let stop: (() => Promise<void>) | undefined;
   let stopRetention: (() => Promise<void>) | undefined;
   app.addHook('onReady', async () => {
+    await waitForStorage(storage);
+    await queue.start();
+    relay = startPgRelay({
+      connectionString: db.options.connectionString ?? env.DATABASE_URL,
+      onPayload: (payload) => {
+        relayed = relayed
+          .then(() => relayLayerEvent(payload))
+          .catch((error: unknown) => app.log.warn({ err: error }, 'Layer event relay failed'));
+      },
+      // Notifications sent while disconnected are lost: ask every client to resync.
+      onReconnect: () =>
+        hub.publish([{ type: 'sync:required', data: { connected_at: new Date().toISOString() } }]),
+      log: app.log,
+    });
+    await relay.ready;
     if (simulator) stop = startSimulator(telemetry, env.SIMULATOR_INTERVAL_MS, app.log);
     if (retentionHours > 0) stopRetention = startRetention(telemetry, retentionHours, app.log);
   });
   app.addHook('preClose', async () => {
     await stop?.();
     await stopRetention?.();
+    await relay?.stop();
+    await relayed;
+    await queue.stop();
     hub.close();
   });
   return app;
