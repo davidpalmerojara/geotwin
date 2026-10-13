@@ -55,7 +55,13 @@ export default defineConfig({
         {
           command: 'npm run dev -w @geotwin/web',
           url: `http://127.0.0.1:${webPort}`,
-          env: { WEB_PORT: webPort, API_PORT: apiPort },
+          // A placeholder ion token offers the «Fotorrealista (Google)» option; its test answers
+          // Cesium ion locally, and no other test uses ion.
+          env: {
+            WEB_PORT: webPort,
+            API_PORT: apiPort,
+            VITE_CESIUM_ION_TOKEN: process.env.VITE_CESIUM_ION_TOKEN ?? 'e2e-placeholder-token',
+          },
           reuseExistingServer: false,
           timeout: 60000,
         },

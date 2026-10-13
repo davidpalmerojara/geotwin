@@ -21,8 +21,10 @@ import {
   TileMapServiceImageryProvider,
   buildModuleUrl,
   Ion,
+  createGooglePhotorealistic3DTileset,
   createOsmBuildingsAsync,
   createWorldTerrainAsync,
+  type Cesium3DTileset,
   Cartographic,
   HeightReference,
   ClassificationType,
@@ -36,9 +38,10 @@ import {
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import type { Asset, Installation } from '@geotwin/shared';
-import { Crosshair, Layers, Mountain, Plus, Minus, Ruler } from 'lucide-react';
+import { Building2, Crosshair, Layers, Mountain, Plus, Minus, Ruler } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { loadIonEnvironment } from './ion-environment';
+import { loadPhotorealistic, PhotorealError, TileFailureWatch } from './photorealistic';
 import { fitInView, frameOf, samePose, type LatLng, type ScreenBox } from './camera';
 import { coveredByOverlays, shiftedRight, viewerFov } from './overlays';
 import { placeLabels, type LabelAnchor, type LabelOffset } from './labels';
@@ -185,6 +188,10 @@ export default function CesiumView({
     [buildings, setBuildings] = useState<'off' | 'loading' | 'on' | 'error'>('off');
   const [mapMessage, setMapMessage] = useState('');
   const [terrain, setTerrain] = useState<'ellipsoid' | 'world'>('ellipsoid');
+  // Google Photorealistic 3D Tiles through Cesium ion (only offered with a token).
+  const [photoreal, setPhotoreal] = useState<'off' | 'loading' | 'on' | 'error'>('off');
+  const photorealRef = useRef<Cesium3DTileset | undefined>(undefined);
+  const photorealOn = photoreal === 'on';
   const ionLoading = useRef<Viewer | null>(null);
   const measuring = useMeasure((s) => s.active),
     setMeasuring = useMeasure((s) => s.setActive);
@@ -206,7 +213,12 @@ export default function CesiumView({
   const relief = terrain === 'world' || lidarOn;
   const reliefRef = useRef(relief);
   const groundLayers = (useLayers().data ?? []).some((l) => l.status === 'ready' && l.terrain_url);
-  usePointCloudLayers(ready ? viewer.current : null, ready, terrain === 'world' || lidarOn);
+  // Over the Google mesh the clouds keep their real heights too.
+  usePointCloudLayers(
+    ready ? viewer.current : null,
+    ready,
+    terrain === 'world' || lidarOn || photorealOn,
+  );
   const cloudsShown = useLayerView(
     (s) => Object.entries(s.render).filter(([id, r]) => r === 'shown' && !s.hidden[id]).length,
   );
@@ -319,6 +331,7 @@ export default function CesiumView({
         delete (window as DevWindow).__geotwinViewer;
       framed.current = false;
       buildingsRef.current = undefined;
+      photorealRef.current = undefined;
       if (ionLoading.current === v) ionLoading.current = null;
     };
   }, [token]);
@@ -326,9 +339,15 @@ export default function CesiumView({
     const v = viewer.current;
     if (!v || !ready) return;
     const ids = new Set<string>();
+    // Over the Google mesh, which has the roofs in it, each asset stands on the mesh at its
+    // position (a roof or the ground); otherwise at its mounting height above the terrain.
+    const reference = photorealOn
+      ? HeightReference.RELATIVE_TO_3D_TILE
+      : HeightReference.RELATIVE_TO_TERRAIN;
+    const surface = relief || photorealOn;
     for (const a of assets) {
       const id = `asset:${a.id}`;
-      const mount = relief ? a.mount_height_m : 0;
+      const mount = relief && !photorealOn ? a.mount_height_m : 0;
       ids.add(id);
       const color = Color.fromCssColorString(colors[a.status]);
       const existing = v.entities.getById(id);
@@ -337,8 +356,14 @@ export default function CesiumView({
         existing.position = new ConstantPositionProperty(
           Cartesian3.fromDegrees(a.location.lng, a.location.lat, mount),
         );
-        if (existing.box) existing.box.dimensions = new ConstantProperty(assetBox(a, relief));
-        if (existing.point) existing.point.color = new ConstantProperty(color);
+        if (existing.box) {
+          existing.box.dimensions = new ConstantProperty(assetBox(a, surface));
+          existing.box.heightReference = new ConstantProperty(reference);
+        }
+        if (existing.point) {
+          existing.point.color = new ConstantProperty(color);
+          existing.point.heightReference = new ConstantProperty(reference);
+        }
         if (existing.box) {
           existing.box.material = new ColorMaterialProperty(color.withAlpha(0.55));
           existing.box.outlineColor = new ConstantProperty(color);
@@ -346,6 +371,7 @@ export default function CesiumView({
         if (existing.label) {
           existing.label.text = new ConstantProperty(a.name);
           existing.label.show = new ConstantProperty(selectedId === a.id);
+          existing.label.heightReference = new ConstantProperty(reference);
         }
       } else
         v.entities.add({
@@ -354,7 +380,7 @@ export default function CesiumView({
           // Height above the terrain: 0 on the ground, the roof for a rooftop gateway.
           position: Cartesian3.fromDegrees(a.location.lng, a.location.lat, mount),
           point: {
-            heightReference: HeightReference.RELATIVE_TO_TERRAIN,
+            heightReference: reference,
             pixelSize: 13,
             color,
             outlineColor: Color.WHITE,
@@ -363,14 +389,14 @@ export default function CesiumView({
           },
           // Demo volume standing on the ground or on the mounting point (bottom at the position).
           box: {
-            heightReference: HeightReference.RELATIVE_TO_TERRAIN,
-            dimensions: assetBox(a, relief),
+            heightReference: reference,
+            dimensions: assetBox(a, surface),
             material: color.withAlpha(0.55),
             outline: true,
             outlineColor: color,
           },
           label: {
-            heightReference: HeightReference.RELATIVE_TO_TERRAIN,
+            heightReference: reference,
             text: a.name,
             font: '13px sans-serif',
             show: selectedId === a.id,
@@ -383,22 +409,30 @@ export default function CesiumView({
           },
         });
     }
+    // Installation areas are draped on the terrain, or also on the 3D tiles over the Google mesh.
+    const classification = photorealOn ? ClassificationType.BOTH : ClassificationType.TERRAIN;
+    const clamp = photorealOn ? HeightReference.CLAMP_TO_GROUND : HeightReference.CLAMP_TO_TERRAIN;
     for (const i of installations) {
       const id = `installation:${i.id}`;
       ids.add(id);
-      if (!v.entities.getById(id))
+      const existing = v.entities.getById(id);
+      if (existing) {
+        if (existing.ellipse)
+          existing.ellipse.classificationType = new ConstantProperty(classification);
+        if (existing.label) existing.label.heightReference = new ConstantProperty(clamp);
+      } else
         v.entities.add({
           id,
           name: i.name,
           position: Cartesian3.fromDegrees(i.location.lng, i.location.lat),
           ellipse: {
-            classificationType: ClassificationType.TERRAIN,
+            classificationType: classification,
             semiMajorAxis: 210,
             semiMinorAxis: 210,
             material: Color.CYAN.withAlpha(0.08),
           },
           label: {
-            heightReference: HeightReference.CLAMP_TO_TERRAIN,
+            heightReference: clamp,
             text: i.name,
             font: '12px sans-serif',
             fillColor: Color.CYAN,
@@ -413,7 +447,7 @@ export default function CesiumView({
     }
     for (const entity of [...v.entities.values]) if (!ids.has(entity.id)) v.entities.remove(entity);
     v.scene.requestRender();
-  }, [assets, installations, selectedId, ready, relief]);
+  }, [assets, installations, selectedId, ready, relief, photorealOn]);
   // Installation labels: placed after every render so they neither overlap each other nor hide
   // under the floating controls (on a phone the control column covers the left of the map).
   useEffect(() => {
@@ -616,9 +650,71 @@ export default function CesiumView({
       setMapMessage('No se pudo cambiar la cartografía.');
     }
   };
+  /** Shows or hides the Google mesh; the globe (and the LiDAR relief on it) does the opposite. */
+  const showPhotoreal = (v: Viewer, show: boolean) => {
+    const tileset = photorealRef.current;
+    if (tileset) tileset.show = show;
+    // The Google tiles include the ground and the buildings: no globe, no OSM buildings.
+    v.scene.globe.show = !show;
+    if (show && buildingsRef.current?.show) {
+      buildingsRef.current.show = false;
+      setBuildings('off');
+    }
+    setPhotoreal(show ? 'on' : 'off');
+    v.scene.requestRender();
+  };
+  const togglePhotoreal = async () => {
+    const v = viewer.current;
+    if (!v || !token || photoreal === 'loading') return;
+    setMapMessage('');
+    // Loaded once and then only shown or hidden: every new load requests the root tile again,
+    // which counts against the monthly quota of the ion account.
+    if (photorealRef.current) {
+      showPhotoreal(v, !photorealRef.current.show);
+      return;
+    }
+    setPhotoreal('loading');
+    try {
+      const tileset = await loadPhotorealistic(() =>
+        createGooglePhotorealistic3DTileset(
+          // The viewer has no geocoder, so no other geocoder is used alongside these tiles.
+          { onlyUsingWithGoogleGeocoder: true },
+          // The provider's attribution must be visible on the map, not only behind a link.
+          { showCreditsOnScreen: true },
+        ),
+      );
+      if (v.isDestroyed()) {
+        tileset.destroy();
+        return;
+      }
+      // A refused tile request (no access, quota) or a run of failures puts the LiDAR view back.
+      const watch = new TileFailureWatch();
+      tileset.tileLoad.addEventListener(() => watch.loaded());
+      tileset.tileFailed.addEventListener((failure: unknown) => {
+        const problem = watch.failed(failure);
+        if (!problem || v.isDestroyed() || !tileset.show) return;
+        showPhotoreal(v, false);
+        setPhotoreal('error');
+        setMapMessage(new PhotorealError(problem).message);
+      });
+      v.scene.primitives.add(tileset);
+      photorealRef.current = tileset;
+      showPhotoreal(v, true);
+    } catch (failure) {
+      if (v.isDestroyed()) return;
+      setPhotoreal('error');
+      setMapMessage(
+        failure instanceof Error
+          ? failure.message
+          : 'No se pudo cargar la capa fotorrealista de Google. Sigue la vista LiDAR.',
+      );
+    }
+  };
   const toggleBuildings = async () => {
     const v = viewer.current;
     if (!v || !token || ionLoading.current === v) return;
+    // OSM buildings and the Google mesh would draw the same buildings twice.
+    if (photorealRef.current?.show) showPhotoreal(v, false);
     if (buildingsRef.current) {
       buildingsRef.current.show = !buildingsRef.current.show;
       setBuildings(buildingsRef.current.show ? 'on' : 'off');
@@ -727,6 +823,7 @@ export default function CesiumView({
         data-testid="cesium-view"
         data-ready={ready}
         data-terrain={terrain === 'world' ? 'world' : lidarOn ? 'lidar' : 'ellipsoid'}
+        data-photoreal={photoreal}
         data-buildings={buildings}
         data-pointclouds={cloudsShown}
         data-color-mode={colorMode}
@@ -743,7 +840,13 @@ export default function CesiumView({
         </span>
         <span className="map-tag">
           {token ? 'ION LISTO' : 'MODO BÁSICO'} · {base} ·{' '}
-          {terrain === 'world' ? 'RELIEVE 3D' : lidarOn ? 'RELIEVE LIDAR' : 'GLOBO BÁSICO'}
+          {photorealOn
+            ? 'FOTORREALISTA (GOOGLE)'
+            : terrain === 'world'
+              ? 'RELIEVE 3D'
+              : lidarOn
+                ? 'RELIEVE LIDAR'
+                : 'GLOBO BÁSICO'}
         </span>
       </div>
       <div className="map-controls">
@@ -806,6 +909,19 @@ export default function CesiumView({
         >
           <Mountain size={17} />
         </Button>
+        {token && (
+          <Button
+            variant="outline"
+            size="icon"
+            disabled={photoreal === 'loading'}
+            title="Fotorrealista (Google): malla 3D de Google Photorealistic 3D Tiles a través de Cesium ion"
+            aria-label="Fotorrealista (Google)"
+            aria-pressed={photorealOn}
+            onClick={() => void togglePhotoreal()}
+          >
+            <Building2 size={17} />
+          </Button>
+        )}
         <Button
           variant="outline"
           size="icon"
@@ -831,14 +947,17 @@ export default function CesiumView({
         <span />
         <small>Haz clic para inspeccionar</small>
       </div>
-      {!relief && lidar.state !== 'loading' && assets.some((a) => a.mount_height_m > 0) && (
-        <div className="map-hint" role="note" data-testid="relief-hint">
-          Sin relieve, los activos de cubiertas y torres se dibujan a ras del mapa.{' '}
-          {groundLayers && !lidarOption
-            ? 'Activa «Relieve del LiDAR» en Capas para verlos a su altura.'
-            : 'Carga las hojas LiDAR en Capas para verlos a su altura.'}
-        </div>
-      )}
+      {!relief &&
+        !photorealOn &&
+        lidar.state !== 'loading' &&
+        assets.some((a) => a.mount_height_m > 0) && (
+          <div className="map-hint" role="note" data-testid="relief-hint">
+            Sin relieve, los activos de cubiertas y torres se dibujan a ras del mapa.{' '}
+            {groundLayers && !lidarOption
+              ? 'Activa «Relieve del LiDAR» en Capas para verlos a su altura.'
+              : 'Carga las hojas LiDAR en Capas para verlos a su altura.'}
+          </div>
+        )}
       {mapMessage && (
         <div className="map-message" role="status">
           {mapMessage}
