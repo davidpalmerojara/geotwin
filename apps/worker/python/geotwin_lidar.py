@@ -239,6 +239,20 @@ def shift_heights(path: Path, offset: float) -> None:
             f.write(struct.pack("<d", value + offset))
 
 
+def single_threaded_laz() -> None:
+    """Makes laspy decode LAZ with lazrs' single-threaded backend in this process and its forks.
+
+    py3dtiles reads the LAZ header in the parent and then fork()s its worker processes. lazrs'
+    parallel backend runs on a Rayon thread pool, which does not survive fork(): with any LAZ of
+    more than one chunk (50,000 points), the workers wait forever and the conversion hangs. Each
+    worker already decodes its own slice of the file, so nothing is lost.
+    """
+    import laspy
+
+    if laspy.LazBackend.Lazrs.is_available():
+        laspy.LazBackend.detect_available = staticmethod(lambda: (laspy.LazBackend.Lazrs,))
+
+
 class ProgressTiler:
     """Factory for a py3dtiles PointTiler that reports how many points are already in tiles."""
 
@@ -273,6 +287,7 @@ def convert(
     from py3dtiles.convert import Converter
     from pyproj import CRS
 
+    single_threaded_laz()
     if exact:
         if setup_grid(grid_dir) is None:
             raise RuntimeError(f"{GRID_FILE} not found in {grid_dir}")

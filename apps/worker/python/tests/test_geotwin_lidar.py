@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -31,7 +32,11 @@ def fixture(request, tmp_path) -> Path:
 
 
 def leaf_points(out: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """ECEF positions, RGB and classification of every point in the leaf tiles."""
+    """ECEF positions, RGB and classification of every source point.
+
+    py3dtiles writes each point once in an ADD-refined tile; the REPLACE tiles near the root are
+    subsampled previews that repeat some of them.
+    """
     from py3dtiles.tileset.content import read_binary_tile_content
 
     tileset = json.loads((out / "tileset.json").read_text())
@@ -39,7 +44,7 @@ def leaf_points(out: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     def walk(tile, matrix):
         local = np.array(tile.get("transform", np.identity(4).ravel()), dtype=float)
         matrix = matrix @ local.reshape(4, 4).T
-        if "content" in tile and tile["geometricError"] == 0:
+        if "content" in tile and tile.get("refine") == "ADD":
             yield tile["content"]["uri"], matrix
         for child in tile.get("children", []):
             yield from walk(child, matrix)
@@ -157,3 +162,21 @@ def test_exact_path_uses_the_official_grid_per_point(tmp_path):
 def test_missing_grid_falls_back_cleanly(tmp_path):
     assert tool.setup_grid(None) is None
     assert tool.setup_grid(str(tmp_path)) is None  # folder without the grid file
+
+
+def test_multi_chunk_laz_does_not_hang(tmp_path):
+    """Regression: LAZ larger than one 50,000-point chunk hung py3dtiles' forked workers."""
+    import make_synthetic_fixtures as fixtures
+
+    source = tmp_path / "big.laz"
+    fixtures.write(fixtures.build_large(120_000, 200), source)
+    out = tmp_path / "tiles"
+    script = Path(tool.__file__)
+    done = subprocess.run(
+        [sys.executable, "-I", str(script), "convert", str(source), str(out), "--z-offset", "53.6",
+         "--jobs", "2"],
+        capture_output=True, text=True, timeout=120,
+    )
+    assert done.returncode == 0, done.stdout[-500:] + done.stderr[-500:]
+    assert json.loads(done.stdout.strip().splitlines()[-1])["event"] == "result"
+    assert len(leaf_points(out)[0]) == 120_000

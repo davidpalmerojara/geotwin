@@ -4,10 +4,14 @@ These are not real measurements. They imitate the shape of a PNOA-LiDAR tile (ET
 EPSG:25830, orthometric heights, RGB, ASPRS classes) over a 120 x 120 m patch near Laguna de Duero
 (Valladolid), so tests can run a real conversion in a second. The header says SYNTHETIC too.
 
-Usage: python make_synthetic_fixtures.py <output folder>
+Usage:
+  python make_synthetic_fixtures.py <output folder>
+      the two small test fixtures (5,540 points, committed in apps/worker/tests/fixtures)
+  python make_synthetic_fixtures.py <output folder> --points 12000000 --size 1000
+      a tile-sized SYNTHETIC LAZ for benchmarks (1 x 1 km, ~5 pts/m2 like PNOA cob3; ~60 MB)
 """
 
-import sys
+import argparse
 from pathlib import Path
 
 import laspy
@@ -55,6 +59,30 @@ def build(seed: int = 25830) -> dict[str, np.ndarray]:
     return {"x": xs + CENTRE_X, "y": ys + CENTRE_Y, "z": zs, "classification": cls}
 
 
+def build_large(count: int, size: float, seed: int = 4258) -> dict[str, np.ndarray]:
+    """A big synthetic tile: rolling ground, scattered trees and flat-roofed blocks."""
+    rng = np.random.default_rng(seed)
+    half = size / 2
+    x = rng.uniform(-half, half, count)
+    y = rng.uniform(-half, half, count)
+    z = GROUND_Z + 4 * np.sin(x / 150) + 3 * np.cos(y / 110)
+    cls = np.full(count, 2, dtype=np.uint8)
+    # Blocks on a 60 m grid (25 x 18 m footprints) and trees in a 37 m lattice of crowns.
+    bx, by = np.mod(x, 60) - 30, np.mod(y, 60) - 30
+    in_block = (np.abs(bx) < 12.5) & (np.abs(by) < 9)
+    block = in_block & (np.mod(np.floor(x / 60) + np.floor(y / 60), 3) == 0)
+    z[block] += 9 + rng.normal(0, 0.05, block.sum())
+    cls[block] = 6
+    tx, ty = np.mod(x, 37) - 18.5, np.mod(y, 37) - 18.5
+    crown = ~block & (tx**2 + ty**2 < 16)
+    z[crown] += 4 + rng.uniform(0, 6, crown.sum())
+    cls[crown] = 5
+    pond = (x + half / 2) ** 2 + (y + half / 2) ** 2 < 60**2
+    z[pond] = GROUND_Z - 2
+    cls[pond] = 9
+    return {"x": x + CENTRE_X, "y": y + CENTRE_Y, "z": z, "classification": cls}
+
+
 def write(points: dict[str, np.ndarray], path: Path) -> None:
     header = laspy.LasHeader(point_format=7, version="1.4")
     header.scales = np.array([0.01, 0.01, 0.01])
@@ -66,19 +94,31 @@ def write(points: dict[str, np.ndarray], path: Path) -> None:
     las = laspy.LasData(header)
     las.x, las.y, las.z = points["x"], points["y"], points["z"]
     las.classification = points["classification"]
-    rgb = np.array([COLOURS[int(c)] for c in points["classification"]], dtype=np.uint16) * 256
+    palette = np.zeros((256, 3), dtype=np.uint16)
+    for cls, colour in COLOURS.items():
+        palette[cls] = colour
+    rgb = palette[points["classification"]] * 256
     las.red, las.green, las.blue = rgb[:, 0], rgb[:, 1], rgb[:, 2]
     las.gps_time = np.arange(len(points["x"]), dtype=np.float64)
     las.write(path)
 
 
 def main() -> None:
-    out = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
-    out.mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("out", type=Path, nargs="?", default=Path("."))
+    parser.add_argument("--points", type=int, help="write one big LAZ with this many points")
+    parser.add_argument("--size", type=float, default=1000.0, help="tile side in metres")
+    args = parser.parse_args()
+    args.out.mkdir(parents=True, exist_ok=True)
+    if args.points:
+        target = args.out / f"synthetic-laguna-duero-{args.points // 1_000_000}M.laz"
+        write(build_large(args.points, args.size), target)
+        print(f"{args.points} synthetic points written to {target}")
+        return
     points = build()
     for suffix in ("las", "laz"):
-        write(points, out / f"synthetic-laguna-duero.{suffix}")
-    print(f"{len(points['x'])} synthetic points written to {out}")
+        write(points, args.out / f"synthetic-laguna-duero.{suffix}")
+    print(f"{len(points['x'])} synthetic points written to {args.out}")
 
 
 if __name__ == "__main__":
