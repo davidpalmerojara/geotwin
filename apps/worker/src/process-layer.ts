@@ -8,6 +8,7 @@ import { LidarToolError, runLidarTool } from './python.js';
 import { planVertical } from './geoid.js';
 import { z } from 'zod';
 import type { WorkerEnv } from './config.js';
+import { ATTEMPT_PREFIX } from './temp.js';
 
 export interface LayerJobContext {
   id: string;
@@ -69,7 +70,7 @@ export async function processLayer(job: LayerJobContext, deps: Deps): Promise<Ou
     return 'skipped';
   }
   if (!(await repo.start(layer.id, job.id))) return 'skipped';
-  const dir = await mkdtemp(join(env.WORKER_TMP_DIR, `geotwin-layer-${layer.id}-`));
+  const dir = await mkdtemp(join(env.WORKER_TMP_DIR, `${ATTEMPT_PREFIX}${layer.id}-`));
   // Progress writes are throttled: at most one per second unless the stage changes.
   let last = { stage: '', at: 0, value: -1 };
   const report = async (stage: keyof typeof STAGES, fraction: number) => {
