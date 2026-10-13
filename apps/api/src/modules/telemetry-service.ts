@@ -1,7 +1,7 @@
 import type { Alert, AssetStatus, RealtimeEvent, Sensor } from '@geotwin/shared';
 import { transaction, type Database, type Transaction } from '../db/pool.js';
 import { Repository, alertColumns } from './repository.js';
-import { evaluate, generatedValue, metricLabel } from '../simulator/domain.js';
+import { decimal, evaluate, generatedValue, metricLabel } from '../simulator/domain.js';
 import { notFound } from './errors.js';
 interface Measurement {
   sensor: Sensor;
@@ -277,5 +277,5 @@ export function alertMessage(
 ) {
   const threshold = severity === 'critical' ? sensor.critical_threshold : sensor.warning_threshold;
   const level = severity === 'critical' ? 'crítico' : 'de advertencia';
-  return `${metricLabel(sensor.metric_type)}: ${value} ${sensor.unit} (umbral ${level} ${threshold} ${sensor.unit}) · telemetría simulada`;
+  return `${metricLabel(sensor.metric_type)}: ${decimal(value)} ${sensor.unit} (umbral ${level} ${decimal(threshold)} ${sensor.unit}) · telemetría simulada`;
 }

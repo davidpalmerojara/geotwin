@@ -39,3 +39,6 @@ const metricLabels: Record<Sensor['metric_type'], string> = {
   level: 'Nivel',
 };
 export const metricLabel = (metric: Sensor['metric_type']) => metricLabels[metric];
+/** A value as Spanish text, with a decimal comma and up to two decimals: 2,35 · 85 · 0,5. */
+export const decimal = (value: number) =>
+  value.toLocaleString('es-ES', { maximumFractionDigits: 2, useGrouping: false });

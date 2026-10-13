@@ -1054,6 +1054,18 @@ main {
   font-size: 9px;
   margin-left: 5px;
 }
+/* Every reading in the demo comes from the simulator: said next to the value itself. */
+.sensor-card .sim-tag {
+  display: block;
+  margin-top: 2px;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-align: right;
+  text-transform: uppercase;
+  color: #e5b75a;
+}
 .detail-chart {
   height: 153px;
 }

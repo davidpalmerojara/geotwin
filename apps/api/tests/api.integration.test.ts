@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, afterAll, describe, it, expect } from 'vitest';
 import WebSocket from 'ws';
 import { z } from 'zod';
 import { connect } from 'node:net';
+import { readFile } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
 import { createPool } from '../src/db/pool.js';
 import { migrate, seed } from '../src/db/migrate.js';
@@ -559,6 +560,8 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     expect(byName('Depósito elevado').mount_height_m).toBeCloseTo(33.1, 1);
     expect(byName('Sonda de nivel · laguna').mount_height_m).toBe(0);
     const probe = byName('Sonda de nivel · laguna');
+    expect(probe.type).toBe('level_probe');
+    expect(byName('Depósito elevado').type).toBe('reservoir');
     const sensors = (await app.inject(`/api/sensors?asset_id=${probe.id}`)).json();
     expect(
       sensors.map((s: { metric_type: string; unit: string }) => [s.metric_type, s.unit]),
@@ -566,6 +569,27 @@ describe('Real API and PostgreSQL/PostGIS', () => {
       ['level', 'm'],
       ['temperature', '°C'],
     ]);
+    // A simulated anomaly words its values with a decimal comma (2.1 × 1.12 = 2.352 m).
+    const level = sensors.find((s: { metric_type: string }) => s.metric_type === 'level');
+    await app.inject({
+      method: 'POST',
+      url: '/api/demo/anomalies',
+      payload: { sensor_id: level.id, mode: 'critical' },
+    });
+    const [alert] = (await app.inject(`/api/alerts?asset_id=${probe.id}&status=active`)).json();
+    expect(alert.message).toBe('Nivel: 2,35 m (umbral crítico 2,1 m) · telemetría simulada');
+    await app.inject({ method: 'PATCH', url: `/api/alerts/${alert.id}/resolve` });
+    // A database seeded before the level probe type: the migration retypes the lake probe.
+    await db.query("UPDATE assets SET type='reservoir' WHERE id=$1", [probe.id]);
+    await db.query(
+      await readFile(
+        new URL('../../../database/migrations/008_asset_type_level_probe.sql', import.meta.url),
+        'utf8',
+      ),
+    );
+    expect((await db.query('SELECT type FROM assets WHERE id=$1', [probe.id])).rows[0].type).toBe(
+      'level_probe',
+    );
     const installations = (await app.inject('/api/installations')).json();
     expect(installations.map((i: { name: string }) => i.name).sort()).toEqual([
       'Depósito elevado del cerro',

@@ -16,7 +16,7 @@ import {
   useInstallations,
   useOrganization,
 } from '../../hooks/data';
-import { assetTypeLabel, coordinates, count } from '../../lib/format';
+import { assetTypeLabel, coordinates, count, number } from '../../lib/format';
 import { Loading, ErrorState, SectionHeading, Status, Empty } from '../../components/common';
 import { useUI } from '../../stores/ui';
 import { Button } from '../../components/ui/button';
@@ -155,7 +155,7 @@ export function Dashboard() {
                     }}
                     labelFormatter={(v) => time(String(v))}
                     formatter={(v, name) => [
-                      Number(v).toFixed(2),
+                      number(Number(v), 2),
                       name === 'temperature' ? 'Temperatura °C' : 'Vibración mm/s',
                     ]}
                   />

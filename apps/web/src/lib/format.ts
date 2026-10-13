@@ -16,6 +16,7 @@ export const assetTypeLabel: Record<Asset['type'], string> = {
   gateway: 'Pasarela de datos',
   valve: 'Válvula',
   turbine: 'Turbina',
+  level_probe: 'Sonda de nivel',
 };
 export const metricLabel = (metric: string) =>
   metric === 'temperature'
@@ -31,6 +32,10 @@ export const metricLabel = (metric: string) =>
 export function initials(name: string) {
   const words = name.split(/\s+/).filter(Boolean);
   return ((words[0]?.[0] ?? '') + (words[1]?.[0] ?? '')).toUpperCase() || '—';
+}
+/** Spanish number with up to `digits` decimals, none when not needed: 1,7 · 85 · 0,25. */
+export function decimal(value: number, digits = 2) {
+  return value.toLocaleString('es-ES', { maximumFractionDigits: digits });
 }
 /** Spanish number with a fixed number of decimals: 1234,5 · 18.245,6 · 5540. */
 export function number(value: number, digits = 0) {

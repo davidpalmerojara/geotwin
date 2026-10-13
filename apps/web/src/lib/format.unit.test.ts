@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coordinates, count, initials } from './format';
+import { assetTypeLabel, coordinates, count, decimal, initials, number } from './format';
 describe('Spanish formatting', () => {
   it('uses the singular for exactly one', () => {
     expect(count(1, 'sensor activo', 'sensores activos')).toBe('1 sensor activo');
@@ -15,5 +15,16 @@ describe('Spanish formatting', () => {
     expect(initials('Valladolid Infrastructure Lab')).toBe('VI');
     expect(initials('Laguna')).toBe('L');
     expect(initials('')).toBe('—');
+  });
+  it('writes sensor values with a decimal comma, like the measuring tool', () => {
+    expect(number(2.352, 1)).toBe('2,4');
+    expect(number(42, 1)).toBe('42,0');
+    expect(decimal(1.7)).toBe('1,7');
+    expect(decimal(85)).toBe('85');
+    expect(decimal(0.125)).toBe('0,13');
+  });
+  it('names the level probe as such, not as a reservoir', () => {
+    expect(assetTypeLabel.level_probe).toBe('Sonda de nivel');
+    expect(assetTypeLabel.reservoir).toBe('Depósito');
   });
 });

@@ -42,6 +42,8 @@ test('dashboard → 3D twin → persisted anomaly → resolved incident', async 
   await expect(page.locator('.map-top')).toContainText('Local');
   await page.getByTestId(`map-asset-${assetId}`).click();
   await expect(page.getByRole('heading', { name: 'Sensores del activo' })).toBeVisible();
+  // Values with a decimal comma, each marked as simulated next to it.
+  await expect(page.locator('.sensor-card > strong').first()).toHaveText(/^\d+,\d°C\s*simulado$/);
   const link = `/gemelo?instalacion=${installationId}&activo=${assetId}`;
   await expect(page).toHaveURL((url) => `${url.pathname}${url.search}` === link);
   await page.getByRole('button', { name: 'Simular fallo', exact: true }).click();

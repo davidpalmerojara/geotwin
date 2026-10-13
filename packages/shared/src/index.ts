@@ -8,7 +8,7 @@ export const assetSchema = z.object({
   organization_id: uuid,
   installation_id: uuid,
   name: z.string(),
-  type: z.enum(['pump', 'transformer', 'reservoir', 'gateway', 'valve', 'turbine']),
+  type: z.enum(['pump', 'transformer', 'reservoir', 'gateway', 'valve', 'turbine', 'level_probe']),
   status: assetStatus,
   location: locationSchema,
   // Height of the mounting point above the ground in metres (0: at ground level).

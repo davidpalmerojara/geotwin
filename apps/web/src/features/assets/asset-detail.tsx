@@ -23,7 +23,7 @@ import {
 import { api } from '../../lib/api';
 import { time, date } from '../../lib/utils';
 import { useAlerts, useHealth, useInstallations, useSync } from '../../hooks/data';
-import { assetTypeLabel, coordinates, metricLabel, number } from '../../lib/format';
+import { assetTypeLabel, coordinates, decimal, metricLabel, number } from '../../lib/format';
 import { Status, Loading, ErrorState, Empty } from '../../components/common';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../components/ui/dialog';
@@ -232,8 +232,11 @@ function AssetInspector({ id }: { id: string }) {
                   <small>{s.latest_at ? time(s.latest_at) : 'Sin lectura'}</small>
                 </div>
                 <strong>
-                  {s.latest_value?.toFixed(1) ?? '—'}
+                  {s.latest_value === null ? '—' : number(s.latest_value, 1)}
                   <small>{s.unit}</small>
+                  <em className="sim-tag" title="Lectura generada por el simulador de la demo">
+                    simulado
+                  </em>
                 </strong>
               </button>
             ))}
@@ -272,7 +275,10 @@ function AssetInspector({ id }: { id: string }) {
                 />
                 <Tooltip
                   labelFormatter={(v) => time(String(v))}
-                  formatter={(v) => [`${Number(v).toFixed(2)} ${selected?.unit ?? ''}`, 'Lectura']}
+                  formatter={(v) => [
+                    `${number(Number(v), 2)} ${selected?.unit ?? ''}`,
+                    'Lectura simulada',
+                  ]}
                   contentStyle={{
                     background: '#111c2d',
                     border: '1px solid #304158',
@@ -311,10 +317,10 @@ function AssetInspector({ id }: { id: string }) {
         {selected && (
           <div className="thresholds">
             <span>
-              Advertencia ≥ {selected.warning_threshold} {selected.unit}
+              Advertencia ≥ {decimal(selected.warning_threshold)} {selected.unit}
             </span>
             <span>
-              Crítico ≥ {selected.critical_threshold} {selected.unit}
+              Crítico ≥ {decimal(selected.critical_threshold)} {selected.unit}
             </span>
           </div>
         )}

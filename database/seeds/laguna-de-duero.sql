@@ -25,7 +25,7 @@ FROM (VALUES
  (4,1,'Pasarela LoRa · torre norte','gateway',-4.724305,41.590574,41.7),
  (5,1,'Válvula de sector · Torrelago','valve',-4.724757,41.588469,0),
  (6,1,'Depósito de cubierta · torre oeste','reservoir',-4.726391,41.587724,41.5),
- (7,2,'Sonda de nivel · laguna','reservoir',-4.721907,41.586422,0),
+ (7,2,'Sonda de nivel · laguna','level_probe',-4.721907,41.586422,0),
  (8,2,'Bombeo de recirculación · laguna','pump',-4.721184,41.584717,0),
  (9,2,'Bomba de las piscinas','pump',-4.721603,41.586962,0),
  (10,2,'Pasarela · cubierta del pabellón','gateway',-4.723770,41.587245,12.3),

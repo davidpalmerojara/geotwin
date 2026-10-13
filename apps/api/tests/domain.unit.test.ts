@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluate, generatedValue } from '../src/simulator/domain.js';
+import { decimal, evaluate, generatedValue } from '../src/simulator/domain.js';
 import { nearbyQuery, realtimeEventSchema, type Sensor } from '@geotwin/shared';
 const sensor: Sensor = {
   id: '30000000-0000-4000-8000-000000000001',
@@ -13,6 +13,12 @@ const sensor: Sensor = {
   latest_at: null,
 };
 describe('Telemetry domain', () => {
+  it('writes values in alert messages with a decimal comma', () => {
+    expect(decimal(2.352)).toBe('2,35');
+    expect(decimal(2.1)).toBe('2,1');
+    expect(decimal(85)).toBe('85');
+    expect(decimal(1234.5)).toBe('1234,5');
+  });
   it('treats the exact threshold as an anomaly', () => {
     expect(evaluate(69.99, sensor)).toBe('healthy');
     expect(evaluate(70, sensor)).toBe('warning');
