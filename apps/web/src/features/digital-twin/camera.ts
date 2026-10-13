@@ -38,8 +38,72 @@ export function frameOf(points: LatLng[], paddingM?: number, minRadiusM = 300) {
  * horizontal angle is the narrow one and decides the distance.
  */
 export function fitDistance(radius: number, fov: number, aspectRatio: number, margin = 1.15) {
-  const fovy = aspectRatio <= 1 ? fov : 2 * Math.atan(Math.tan(fov / 2) / aspectRatio);
-  const fovx = 2 * Math.atan(Math.tan(fovy / 2) * aspectRatio);
-  const narrow = Math.min(fovx, fovy);
-  return (radius / Math.sin(narrow / 2)) * margin;
+  return fitInView(radius, fov, aspectRatio, 1, 0, margin).distance;
+}
+
+/** Tangent of half the horizontal and vertical field of view of Cesium's `fov`. */
+function halfTangents(fov: number, width: number, height: number) {
+  const aspect = width / height;
+  const fovy = aspect <= 1 ? fov : 2 * Math.atan(Math.tan(fov / 2) / aspect);
+  const y = Math.tan(fovy / 2);
+  return { x: y * aspect, y };
+}
+
+/**
+ * Metres to aim the camera to the right of a target `distance` away so the target lands in the
+ * middle of the part of the canvas that a panel `covered` px wide on the right leaves visible.
+ */
+export function aimShift(
+  distance: number,
+  fov: number,
+  width: number,
+  height: number,
+  covered: number,
+) {
+  if (!covered || !width || !height) return 0;
+  return (distance * halfTangents(fov, width, height).x * covered) / width;
+}
+
+/**
+ * Fits a sphere in the visible part of a `width` x `height` canvas whose right `covered` px are
+ * hidden by a floating panel: the camera distance for the narrower visible angle and how far to
+ * aim to the right of the sphere so it sits centred in what is left.
+ */
+export function fitInView(
+  radius: number,
+  fov: number,
+  width: number,
+  height: number,
+  covered = 0,
+  margin = 1.15,
+) {
+  const hidden = Math.max(0, Math.min(covered, width / 2));
+  const half = halfTangents(fov, width, height);
+  const narrow = Math.min(Math.atan((half.x * (width - hidden)) / width), Math.atan(half.y));
+  const distance = (radius / Math.sin(narrow)) * margin;
+  return { distance, shift: aimShift(distance, fov, width, height, hidden) };
+}
+
+export interface ScreenBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+/**
+ * Pixels on the right of the canvas hidden by panels floating over the map. Only panels that
+ * start in the right half and cover at least a quarter of its height count: a collapsed header
+ * is a thin strip that the framing margin already leaves room for.
+ */
+export function coveredRight(canvas: ScreenBox, overlays: ScreenBox[]) {
+  const width = canvas.right - canvas.left,
+    height = canvas.bottom - canvas.top;
+  let covered = 0;
+  for (const box of overlays) {
+    const overlap = Math.min(box.bottom, canvas.bottom) - Math.max(box.top, canvas.top);
+    if (box.left <= canvas.left + width / 2 || box.left >= canvas.right) continue;
+    if (overlap < height / 4) continue;
+    covered = Math.max(covered, canvas.right - box.left);
+  }
+  return covered;
 }

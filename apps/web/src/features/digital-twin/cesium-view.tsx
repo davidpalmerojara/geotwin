@@ -29,7 +29,6 @@ import {
   sampleTerrainMostDetailed,
   HeadingPitchRange,
   BoundingSphere,
-  PerspectiveFrustum,
   JulianDate,
   Ellipsoid,
 } from 'cesium';
@@ -38,7 +37,8 @@ import type { Asset, Installation } from '@geotwin/shared';
 import { Crosshair, Layers, Mountain, Plus, Minus, Ruler } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { loadIonEnvironment } from './ion-environment';
-import { fitDistance, frameOf, type LatLng } from './camera';
+import { fitInView, frameOf, type LatLng } from './camera';
+import { coveredByOverlays, shiftedRight, viewerFov } from './overlays';
 import { coordinates } from '../../lib/format';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
 import { useLayerView } from '../../stores/layers';
@@ -62,25 +62,29 @@ function pnoaProvider() {
   });
   return provider;
 }
+type DevWindow = Window & { __geotwinViewer?: Viewer };
 const colors = { healthy: '#34d399', warning: '#fbbf24', critical: '#fb7185' };
-// Oblique view that fits every point on desktop and on a portrait phone.
+// Oblique view that fits every point on desktop and on a portrait phone, in the part of the map
+// that floating panels (the «Capas» panel) leave visible.
 function flyToPoints(v: Viewer, points: LatLng[], duration: number) {
   const frame = frameOf(points);
   if (!frame || v.isDestroyed()) return;
   const canvas = v.scene.canvas;
-  const aspect =
-    canvas.clientWidth && canvas.clientHeight ? canvas.clientWidth / canvas.clientHeight : 1;
-  const fov =
-    (v.camera.frustum instanceof PerspectiveFrustum ? v.camera.frustum.fov : undefined) ??
-    Math.PI / 3;
+  const width = canvas.clientWidth || 1,
+    height = canvas.clientHeight || 1;
+  const view = fitInView(frame.radius, viewerFov(v), width, height, coveredByOverlays(v));
+  const heading = 0;
   v.camera.flyToBoundingSphere(
-    new BoundingSphere(Cartesian3.fromDegrees(frame.center.lng, frame.center.lat, 0), frame.radius),
-    {
-      offset: new HeadingPitchRange(
-        0,
-        CesiumMath.toRadians(-55),
-        fitDistance(frame.radius, fov, aspect),
+    shiftedRight(
+      new BoundingSphere(
+        Cartesian3.fromDegrees(frame.center.lng, frame.center.lat, 0),
+        frame.radius,
       ),
+      heading,
+      view.shift,
+    ),
+    {
+      offset: new HeadingPitchRange(heading, CesiumMath.toRadians(-55), view.distance),
       duration,
     },
   );
@@ -156,6 +160,8 @@ export default function CesiumView({
         maximumRenderTimeChange: Infinity,
       });
       viewer.current = v;
+      // Development builds expose the viewer so end-to-end tests can check what the camera frames.
+      if (import.meta.env.DEV) (window as DevWindow).__geotwinViewer = v;
       setTerrain('ellipsoid');
       setBuildings('off');
       v.scene.backgroundColor = Color.fromCssColorString('#090e17');
@@ -213,6 +219,8 @@ export default function CesiumView({
       handler?.destroy();
       if (v && !v.isDestroyed()) v.destroy();
       viewer.current = null;
+      if (import.meta.env.DEV && (window as DevWindow).__geotwinViewer === v)
+        delete (window as DevWindow).__geotwinViewer;
       framed.current = false;
       buildingsRef.current = undefined;
       if (ionLoading.current === v) ionLoading.current = null;

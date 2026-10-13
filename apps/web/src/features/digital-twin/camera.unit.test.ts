@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { distanceM, fitDistance, frameOf } from './camera';
+import { aimShift, coveredRight, distanceM, fitDistance, fitInView, frameOf } from './camera';
 const pisuerga = { lat: 41.655, lng: -4.737 };
 const sanCristobal = { lat: 41.62, lng: -4.706 };
 const campus = { lat: 41.663, lng: -4.713 };
@@ -42,5 +42,77 @@ describe('Camera framing', () => {
     expect(phone).toBeGreaterThan(desktop * 1.25);
     // The sphere fits the narrow axis: radius / sin(halfAngle) with the margin.
     expect(fitDistance(1000, Math.PI / 2, 1, 1)).toBeCloseTo(1000 / Math.sin(Math.PI / 4), 6);
+  });
+});
+
+describe('Framing beside a floating panel', () => {
+  const fov = Math.PI / 3;
+  // Screen x (px) of a direction at tangent `t` right of the view axis on a `width` px canvas.
+  const screenX = (t: number, width: number, height: number) => {
+    const aspect = width / height;
+    const tanX = aspect >= 1 ? Math.tan(fov / 2) : Math.tan(fov / 2) * aspect;
+    return width / 2 + (t / tanX) * (width / 2);
+  };
+  // Horizontal screen extent of a sphere whose centre is `shift` m left of the view axis.
+  const extent = (
+    radius: number,
+    distance: number,
+    shift: number,
+    width: number,
+    height: number,
+  ) => {
+    const centre = Math.atan2(-shift, distance);
+    const half = Math.asin(radius / Math.hypot(shift, distance));
+    return {
+      centre: screenX(Math.tan(centre), width, height),
+      left: screenX(Math.tan(centre - half), width, height),
+      right: screenX(Math.tan(centre + half), width, height),
+    };
+  };
+
+  it('is the plain fit when nothing covers the map', () => {
+    const view = fitInView(3000, fov, 1440, 900);
+    expect(view.shift).toBe(0);
+    expect(view.distance).toBeCloseTo(fitDistance(3000, fov, 1440 / 900), 6);
+  });
+
+  it('keeps the whole sphere in the visible part, centred in it (1280 x 900 desktop)', () => {
+    // The map is about 700 x 580 px there and the open panel hides its right 318 px.
+    const [width, height, covered] = [703, 580, 318];
+    const view = fitInView(3000, fov, width, height, covered);
+    expect(view.distance).toBeGreaterThan(fitDistance(3000, fov, width / height));
+    const box = extent(3000, view.distance, view.shift, width, height);
+    expect(box.centre).toBeCloseTo((width - covered) / 2, 6);
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(width - covered);
+    // Without the correction the right of the sphere is under the panel (the reported bug).
+    const naive = extent(3000, fitDistance(3000, fov, width / height), 0, width, height);
+    expect(naive.right).toBeGreaterThan(width - covered);
+  });
+
+  it('works on a portrait canvas and never trusts more than half the map to a panel', () => {
+    const view = fitInView(500, fov, 600, 800, 250);
+    const box = extent(500, view.distance, view.shift, 600, 800);
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(600 - 250);
+    expect(fitInView(500, fov, 600, 800, 900)).toEqual(fitInView(500, fov, 600, 800, 300));
+  });
+
+  it('aims at the middle of the visible part for any camera distance', () => {
+    const shift = aimShift(1000, fov, 800, 600, 200);
+    expect(extent(10, 1000, shift, 800, 600).centre).toBeCloseTo(300, 6);
+    expect(aimShift(1000, fov, 800, 600, 0)).toBe(0);
+  });
+
+  it('counts only tall panels that float over the right half', () => {
+    const canvas = { left: 232, top: 176, right: 935, bottom: 756 };
+    const open = { left: 617, top: 238, right: 917, bottom: 730 };
+    const collapsed = { left: 617, top: 238, right: 917, bottom: 280 };
+    const leftTool = { left: 302, top: 500, right: 564, bottom: 690 };
+    expect(coveredRight(canvas, [open])).toBe(318);
+    expect(coveredRight(canvas, [collapsed])).toBe(0);
+    expect(coveredRight(canvas, [leftTool])).toBe(0);
+    expect(coveredRight(canvas, [leftTool, open, collapsed])).toBe(318);
+    expect(coveredRight(canvas, [])).toBe(0);
   });
 });

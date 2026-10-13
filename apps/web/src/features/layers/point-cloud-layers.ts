@@ -6,22 +6,21 @@ import { useEffect, useRef } from 'react';
 import {
   BoundingSphere,
   Cartesian3,
-  Cartesian4,
   Cesium3DTileset,
   Cesium3DTileStyle,
   Credit,
   HeadingPitchRange,
   Math as CesiumMath,
   Matrix4,
-  PerspectiveFrustum,
   PointCloudShading,
   Rectangle,
-  Transforms,
   type Viewer,
 } from 'cesium';
 import type { Layer } from '@geotwin/shared';
 import { useLayers } from '../../hooks/data';
 import { useLayerView } from '../../stores/layers';
+import { aimShift } from '../digital-twin/camera';
+import { coveredByOverlays, shiftedRight, viewerFov } from '../digital-twin/overlays';
 import {
   buildPointCloudStyle,
   ellipsoidalRange,
@@ -240,42 +239,17 @@ function revealMap(element: Element) {
   element.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
 }
 
-/**
- * A panel floating over the right of the map (marked data-map-overlay) hides part of the view:
- * aim the camera to the right of the layer so it lands in the middle of the visible part.
- */
+/** Aim to the right of the layer so it lands in the part of the map that panels leave visible. */
 function clearOfOverlays(viewer: Viewer, sphere: BoundingSphere, heading: number, range: number) {
-  const canvas = viewer.scene.canvas.getBoundingClientRect();
-  let covered = 0;
-  for (const overlay of document.querySelectorAll('[data-map-overlay]')) {
-    if (getComputedStyle(overlay).position !== 'absolute') continue;
-    const box = overlay.getBoundingClientRect();
-    if (box.left > canvas.left + canvas.width / 2 && box.top < canvas.bottom)
-      covered = Math.max(covered, canvas.right - box.left);
-  }
-  if (!covered || !canvas.width) return sphere;
-  const frustum = viewer.camera.frustum;
-  const fov = frustum instanceof PerspectiveFrustum && frustum.fov ? frustum.fov : Math.PI / 3;
-  // Cesium's fov is horizontal on a landscape canvas and vertical on a portrait one.
-  const aspect = canvas.width / canvas.height;
-  const visibleWidth = 2 * range * Math.tan(fov / 2) * (aspect >= 1 ? 1 : aspect);
-  const shift = (covered / 2 / canvas.width) * visibleWidth;
-  const enu = Transforms.eastNorthUpToFixedFrame(sphere.center);
-  const east = Matrix4.getColumn(enu, 0, new Cartesian4()),
-    north = Matrix4.getColumn(enu, 1, new Cartesian4());
-  const right = new Cartesian3(
-    Math.cos(heading) * east.x - Math.sin(heading) * north.x,
-    Math.cos(heading) * east.y - Math.sin(heading) * north.y,
-    Math.cos(heading) * east.z - Math.sin(heading) * north.z,
+  const canvas = viewer.scene.canvas;
+  const shift = aimShift(
+    range,
+    viewerFov(viewer),
+    canvas.clientWidth,
+    canvas.clientHeight,
+    coveredByOverlays(viewer),
   );
-  return new BoundingSphere(
-    Cartesian3.add(
-      sphere.center,
-      Cartesian3.multiplyByScalar(right, shift, new Cartesian3()),
-      new Cartesian3(),
-    ),
-    sphere.radius,
-  );
+  return shiftedRight(sphere, heading, shift);
 }
 
 function footprintSphere(layer: Layer, shift: number) {
