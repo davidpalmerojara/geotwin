@@ -89,6 +89,9 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
         Cesium3DTileset.fromUrl(layer.tileset_url!, {
           maximumScreenSpaceError: QUALITY_SSE[quality],
           pointCloudShading: new PointCloudShading(shadingFor(pointSize, pointSpacing(layer))),
+          // Points are unlit: the image-based lighting map Cesium keeps per tileset is never
+          // used, and updating it reads pixels back from the GPU, which stalls every frame.
+          environmentMapOptions: { enabled: false },
         })
           .then((tileset) => {
             if (target.disposed || viewer.isDestroyed()) {
