@@ -112,10 +112,32 @@ Una verificación independiente de `f107162` dio por buenos la instalación desd
 | 13/10/2026 | rama      | Igual, `npm run test:e2e` con API, worker y Vite reales                                                                      | 7/7: los dos flujos anteriores, encuadre junto al panel a 1280 y 1440 px, créditos visibles al medir en el móvil y axe sin infracciones en cinco páginas, escritorio y móvil | Correcto  |
 | 13/10/2026 | `998d44d` | GitHub Actions (ejecución 38397097390)                                                                                       | Jobs `checks` (con los 7 E2E, pytest e integración contra MinIO) y `docker` (Compose completo y subida del LAZ sintético)                                                    | Correcto  |
 
+## Laguna de Duero con datos reales (rama `feat/laguna-de-duero`)
+
+Primera prueba con **datos reales**: las ocho hojas PNOA-LiDAR de la 3.ª cobertura que cubren Laguna de Duero (63,6 M de puntos, 488 MB de LAZ), subidas por la API con `scripts/upload-layers.sh` y convertidas por el worker. Entorno local del 13/10/2026: Node 22.22, PostgreSQL 16 + PostGIS 3 nativos, Python 3.13 con los requisitos del worker y la rejilla EGM08-REDNAP, almacenamiento local, Chromium build 1194 con SwiftShader y atlas local (sin ortofoto PNOA). Cifras y método en [laguna-de-duero.md](laguna-de-duero.md).
+
+| Fecha      | Revisión | Entorno                                                 | Comprobación                                                                                                                                                                                                                             | Resultado |
+| ---------- | -------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 13/10/2026 | rama     | Local                                                   | Lint, formato, tipos; `npm test` 105/105 (20 ficheros); `npm run test:integration` 41/41 (+1 de S3 sin servidor); `pytest` 20/20; `npm run build`                                                                                        | Correcto  |
+| 13/10/2026 | rama     | Igual, `npm run test:e2e` con API, worker y Vite reales | 7/7 (la subida sintética comprueba además que su suelo se convierte en el relieve y que se puede apagar)                                                                                                                                 | Correcto  |
+| 13/10/2026 | rama     | Igual, API + worker                                     | Ocho hojas reales: de 28 a 37 s cada una de la subida a la capa lista, 252 s en total; 47,7 M de puntos dibujados y 15,9 M de solape y ruido fuera; 771 MB de teselas y MDT; memoria del worker y py3dtiles hasta 694 MB                 | Correcto  |
+| 13/10/2026 | rama     | Comprobación independiente                              | Datum: h − (H + N) = 0,05 mm en 400.000 puntos de suelo de dos hojas (N de la rejilla oficial leída a mano, geodésicas propias desde ECEF); MDT a 2,1-2,4 cm de mediana de los puntos de suelo                                           | Correcto  |
+| 13/10/2026 | rama     | Navegador, 1440×900 y 390×844                           | Torre de Torrelago: −41,7 m en el visor frente a 41,8 m en los puntos LiDAR de esos sitios; avenida: 301,3 m frente a 301,26 m (pyproj); laguna: 36.919 m² frente a 36.919,4 m² (pyproj, mismos vértices). Sin desbordamiento horizontal | Correcto  |
+
+Fallos que han aparecido con los datos reales y se han corregido, cada uno con su prueba:
+
+- **Franjas de solape.** Las hojas PNOA marcan como clase 12 los puntos de solape entre pasadas (hasta el 32 % de una hoja): en el modo Clasificación salían como franjas grises y duplicaban superficie. El worker los deja fuera, con el ruido (7 y 18), y la capa dice cuántos.
+- **Nube flotando o hundida.** Sin Cesium ion el globo es el elipsoide y la nube estaba a 750 m sobre el mapa (o bajada hasta él, con los activos fuera de sitio). El suelo de cada hoja es ahora un MDT servido como terreno: mapa, activos y nubes coinciden en altura.
+- **Créditos compartidos.** Con ocho capas con la misma atribución, ocultar una quitaba el crédito de todas (Cesium trata los créditos iguales como uno). Ahora se cuentan por texto.
+- **Cámara bajo el terreno.** El encuadre y el vuelo a un activo apuntaban a h = 0; con el relieve del LiDAR la cámara podía quedar por debajo del suelo. Ahora apuntan a la altura del terreno.
+- **Encuadre de una red pequeña.** La red de Laguna mide 1,4 km y la etiqueta de la instalación del extremo quedaba bajo el panel Capas a 1280 px: el margen pasa al 30 % con un mínimo de 200 m.
+- **E2E de encuadre inestable.** Con teselas reales en SwiftShader el primer fotograma de un vuelo tarda segundos y la prueba daba la cámara por quieta antes de empezar a moverse; ahora espera a que el vuelo empiece y termine.
+
 ## Límites del entorno
 
 - No hay despliegue público ni recursos en AWS; [aws.md](aws.md) es un plan.
 - La ortofoto PNOA necesita conexión con `ign.es`; el atlas local funciona sin red. Las pruebas automáticas usan el atlas local.
 - El terreno y los edificios de Cesium ion necesitan un token propio y no se prueban en CI.
 - El chunk de Cesium supera el límite de aviso de Vite; se carga bajo demanda al abrir el gemelo digital.
-- No se ha probado todavía con una hoja PNOA-LiDAR real (los servidores del CNIG no eran accesibles desde este entorno); las cifras de rendimiento son de una nube sintética del mismo tamaño. El visor se ha probado con nubes sintéticas (5.540 y 12 M de puntos), no con una real.
+- Las hojas PNOA-LiDAR reales se descargaron fuera de este entorno (el CNIG no es accesible desde él) y se cargaron desde la release `data-laguna`; las pruebas automáticas siguen usando nubes sintéticas.
+- Las capturas y el vídeo se hicieron con SwiftShader: las teselas lejanas no siempre llegaban a su máximo detalle antes de la captura.
