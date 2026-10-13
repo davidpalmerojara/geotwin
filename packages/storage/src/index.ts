@@ -325,6 +325,24 @@ function isS3Missing(error: unknown) {
   return name === 'NoSuchKey' || name === 'NotFound' || name === 'NoSuchBucket' || status === 404;
 }
 
+/**
+ * `ensureReady` with retries, for start-up next to a storage service that may still be booting
+ * (MinIO in Compose). Gives up after `attempts` tries, doubling the wait up to 5 s.
+ */
+export async function waitForStorage(storage: Storage, attempts = 15, firstDelayMs = 250) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await storage.ensureReady();
+      return;
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(5000, firstDelayMs * 2 ** (attempt - 1))),
+      );
+    }
+  }
+}
+
 const boolean = z.enum(['true', 'false']).transform((v) => v === 'true');
 export const storageEnvSchema = z.object({
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),

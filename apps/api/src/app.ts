@@ -4,7 +4,7 @@ import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
 import websocket from '@fastify/websocket';
 import multipart from '@fastify/multipart';
-import { createStorage, type Storage } from '@geotwin/storage';
+import { createStorage, waitForStorage, type Storage } from '@geotwin/storage';
 import { layerNotificationSchema, type RealtimeEvent } from '@geotwin/shared';
 import {
   validatorCompiler,
@@ -170,7 +170,7 @@ export async function buildApp(
   let stop: (() => Promise<void>) | undefined;
   let stopRetention: (() => Promise<void>) | undefined;
   app.addHook('onReady', async () => {
-    await storage.ensureReady();
+    await waitForStorage(storage);
     await queue.start();
     relay = startPgRelay({
       connectionString: db.options.connectionString ?? env.DATABASE_URL,

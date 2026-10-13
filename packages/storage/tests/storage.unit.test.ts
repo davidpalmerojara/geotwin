@@ -65,3 +65,18 @@ describe('Storage', () => {
     expect(() => storageEnvSchema.parse({ STORAGE_DRIVER: 'ftp' })).toThrow();
   });
 });
+describe('waitForStorage', () => {
+  it('retries until the storage service answers, then gives up', async () => {
+    const { waitForStorage } = await import('../src/index.js');
+    let calls = 0;
+    const flaky = {
+      ensureReady: async () => {
+        if (++calls < 3) throw new Error('connect ECONNREFUSED');
+      },
+    } as unknown as Parameters<typeof waitForStorage>[0];
+    await waitForStorage(flaky, 5, 1);
+    expect(calls).toBe(3);
+    calls = -100;
+    await expect(waitForStorage(flaky, 2, 1)).rejects.toThrow('ECONNREFUSED');
+  });
+});

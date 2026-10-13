@@ -14,12 +14,36 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+  # S3-compatible object storage for uploaded LAS/LAZ and generated 3D Tiles. The same code
+  # talks to AWS S3 when S3_ENDPOINT is unset. Community build of MinIO (AGPL-3.0); the
+  # minio/minio image is no longer published on Docker Hub.
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-geotwin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-geotwin_local_minio}
+    ports: ['127.0.0.1:9000:9000', '127.0.0.1:9001:9001']
+    volumes: ['miniodata:/data']
+    restart: unless-stopped
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-geotwin}:${POSTGRES_PASSWORD:-geotwin_local}@db:5432/${POSTGRES_DB:-geotwin}
+      <<: &storage
+        STORAGE_DRIVER: s3
+        S3_ENDPOINT: http://minio:9000
+        S3_FORCE_PATH_STYLE: 'true'
+        S3_REGION: us-east-1
+        S3_BUCKET: ${S3_BUCKET:-geotwin}
+        S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-geotwin}
+        S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-geotwin_local_minio}
+        # Bucket init: the API and the worker create the bucket if it is missing. On AWS the
+        # bucket comes from infrastructure code and this stays false.
+        S3_CREATE_BUCKET: 'true'
+      LAYER_UPLOAD_MAX_BYTES: ${LAYER_UPLOAD_MAX_BYTES:-157286400}
       HOST: 0.0.0.0
       PORT: 3001
       DEMO_MODE: ${DEMO_MODE:-true}
@@ -29,6 +53,7 @@ services:
       CORS_ORIGIN: http://localhost:8080,http://127.0.0.1:8080
     depends_on:
       db: { condition: service_healthy }
+      minio: { condition: service_started }
     ports: ['127.0.0.1:3001:3001']
     healthcheck:
       test:
@@ -42,6 +67,22 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+  # Background conversions (pg-boss queue on the same PostgreSQL; no Redis).
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-geotwin}:${POSTGRES_PASSWORD:-geotwin_local}@db:5432/${POSTGRES_DB:-geotwin}
+      <<: *storage
+      # Optional official geoid: put es_ign_egm08-rednap.tif in ./data/geoid (see README).
+      GEOID_GRID_DIR: /opt/geoid
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+    volumes: ['./data/geoid:/opt/geoid:ro']
+    depends_on:
+      # The API runs the migrations; the worker starts once they are applied.
+      api: { condition: service_healthy }
+    restart: unless-stopped
   web:
     build:
       context: .
@@ -54,3 +95,4 @@ services:
     restart: unless-stopped
 volumes:
   pgdata:
+  miniodata:

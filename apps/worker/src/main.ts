@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { PgBoss } from 'pg-boss';
-import { createStorage } from '@geotwin/storage';
+import { createStorage, waitForStorage } from '@geotwin/storage';
 import { workerEnvSchema, repoRoot } from './config.js';
 import { LayerRepository } from './layers.js';
 import { startLayerWorker } from './worker.js';
@@ -28,7 +28,7 @@ function serialize(obj: object) {
 const db = new pg.Pool({ connectionString: env.DATABASE_URL, max: 4 });
 db.on('error', (error) => log.error({ err: error }, 'Idle database connection error'));
 const storage = createStorage(env, repoRoot);
-await storage.ensureReady();
+await waitForStorage(storage);
 const boss = new PgBoss({ connectionString: env.DATABASE_URL, max: 4, instanceName: 'worker' });
 boss.on('error', (error) => log.error({ err: error }, 'pg-boss error'));
 await boss.start({ attempts: 10 });
