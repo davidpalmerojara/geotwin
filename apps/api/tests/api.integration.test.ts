@@ -179,6 +179,8 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     expect(statements).toBeLessThanOrEqual(12);
   });
   it('stamps readings after the lock is acquired, not at transaction start', async () => {
+    // Only rows written by this tick: ids above the seeded history.
+    const lastId = (await db.query('SELECT max(id) AS id FROM sensor_readings')).rows[0].id;
     const holder = await db.connect();
     let releasedAt: string;
     try {
@@ -192,12 +194,12 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     } finally {
       holder.release();
     }
-    const earliest = await db.query<{ late: boolean }>(
-      `SELECT min(recorded_at) > $1::timestamptz AS late FROM sensor_readings
-      WHERE recorded_at > now() - interval '1 minute' AND recorded_at > date_trunc('minute', now())`,
-      [releasedAt],
+    const earliest = await db.query<{ late: boolean; n: number }>(
+      `SELECT min(recorded_at) > $1::timestamptz AS late, count(*)::int AS n
+      FROM sensor_readings WHERE id > $2`,
+      [releasedAt, lastId],
     );
-    expect(earliest.rows[0]!.late).toBe(true);
+    expect(earliest.rows[0]).toEqual({ late: true, n: 36 });
   });
   it('opens natural anomalies once per sensor and closes them when the reading recovers', async () => {
     const events: RealtimeEvent[] = [];
