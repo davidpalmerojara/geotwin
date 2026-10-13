@@ -155,15 +155,30 @@ export function buildPointCloudStyle(input: StyleInput): StyleJson {
 }
 
 /**
+ * Average horizontal point spacing in metres, from the footprint and the point count (PNOA cob3:
+ * about 0.45 m at 5 pts/m²). py3dtiles leaves the leaf tiles' geometric error at 0, and Cesium
+ * would otherwise estimate it from each tile's volume, which for flat ground gives points a pixel
+ * wide; this is the `baseResolution` it uses instead.
+ */
+export function pointSpacing(layer: Pick<Layer, 'bbox' | 'point_count'>) {
+  if (!layer.bbox || !layer.point_count) return undefined;
+  const [west, south, east, north] = layer.bbox;
+  const lat = (((south + north) / 2) * Math.PI) / 180;
+  const area = (east - west) * 111320 * Math.cos(lat) * ((north - south) * 110574);
+  return area > 0 ? Math.sqrt(area / layer.point_count) : undefined;
+}
+
+/**
  * Point-cloud shading: attenuation sizes points by the tile's geometric error (so sparse,
  * coarse tiles still look solid) up to `pointSize` pixels, and eye-dome lighting adds depth
- * cues to points that carry no normals. geometricErrorScale < 1 keeps distant points small.
+ * cues to points that carry no normals.
  */
-export function shadingFor(pointSize: number) {
+export function shadingFor(pointSize: number, baseResolution?: number) {
   return {
     attenuation: true,
     maximumAttenuation: Math.min(Math.max(pointSize, 1), 8),
-    geometricErrorScale: 0.6,
+    geometricErrorScale: 1,
+    baseResolution,
     eyeDomeLighting: true,
     eyeDomeLightingStrength: 0.8,
     eyeDomeLightingRadius: 1.0,

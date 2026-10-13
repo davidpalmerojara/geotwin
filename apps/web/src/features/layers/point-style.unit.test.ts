@@ -8,6 +8,7 @@ import {
   globeShift,
   heightExpression,
   HEIGHT_RAMP,
+  pointSpacing,
   rampBounds,
   shadingFor,
 } from './point-style';
@@ -21,8 +22,13 @@ const variables = {
   COLOR: 'attributes.color_0',
   classification: 'metadata.classification',
 };
+// Internal Cesium API (not in its typings): the GLSL a point cloud gets for this style.
+interface ShaderStyle {
+  getColorShaderFunction(name: string, map: object, state: object): string;
+  getShowShaderFunction(name: string, map: object, state: object): string;
+}
 function shader(json: ReturnType<typeof buildPointCloudStyle>) {
-  const style = new Cesium3DTileStyle(json);
+  const style = new Cesium3DTileStyle(json) as unknown as ShaderStyle;
   return {
     color: style.getColorShaderFunction('getColorFromStyle', variables, { translucent: false }),
     show: style.getShowShaderFunction('getShowFromStyle', variables, {}),
@@ -128,8 +134,27 @@ describe('Point-cloud style builders', () => {
       maximumAttenuation: 3,
       eyeDomeLighting: true,
     });
+    expect(shadingFor(3, 0.45).baseResolution).toBe(0.45);
     expect(shadingFor(0).maximumAttenuation).toBe(1);
     expect(shadingFor(40).maximumAttenuation).toBe(8);
+  });
+});
+
+describe('Point spacing', () => {
+  it('estimates the spacing from the footprint and the count', () => {
+    // A 1 x 1 km PNOA cob3 tile at Laguna de Duero with 5 pts/m².
+    const tile = {
+      bbox: [-4.72752, 41.57472, -4.71529, 41.5839] as [number, number, number, number],
+      point_count: 5_000_000,
+    };
+    // The bbox of a UTM square is a little larger than the square itself (about 3 % here).
+    expect(Math.abs(pointSpacing(tile)! / Math.sqrt(1 / 5) - 1)).toBeLessThan(0.03);
+    // The SYNTHETIC fixture: 5,540 points over 120 x 120 m.
+    expect(
+      pointSpacing({ bbox: [-4.72, 41.5824, -4.71856, 41.58348], point_count: 5540 }),
+    ).toBeCloseTo(1.61, 1);
+    expect(pointSpacing({ bbox: null, point_count: 10 })).toBeUndefined();
+    expect(pointSpacing({ bbox: [0, 0, 1, 1], point_count: null })).toBeUndefined();
   });
 });
 

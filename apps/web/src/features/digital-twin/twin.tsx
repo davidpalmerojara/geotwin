@@ -6,6 +6,7 @@ import { frameOf } from './camera';
 import { useUI } from '../../stores/ui';
 import { Loading, ErrorState, Status, Empty } from '../../components/common';
 import { AssetDetail } from '../assets/asset-detail';
+import { LayersPanel } from '../layers/layers-panel';
 import { Button } from '../../components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
@@ -79,17 +80,20 @@ export function Twin() {
             }}
           />
         )}
-        <Suspense fallback={<Loading label="Inicializando motor geoespacial…" />}>
-          <CesiumView
-            assets={assets.data ?? noAssets}
-            installations={installations.data ?? noInstallations}
-            installationId={installationId}
-            region={region}
-            selectedId={selected}
-            onSelect={select}
-            onInstallation={setInstallation}
-          />
-        </Suspense>
+        <div className="twin-stage">
+          <Suspense fallback={<Loading label="Inicializando motor geoespacial…" />}>
+            <CesiumView
+              assets={assets.data ?? noAssets}
+              installations={installations.data ?? noInstallations}
+              installationId={installationId}
+              region={region}
+              selectedId={selected}
+              onSelect={select}
+              onInstallation={setInstallation}
+            />
+          </Suspense>
+          <LayersPanel />
+        </div>
         <div className="map-asset-strip">
           {assets.isPending ? (
             <Loading />

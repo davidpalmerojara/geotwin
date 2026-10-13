@@ -1,5 +1,5 @@
 // Workers and imagery assets are served from /cesium/ in dev and production.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   Cartesian3,
   Cartesian2,
@@ -31,14 +31,20 @@ import {
   BoundingSphere,
   PerspectiveFrustum,
   JulianDate,
+  Ellipsoid,
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import type { Asset, Installation } from '@geotwin/shared';
-import { Crosshair, Layers, Mountain, Plus, Minus } from 'lucide-react';
+import { Crosshair, Layers, Mountain, Plus, Minus, Ruler } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { loadIonEnvironment } from './ion-environment';
 import { fitDistance, frameOf, type LatLng } from './camera';
 import { coordinates } from '../../lib/format';
+import { usePointCloudLayers } from '../layers/point-cloud-layers';
+import { useLayerView } from '../../stores/layers';
+import { useMeasure } from '../../stores/measure';
+// The measuring tool is only downloaded when it is first opened.
+const MeasureTool = lazy(() => import('../measure/measure-tool'));
 function pnoaProvider() {
   const provider = new WebMapTileServiceImageryProvider({
     url: 'https://www.ign.es/wmts/pnoa-ma',
@@ -108,6 +114,14 @@ export default function CesiumView({
   const [mapMessage, setMapMessage] = useState('');
   const [terrain, setTerrain] = useState<'ellipsoid' | 'world'>('ellipsoid');
   const ionLoading = useRef<Viewer | null>(null);
+  const measuring = useMeasure((s) => s.active),
+    setMeasuring = useMeasure((s) => s.setActive);
+  usePointCloudLayers(ready ? viewer.current : null, ready, terrain === 'world');
+  const cloudsShown = useLayerView(
+    (s) => Object.entries(s.render).filter(([id, r]) => r === 'shown' && !s.hidden[id]).length,
+  );
+  const colorMode = useLayerView((s) => s.colorMode);
+  useEffect(() => () => setMeasuring(false), [setMeasuring]);
   const tooltip = useRef<HTMLDivElement>(null);
   const token = import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined;
   const buildingsRef = useRef<Awaited<ReturnType<typeof createOsmBuildingsAsync>> | undefined>(
@@ -150,6 +164,8 @@ export default function CesiumView({
       v.scene.globe.depthTestAgainstTerrain = true;
       handler = new ScreenSpaceEventHandler(v.scene.canvas);
       handler.setInputAction((movement: { position: Cartesian2 }) => {
+        // While measuring, clicks add measurement points instead of selecting.
+        if (useMeasure.getState().active) return;
         const picked: unknown = v?.scene.pick(movement.position);
         if (typeof picked === 'object' && picked && 'id' in picked && picked.id instanceof Entity) {
           const id = String(picked.id.id);
@@ -167,6 +183,10 @@ export default function CesiumView({
         hoverFrame = 0;
         const tip = tooltip.current;
         if (!v || v.isDestroyed() || !tip || !pointer) return;
+        if (useMeasure.getState().active) {
+          tip.style.display = 'none';
+          return;
+        }
         const picked: unknown = v.scene.pick(pointer);
         const entity =
           typeof picked === 'object' && picked && 'id' in picked && picked.id instanceof Entity
@@ -419,6 +439,32 @@ export default function CesiumView({
       if (ionLoading.current === v) ionLoading.current = null;
     }
   };
+  // Keyboard navigation of the focused map: arrows pan over the ground, + and - zoom.
+  const onMapKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    const v = viewer.current;
+    if (!v || event.target !== event.currentTarget) return;
+    const camera = v.camera;
+    const step = Math.max(camera.positionCartographic.height * 0.15, 5);
+    const up = Ellipsoid.WGS84.geodeticSurfaceNormal(camera.positionWC, new Cartesian3());
+    const forward = Cartesian3.normalize(
+      Cartesian3.cross(up, camera.rightWC, new Cartesian3()),
+      new Cartesian3(),
+    );
+    const right = Cartesian3.cross(forward, up, new Cartesian3());
+    const moves: Record<string, () => void> = {
+      ArrowUp: () => camera.move(forward, step),
+      ArrowDown: () => camera.move(forward, -step),
+      ArrowRight: () => camera.move(right, step),
+      ArrowLeft: () => camera.move(right, -step),
+      '+': () => camera.zoomIn(camera.positionCartographic.height * 0.3),
+      '-': () => camera.zoomOut(camera.positionCartographic.height * 0.3),
+    };
+    const move = moves[event.key];
+    if (!move) return;
+    event.preventDefault();
+    move();
+    v.scene.requestRender();
+  };
   if (error)
     return (
       <div className="state-box">
@@ -436,6 +482,12 @@ export default function CesiumView({
         data-ready={ready}
         data-terrain={terrain}
         data-buildings={buildings}
+        data-pointclouds={cloudsShown}
+        data-color-mode={colorMode}
+        tabIndex={0}
+        role="application"
+        aria-label="Mapa 3D. Flechas para desplazarse; + y - para acercar o alejar."
+        onKeyDown={onMapKey}
       />
       <div className="map-top">
         <span className="map-tag">
@@ -506,7 +558,23 @@ export default function CesiumView({
         >
           <Mountain size={17} />
         </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          title="Medir distancias, desniveles y áreas"
+          aria-label="Medir"
+          aria-pressed={measuring}
+          disabled={!ready}
+          onClick={() => setMeasuring(!measuring)}
+        >
+          <Ruler size={17} />
+        </Button>
       </div>
+      {measuring && ready && viewer.current && (
+        <Suspense fallback={null}>
+          <MeasureTool viewer={viewer.current} onClose={() => setMeasuring(false)} />
+        </Suspense>
+      )}
       <div ref={tooltip} className="map-tooltip" style={{ display: 'none' }} aria-hidden="true">
         <span />
         <small>Haz clic para inspeccionar</small>
