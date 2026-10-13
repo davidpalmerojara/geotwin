@@ -50,7 +50,7 @@ export default function App() {
   }, [unknownInstallation, setInstallation]);
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className="sidebar" aria-label="Menú y espacio de trabajo">
         <a
           className="brand"
           href="/"

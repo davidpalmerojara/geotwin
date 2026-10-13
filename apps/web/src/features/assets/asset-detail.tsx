@@ -111,7 +111,7 @@ export function AlertDialog({
 export function AssetDetail({ id }: { id: string | null }) {
   if (!id)
     return (
-      <aside className="detail-panel detail-empty">
+      <aside className="detail-panel detail-empty" aria-label="Inspector de activos">
         <div className="empty-orbit">
           <Box size={32} />
         </div>
@@ -160,20 +160,20 @@ function AssetInspector({ id }: { id: string }) {
   });
   if (asset.isPending)
     return (
-      <aside className="detail-panel">
+      <aside className="detail-panel" aria-label="Inspector de activos">
         <Loading />
       </aside>
     );
   if (asset.isError)
     return (
-      <aside className="detail-panel">
+      <aside className="detail-panel" aria-label="Inspector de activos">
         <ErrorState error={asset.error} retry={() => void asset.refetch()} />
       </aside>
     );
   const a = asset.data;
   const installation = installations.data?.find((i) => i.id === a.installation_id);
   return (
-    <aside className="detail-panel">
+    <aside className="detail-panel" aria-label="Inspector de activos">
       <div className="detail-heading">
         <span className="eyebrow">INSPECTOR DE ACTIVOS</span>
         <span className="pill">#{a.id.slice(-4)}</span>
