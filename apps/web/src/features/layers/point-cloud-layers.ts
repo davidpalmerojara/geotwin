@@ -150,6 +150,7 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
     if (!sphere) return;
     const heading = CesiumMath.toRadians(20),
       range = Math.max(sphere.radius * 2.6, 120);
+    revealMap(viewer.container);
     viewer.camera.flyToBoundingSphere(clearOfOverlays(viewer, sphere, heading, range), {
       duration: 1.2,
       offset: new HeadingPitchRange(heading, CesiumMath.toRadians(-38), range),
@@ -223,6 +224,14 @@ function dispose(viewer: Viewer, entry: Loaded) {
   if (viewer.isDestroyed()) return;
   syncCredit(viewer, entry, false);
   if (entry.tileset) viewer.scene.primitives.remove(entry.tileset); // remove() destroys it
+}
+
+/** On a phone the panel sits below the map: bring the map back into view for the flight. */
+function revealMap(element: Element) {
+  const box = element.getBoundingClientRect();
+  if (box.top >= 0 && box.bottom <= window.innerHeight) return;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  element.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
 }
 
 /**

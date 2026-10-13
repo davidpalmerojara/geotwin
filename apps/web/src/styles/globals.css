@@ -2133,6 +2133,9 @@ tr:hover td {
   line-height: 1.5;
   color: #8ba5be;
 }
+.measure-hint.warn {
+  color: #fcd34d;
+}
 .measure-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2181,8 +2184,19 @@ tr:hover td {
     bottom: 64px;
     width: auto;
   }
+  .measure-panel {
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .measure-results dt {
+    font-size: 7px;
+  }
   .measure-results dd {
     font-size: 11px;
+  }
+  /* The phone map is short: keep only warnings, the results say the rest. */
+  .measure-hint:not(.warn) {
+    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

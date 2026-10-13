@@ -220,7 +220,7 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
             </>
           )}
         </dl>
-        <p className="measure-hint">
+        <p className={`measure-hint ${miss ? 'warn' : ''}`}>
           {miss
             ? 'Ahí no hay nada que medir: apunta a la nube, al terreno o al mapa.'
             : points.length < needed
