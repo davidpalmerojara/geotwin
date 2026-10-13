@@ -9,7 +9,11 @@ if (command === 'test') {
   const target = new URL(url);
   if (target.pathname !== '/geotwin_test')
     throw new Error('Tests require a dedicated geotwin_test database');
-  const admin = createPool(env.DATABASE_URL);
+  // CREATE DATABASE runs from the maintenance database of the same server: DATABASE_URL
+  // may itself point at geotwin_test (the E2E API does), which does not exist yet.
+  const maintenance = new URL(url);
+  maintenance.pathname = '/postgres';
+  const admin = createPool(maintenance.toString());
   try {
     const result = await admin.query("SELECT 1 FROM pg_database WHERE datname='geotwin_test'");
     if (!result.rowCount) await admin.query('CREATE DATABASE geotwin_test');
