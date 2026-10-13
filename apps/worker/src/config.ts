@@ -23,6 +23,11 @@ export const workerEnvSchema = storageEnvSchema.extend({
     .min(1)
     .max(64)
     .default(Math.max(1, cpus().length - 1)),
+  // py3dtiles point cache per process (MB). Empty: py3dtiles' default, a tenth of the RAM.
+  TILER_CACHE_MB: z.preprocess(
+    (v) => (v === '' || v === undefined ? undefined : v),
+    z.coerce.number().int().min(64).max(65536).optional(),
+  ),
   // Folder with es_ign_egm08-rednap.tif (official EGM08-REDNAP geoid). Optional.
   GEOID_GRID_DIR: z.string().optional(),
   // Forces one geoid undulation (m) for every layer without its own override. Optional.

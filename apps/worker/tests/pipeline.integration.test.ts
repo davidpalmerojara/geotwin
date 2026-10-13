@@ -118,6 +118,7 @@ beforeAll(async () => {
         LIDAR_SCRIPT: new URL('../python/geotwin_lidar.py', import.meta.url).pathname,
         WORKER_TMP_DIR: storageRoot,
         TILER_JOBS: 2,
+        TILER_CACHE_MB: 256,
         GEOID_GRID_DIR: hasGrid ? gridDir : undefined,
         GEOID_OFFSET_M: undefined,
         LAYER_JOB_TIMEOUT_SECONDS: 120,

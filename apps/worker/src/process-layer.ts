@@ -31,6 +31,7 @@ export interface Deps {
     | 'LIDAR_SCRIPT'
     | 'WORKER_TMP_DIR'
     | 'TILER_JOBS'
+    | 'TILER_CACHE_MB'
     | 'GEOID_GRID_DIR'
     | 'GEOID_OFFSET_M'
     | 'LAYER_JOB_TIMEOUT_SECONDS'
@@ -133,6 +134,7 @@ export async function processLayer(job: LayerJobContext, deps: Deps): Promise<Ou
           ? ['--exact-geoid', '--grid-dir', env.GEOID_GRID_DIR ?? '']
           : ['--z-offset', String(plan.offset_m)]),
         ...(info.color_scale ? ['--color-scale', String(info.color_scale)] : []),
+        ...(env.TILER_CACHE_MB ? ['--cache-mb', String(env.TILER_CACHE_MB)] : []),
       ],
       { ...python, onProgress: (f) => queueReport('tiling', f) },
     );

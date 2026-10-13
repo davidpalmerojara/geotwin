@@ -77,6 +77,7 @@ function deps(repo: FakeRepo, overrides: Partial<Deps['env']> = {}): Deps {
       LIDAR_SCRIPT: script,
       WORKER_TMP_DIR: dir,
       TILER_JOBS: 1,
+      TILER_CACHE_MB: undefined,
       GEOID_GRID_DIR: undefined,
       GEOID_OFFSET_M: undefined,
       LAYER_JOB_TIMEOUT_SECONDS: 1800,

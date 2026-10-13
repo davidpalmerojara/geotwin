@@ -8,7 +8,7 @@ The Node worker runs this script as a child process and reads one JSON object pe
 Commands:
   inspect FILE [--crs-in EPSG:25830] [--grid-dir DIR]
   convert FILE OUT_DIR [--crs-in EPSG:25830] (--z-offset N | --exact-geoid --grid-dir DIR)
-                       [--jobs N] [--color-scale S]
+                       [--jobs N] [--color-scale S] [--cache-mb MB]
 
 Exit codes: 0 ok, 2 permanent problem with the input (do not retry), 1 anything else.
 """
@@ -283,6 +283,7 @@ def convert(
     grid_dir: str | None,
     jobs: int,
     color_scale: float | None,
+    cache_mb: int | None = None,
 ) -> dict[str, Any]:
     from py3dtiles.convert import Converter
     from pyproj import CRS
@@ -296,7 +297,11 @@ def convert(
         source = CRS(crs_in)
         if z_offset:
             shift_heights(path, z_offset)
+    # py3dtiles keeps up to cache_size MB of points per process before flushing to disk; its
+    # default (a tenth of the machine's RAM) is too generous for a small container.
+    cache = {"cache_size": cache_mb} if cache_mb else {}
     tiler = ProgressTiler.create(
+        **cache,
         crs_in=source,
         crs_out=CRS("EPSG:4978"),
         force_crs_in=True,
@@ -306,7 +311,7 @@ def convert(
         color_scale=color_scale,
         extra_fields=["classification"],
     )
-    converter = Converter([tiler], jobs=jobs, crs_out=CRS("EPSG:4978"), crs_in=source)
+    converter = Converter([tiler], jobs=jobs, crs_out=CRS("EPSG:4978"), crs_in=source, **cache)
     converter.convert([path], out, overwrite=True)
     files = sorted(p for p in out.rglob("*") if p.is_file())
     if not (out / "tileset.json").is_file():
@@ -334,6 +339,7 @@ def main(argv: list[str]) -> int:
     p_convert.add_argument("--grid-dir")
     p_convert.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     p_convert.add_argument("--color-scale", type=float)
+    p_convert.add_argument("--cache-mb", type=int)
     args = parser.parse_args(argv)
     try:
         if args.command == "inspect":
@@ -348,6 +354,7 @@ def main(argv: list[str]) -> int:
                 args.grid_dir,
                 args.jobs,
                 args.color_scale,
+                args.cache_mb,
             )
         emit("result", **result)
         return 0
