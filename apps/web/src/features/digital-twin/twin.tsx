@@ -31,9 +31,18 @@ export function Twin() {
   });
   const region = useOrganization().data?.region ?? '';
   const installation = installations.data?.find((i) => i.id === installationId);
-  // Proximity centre: the selected installation, or the middle of the whole network.
+  // Proximity centre: the selected asset, else the selected installation, else the middle
+  // of the whole network (which may have no asset nearby).
+  const selectedAsset = assets.data?.find((a) => a.id === selected);
   const center =
-    installation?.location ?? frameOf((installations.data ?? []).map((i) => i.location))?.center;
+    selectedAsset?.location ??
+    installation?.location ??
+    frameOf((installations.data ?? []).map((i) => i.location))?.center;
+  const centerLabel = selectedAsset
+    ? `centro: ${selectedAsset.name}`
+    : installation
+      ? 'centro de instalación'
+      : 'centro de la red';
   const visible = (assets.data ?? []).filter((a) =>
     a.name.toLowerCase().includes(search.toLowerCase()),
   );
@@ -105,9 +114,7 @@ export function Twin() {
           <div>
             <LocateFixed size={18} className="text-cyan-400" />
             <strong>Consulta espacial</strong>
-            <span>
-              ST_DWithin · PostGIS · {installation ? 'centro de instalación' : 'centro de la red'}
-            </span>
+            <span>ST_DWithin · PostGIS · {centerLabel}</span>
           </div>
           <label>
             Radio{' '}
