@@ -65,6 +65,12 @@ export async function buildApp(
       .code(404)
       .send({ error: { code: 'NOT_FOUND', message: 'Ruta no encontrada', request_id: req.id } }),
   );
+  // Baseline headers on every API response, errors included, also without nginx in front.
+  app.addHook('onRequest', async (_req, reply) => {
+    reply.header('x-content-type-options', 'nosniff');
+    reply.header('referrer-policy', 'strict-origin-when-cross-origin');
+    reply.header('x-frame-options', 'DENY');
+  });
   const origins = env.CORS_ORIGIN.split(',').map((s) => s.trim());
   await app.register(cors, { origin: origins });
   await app.register(swagger, {

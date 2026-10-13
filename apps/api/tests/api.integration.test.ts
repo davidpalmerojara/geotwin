@@ -480,6 +480,16 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     });
     expect(malformed.statusCode).toBe(400);
   });
+  it('sends baseline security headers, also on errors', async () => {
+    for (const path of ['/api/health', '/api/assets/not-a-uuid', '/api/no-such-route']) {
+      const response = await app.inject(path);
+      expect(response.headers).toMatchObject({
+        'x-content-type-options': 'nosniff',
+        'referrer-policy': 'strict-origin-when-cross-origin',
+        'x-frame-options': 'DENY',
+      });
+    }
+  });
   it('serves the organization and its place name from the database', async () => {
     const organization = organizationSchema.parse((await app.inject('/api/organization')).json());
     expect(organization.region).toBe('Valladolid, España');
