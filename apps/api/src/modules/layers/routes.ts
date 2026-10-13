@@ -6,6 +6,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   errorSchema,
   idParams,
+  layerLimitsSchema,
   layerSchema,
   layerTileParams,
   layerUploadQuery,
@@ -73,6 +74,22 @@ export function registerLayerRoutes(
       },
     },
     async () => repo.list(),
+  );
+
+  api.get(
+    '/api/layers/limits',
+    {
+      schema: {
+        tags: ['Layers'],
+        description: 'Accepted formats and the upload size limit, for the upload form.',
+        response: { 200: layerLimitsSchema, ...errors },
+      },
+    },
+    async () => ({
+      max_upload_bytes: maxUploadBytes,
+      formats: ['las', 'laz'] as ('las' | 'laz')[],
+      extensions: ['.las', '.laz'],
+    }),
   );
 
   api.post(

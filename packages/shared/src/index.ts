@@ -175,6 +175,12 @@ export const layerUploadQuery = z.object({
   geoid_offset_m: z.coerce.number().min(-150).max(150).optional(),
   attribution: z.string().trim().min(1).max(500).optional(),
 });
+// What the upload form shows before sending anything (the API enforces the same values).
+export const layerLimitsSchema = z.object({
+  max_upload_bytes: z.number().int().positive(),
+  formats: z.array(z.enum(['las', 'laz'])),
+  extensions: z.array(z.string()),
+});
 export const layerTileParams = z.object({ id: uuid, '*': z.string().min(1).max(512) });
 // Queue contract shared by the API (producer) and the worker (consumer).
 export const LAYER_QUEUE = 'layer-process';
@@ -224,6 +230,7 @@ export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
 export type AssetStatus = z.infer<typeof assetStatus>;
 export type Layer = z.infer<typeof layerSchema>;
 export type LayerProgress = z.infer<typeof layerProgressSchema>;
+export type LayerLimits = z.infer<typeof layerLimitsSchema>;
 export type LayerStage = z.infer<typeof layerStage>;
 export type GeoidMethod = z.infer<typeof geoidMethod>;
 export type LayerJob = z.infer<typeof layerJobSchema>;

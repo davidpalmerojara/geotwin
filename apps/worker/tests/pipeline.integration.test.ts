@@ -217,6 +217,16 @@ describe.skipIf(!pythonReady)('LiDAR pipeline: upload → queue → worker → 3
     expect(sources).toHaveLength(1);
   }, 60000);
 
+  it('publishes the accepted formats and the upload limit for the interface', async () => {
+    const limits = await fetch(`${base}/api/layers/limits`);
+    expect(limits.status).toBe(200);
+    expect(await limits.json()).toEqual({
+      max_upload_bytes: MAX_UPLOAD,
+      formats: ['las', 'laz'],
+      extensions: ['.las', '.laz'],
+    });
+  });
+
   it('checks the type by content (415) and the size (413) before keeping anything', async () => {
     const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(2000)]);
     const disguised = await upload(png, 'nube.laz');
