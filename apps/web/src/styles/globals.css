@@ -124,7 +124,7 @@ small {
   display: block;
   font-size: 8px;
   letter-spacing: 3px;
-  color: #71849d;
+  color: #7a8ba3;
   font-weight: 600;
   margin-top: 2px;
 }
@@ -133,7 +133,7 @@ small {
   justify-content: space-between;
   font-size: 9px;
   letter-spacing: 1.5px;
-  color: #70839b;
+  color: #7a8ca2;
   margin: 33px 5px 12px;
 }
 .workspace-label span {
@@ -159,7 +159,7 @@ small {
 }
 .workspace-card > svg:last-child {
   margin-left: auto;
-  color: #697f99;
+  color: #788ca3;
 }
 .nav-label {
   font-size: 9px;
@@ -230,7 +230,7 @@ nav b {
 .engine-card p {
   font-size: 11px;
   line-height: 1.8;
-  color: #70859e;
+  color: #798ca4;
   margin: 12px 0;
 }
 .engine-card > span {
@@ -436,7 +436,7 @@ main {
 }
 .metric-card p {
   font-size: 9px;
-  color: #6f859e;
+  color: #788ca4;
 }
 .metric-line {
   width: 50%;
@@ -479,7 +479,7 @@ main {
 }
 .panel-heading p {
   font-size: 10px;
-  color: #70859d;
+  color: #798ca3;
   margin-top: 5px;
 }
 .live-label {
@@ -558,12 +558,12 @@ main {
 }
 .installation-row p {
   font-size: 9px;
-  color: #70839b;
+  color: #7a8ca2;
   margin-top: 5px;
 }
 .installation-row > svg {
   margin-left: auto;
-  color: #6c839e;
+  color: #768ca5;
 }
 .network-note {
   font-size: 9px;
@@ -658,7 +658,7 @@ main {
 }
 .alert-preview small {
   font-size: 9px;
-  color: #5a738e;
+  color: #788ca2;
 }
 .all-clear {
   display: flex;
@@ -675,7 +675,7 @@ main {
 }
 .all-clear p {
   font-size: 11px;
-  color: #6d839e;
+  color: #778ca5;
 }
 .state-box {
   display: flex;
@@ -735,7 +735,7 @@ main {
 .twin-toolbar h1 span {
   font-size: 10px;
   letter-spacing: 0;
-  color: #70859d;
+  color: #798ca3;
   font-weight: 400;
   margin-left: 12px;
 }
@@ -746,7 +746,7 @@ main {
   border: 1px solid #293950;
   border-radius: 7px;
   padding: 0 10px;
-  color: #6f88a4;
+  color: #738ca7;
   background: #111d2c;
 }
 .search-box input {
@@ -802,7 +802,7 @@ main {
 }
 .map-tag b {
   font-size: 7px;
-  color: #5c7f9d;
+  color: #6e8da8;
   font-weight: 400;
 }
 .map-controls {
@@ -830,7 +830,7 @@ main {
   gap: 10px;
   padding: 12px 17px;
   font-size: 8px;
-  color: #6788a6;
+  color: #6d8daa;
   border-top: 1px solid #243b53;
 }
 .map-legend {
@@ -991,7 +991,7 @@ main {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #68839d;
+  color: #748da5;
   font-size: 10px;
   margin-top: 13px;
 }
@@ -1012,7 +1012,7 @@ main {
 }
 .detail-section-title > span,
 .detail-section-title > svg {
-  color: #68849e;
+  color: #738da5;
   font-size: 9px;
 }
 .sensor-list {
@@ -1041,7 +1041,7 @@ main {
 .sensor-card small {
   display: block;
   font-size: 9px;
-  color: #608299;
+  color: #809aad;
   margin-top: 5px;
 }
 .sensor-card > strong {
@@ -1099,7 +1099,7 @@ main {
 .detail-alert > svg:last-child {
   margin-left: auto;
   align-self: center;
-  color: #8f7788;
+  color: #9a8594;
 }
 .quiet-note {
   display: flex;
@@ -1133,7 +1133,7 @@ main {
 }
 .detail-footer {
   font-size: 8px;
-  color: #4c6a84;
+  color: #778ea2;
   margin-top: 22px;
 }
 .detail-empty {
@@ -1201,7 +1201,7 @@ table {
 th {
   font-size: 9px;
   font-weight: 500;
-  color: #6e88a2;
+  color: #748da6;
   padding: 15px 20px;
   background: #111e2e;
   text-transform: uppercase;
@@ -1226,7 +1226,7 @@ tr:hover td {
   display: block;
   margin-top: 5px;
   font-size: 9px;
-  color: #68869f;
+  color: #718da5;
 }
 .alert-tabs {
   display: flex;
@@ -1253,7 +1253,7 @@ tr:hover td {
 .alert-tabs > span {
   margin-left: auto;
   font-size: 10px;
-  color: #6988a1;
+  color: #6f8da5;
 }
 .alerts-grid {
   display: grid;
@@ -1312,7 +1312,7 @@ tr:hover td {
   border-top: 1px solid #2b3549;
   padding-top: 13px;
   font-size: 8px;
-  color: #617d97;
+  color: #748da3;
 }
 .incident-facts {
   display: flex;
@@ -1331,7 +1331,7 @@ tr:hover td {
 }
 .incident-facts > small {
   line-height: 2;
-  color: #66839e;
+  color: #728da6;
   overflow-wrap: anywhere;
 }
 .form-label {
