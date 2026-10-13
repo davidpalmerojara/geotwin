@@ -55,6 +55,8 @@ jobs:
       - run: npm run test:integration
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      # Starts the API, the LiDAR worker (this job's Python) and Vite; one spec uploads the
+      # synthetic LAZ through the interface and waits for the 3D Tiles over the WebSocket.
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()

@@ -4,11 +4,13 @@ const database =
   'postgresql://geotwin:geotwin_local@localhost:55432/geotwin_test';
 const apiPort = process.env.API_PORT ?? '3001';
 const webPort = process.env.WEB_PORT ?? '5173';
+// The API and the worker share this folder as object storage, as they share a bucket in Docker.
+const storage = { STORAGE_DRIVER: 'local', STORAGE_LOCAL_DIR: 'data/e2e-storage' };
 export default defineConfig({
   testDir: 'tests/e2e',
   fullyParallel: false,
   workers: 1,
-  timeout: 60000,
+  timeout: 90000,
   use: {
     ...devices['Desktop Chrome'],
     baseURL: process.env.E2E_BASE_URL ?? `http://127.0.0.1:${webPort}`,
@@ -25,7 +27,7 @@ export default defineConfig({
     : [
         {
           command:
-            'npm run build -w @geotwin/shared && npm run db:test && npm run db:seed && npm run dev -w @geotwin/api',
+            'npm run build -w @geotwin/shared -w @geotwin/storage && npm run db:test && npm run db:seed && npm run dev -w @geotwin/api',
           url: `http://127.0.0.1:${apiPort}/api/health`,
           env: {
             PORT: apiPort,
@@ -34,9 +36,21 @@ export default defineConfig({
             TEST_DATABASE_URL: database,
             DEMO_MODE: 'true',
             SIMULATOR_ENABLED: 'false',
+            ...storage,
           },
           reuseExistingServer: false,
           timeout: 120000,
+        },
+        {
+          // The LiDAR worker (pg-boss consumer + py3dtiles). It starts once the API has created
+          // and migrated the test database. LIDAR_PYTHON must import py3dtiles, laspy and lazrs.
+          name: 'worker',
+          command: `until curl -sf http://127.0.0.1:${apiPort}/api/health > /dev/null; do sleep 1; done; npx tsx apps/worker/src/main.ts`,
+          wait: { stdout: /Worker started/ },
+          env: { DATABASE_URL: database, ...storage },
+          stdout: 'pipe',
+          reuseExistingServer: false,
+          timeout: 180000,
         },
         {
           command: 'npm run dev -w @geotwin/web',
