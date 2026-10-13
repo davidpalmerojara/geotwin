@@ -22,7 +22,7 @@ import {
 } from 'cesium';
 import { Crosshair, Ruler, Shapes, Trash2, Undo2, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
-import { formatArea, formatHeight, formatLength, measure } from './geodesy';
+import { formatArea, formatHeight, formatLength, measure, snapToGround } from './geodesy';
 import { renderUntil } from './render-until';
 
 type Mode = 'distance' | 'area';
@@ -38,9 +38,24 @@ function pick(viewer: Viewer, position: Cartesian2) {
   return scene.camera.pickEllipsoid(position, scene.globe.ellipsoid);
 }
 
-export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClose: () => void }) {
+export default function MeasureTool({
+  viewer,
+  onClose,
+  ground,
+}: {
+  viewer: Viewer;
+  onClose: () => void;
+  /** Ellipsoidal height of the LiDAR ground model at (lng, lat), when it is the terrain. */
+  ground?: (lng: number, lat: number) => number;
+}) {
   const [mode, setMode] = useState<Mode>('distance');
-  const [points, setPoints] = useState<Cartesian3[]>([]);
+  const [picked, setPoints] = useState<Cartesian3[]>([]);
+  const [snap, setSnap] = useState(false);
+  // With «Al suelo», every point takes the ground model's height under it.
+  const points = useMemo(
+    () => (snap && ground ? snapToGround(picked, ground) : picked),
+    [picked, snap, ground],
+  );
   const [miss, setMiss] = useState(false);
   const source = useRef<CustomDataSource | null>(null);
   const stopRendering = useRef<() => void>(undefined);
@@ -102,11 +117,14 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
     return () => observer.disconnect();
   }, [viewer]);
 
-  // Keyboard: Esc closes, Backspace / Delete / Ctrl+Z undo (not while typing in a field).
+  // Keyboard: Esc closes, Backspace / Delete / Ctrl+Z undo (not while typing in a text field).
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (
+        target?.closest('input:not([type="checkbox"]), textarea, select, [contenteditable="true"]')
+      )
+        return;
       if (event.key === 'Escape') onClose();
       else if (
         event.key === 'Backspace' ||
@@ -270,6 +288,15 @@ export default function MeasureTool({ viewer, onClose }: { viewer: Viewer; onClo
               ? `Clic en el mapa o «Centro» (${points.length}/${needed} puntos)`
               : `${points.length} puntos · Retroceso deshace, Esc cierra`}
         </p>
+        {ground && (
+          <label
+            className="measure-snap"
+            title="Lleva cada punto a la altura del modelo del terreno (suelo LiDAR, malla de 2 m) en ese sitio: un clic sobre un coche, una valla o un árbol mide el suelo de debajo."
+          >
+            <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
+            Al suelo (MDT)
+          </label>
+        )}
         <div className="measure-actions">
           <Button
             size="sm"

@@ -2172,6 +2172,13 @@ tr:hover td {
 .measure-hint.warn {
   color: #fcd34d;
 }
+.measure-snap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #b9cde0;
+}
 .measure-actions {
   display: flex;
   flex-wrap: wrap;

@@ -97,6 +97,11 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   await expect(results.locator('div', { hasText: 'Desnivel' }).locator('dd')).toHaveText(
     /^[+−±]\d/,
   );
+  // With the LiDAR relief on, the points can be moved onto the ground model (not a car roof).
+  const snap = page.getByRole('checkbox', { name: 'Al suelo (MDT)' });
+  await snap.check();
+  await expect(distance).toHaveText(/^\d+(,\d+)? (m|km)$/);
+  await snap.uncheck();
   // Keyboard: Backspace undoes the last point, Escape closes the tool.
   await page.keyboard.press('Backspace');
   await expect(distance).toHaveText('—');

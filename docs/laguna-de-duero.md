@@ -101,6 +101,8 @@ Hechas con la herramienta **Medir** del visor (clics sobre lo dibujado) y contra
 
 Un clic toma la profundidad de lo dibujado: sobre una nube a 3 px por punto, el punto picado puede quedar unos 30 cm por delante del punto LiDAR (en la torre, el suelo picado quedó 27 cm por encima de los puntos de suelo). Las alturas de la tabla son las de la nube, no las de un plano de proyecto.
 
+Un clic cae sobre lo primero que se ve en ese píxel: la copa de un árbol, un coche, una valla o una farola. Para medir el suelo, pica en pavimento despejado o marca **«Al suelo (MDT)»** en el panel Medir (aparece con el relieve del LiDAR activo): cada punto pasa a la altura del modelo del terreno en ese sitio, con su malla de 2 m.
+
 ## Límites
 
 - Fuera de las ocho hojas el terreno es un **plano orientativo** a la altura mediana del MDT, que se funde con el borde de los datos en 400 m y vuelve al elipsoide a 30-60 km. Donde falta la hoja 355-4604 se ve ese plano.

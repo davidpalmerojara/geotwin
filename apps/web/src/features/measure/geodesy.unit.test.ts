@@ -9,6 +9,7 @@ import {
   heightDifference,
   horizontalArea,
   measure,
+  snapToGround,
 } from './geodesy';
 
 // Reference values computed independently with pyproj 3.7 (GeographicLib geodesics on WGS84:
@@ -93,5 +94,15 @@ describe('Measurement maths', () => {
     expect(formatArea(1234.56)).toBe('1234,6 m²');
     expect(formatArea(18245.575)).toBe('18.246 m² (1,82 ha)');
     expect(formatArea(1000293.2)).toBe('1,000 km²');
+  });
+  it('moves picked points onto the ground model without moving them sideways', () => {
+    // A point picked on a car roof 1.6 m up and one on the road, on ground rising 1 m per 0.001°.
+    const ground = (lng: number) => 750 + (lng + 4.72) * 1000;
+    const car = Cartesian3.fromDegrees(-4.72, 41.58, 751.6);
+    const road = Cartesian3.fromDegrees(-4.719, 41.58, 751.02);
+    const [a, b] = snapToGround([car, road], ground);
+    expect(heightDifference([car, road])).toBeCloseTo(-0.58, 2);
+    expect(heightDifference([a!, b!])).toBeCloseTo(1, 3);
+    expect(groundDistance([a!, b!])).toBeCloseTo(groundDistance([car, road]), 6);
   });
 });

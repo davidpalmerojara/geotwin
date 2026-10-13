@@ -120,3 +120,17 @@ export function formatArea(m2: number) {
   if (m2 >= 1e4) return `${fixed(m2, 0)} m² (${fixed(m2 / 1e4, 2)} ha)`;
   return `${fixed(m2, m2 < 100 ? 2 : 1)} m²`;
 }
+
+/**
+ * The points moved vertically onto the ground model: same horizontal position, height from
+ * `ground` (longitude and latitude in degrees in, ellipsoidal metres out). A click lands on
+ * whatever is drawn first (a tree crown, a car, a fence); this measures the ground under it.
+ */
+export function snapToGround(points: Cartesian3[], ground: (lng: number, lat: number) => number) {
+  const degrees = 180 / Math.PI;
+  return points.map((p) => {
+    const c = ellipsoid.cartesianToCartographic(p, new Cartographic());
+    const h = ground(c.longitude * degrees, c.latitude * degrees);
+    return Cartesian3.fromRadians(c.longitude, c.latitude, h, ellipsoid);
+  });
+}

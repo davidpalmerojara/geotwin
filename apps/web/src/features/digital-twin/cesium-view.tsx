@@ -806,7 +806,11 @@ export default function CesiumView({
       </div>
       {measuring && ready && viewer.current && (
         <Suspense fallback={null}>
-          <MeasureTool viewer={viewer.current} onClose={() => setMeasuring(false)} />
+          <MeasureTool
+            viewer={viewer.current}
+            onClose={() => setMeasuring(false)}
+            ground={lidarOn ? ground : undefined}
+          />
         </Suspense>
       )}
       <div ref={tooltip} className="map-tooltip" style={{ display: 'none' }} aria-hidden="true">
