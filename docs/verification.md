@@ -92,6 +92,25 @@ Fallos encontrados y corregidos durante esta verificación:
 - **Borrar una capa en proceso bloqueaba la cola.** Al borrarla, el worker mataba solo el proceso principal de Python; los procesos que py3dtiles crea con `fork` seguían vivos con la salida estándar abierta, la ejecución no terminaba nunca y, con un job a la vez, las siguientes subidas se quedaban _En cola_ hasta que pg-boss diera el job por caducado (30 min). Se vio subiendo y borrando una nube sintética de 1,5 M de puntos. El conversor corre ahora en su propio grupo de procesos, que se mata entero; una prueba unitaria con un conversor falso que hace `fork` lo cubre y fallaba antes del arreglo.
 - **Líneas de medición que no aparecían** hasta mover la cámara (geometría asíncrona en `requestRenderMode`) y una petición a `/favicon.ico` que daba 404.
 
+### Segunda verificación independiente y correcciones
+
+Una verificación independiente de `f107162` dio por buenos la instalación desde cero, las pruebas, la CI, las pruebas de API hostiles, la recuperación tras matar el worker, el datum vertical comprobado con las rejillas oficiales y la medición frente a GeographicLib, pero encontró un fallo grave y varios menores. Todos se han corregido, cada uno con su prueba:
+
+- **Encuadre tapado por el panel Capas (grave).** El panel está abierto de entrada en escritorio y, a 1280×900, la vista de la red dejaba San Cristóbal debajo. La red, una instalación y una capa se encuadran ahora en la parte del mapa que deja libre el panel. Un E2E comprueba a 1280 y 1440 px que ningún marcador ni su etiqueta queda debajo; fallaba antes del arreglo.
+- **Progreso que retrocedía** (de 60 % a 37 % en una hoja sintética de 6 M de puntos): el contador de py3dtiles baja durante el teselado. El progreso es ahora monótono en Python y en el worker.
+- **Líneas de medición** que bajo mucha carga no aparecían en 1,2 s: se sigue pidiendo render hasta que la geometría está construida (máximo 20 s).
+- **Mensaje de error fuera de la vista** con el panel desplazado: ahora se lleva a la vista.
+- **Créditos CC-BY tapados** por la herramienta Medir en el móvil: el panel se coloca justo encima de los créditos.
+- **Carpetas temporales** de intentos matados: el worker borra al arrancar, y cada 10 min, las que superan el tiempo máximo del job.
+- **Subidas cortadas** registradas como error 500: ahora son 400 `INCOMPLETE_UPLOAD`, y el HTTP mal formado recibe el formato de error de la API.
+- **Contraste** por debajo de 4,5:1 en textos secundarios de toda la aplicación y dos `<aside>` sin nombre: corregidos y cubiertos por un E2E con axe.
+- **Textos**: el límite se expresa en MiB en todas partes y la documentación aclara que la leyenda de altura da metros solo con una capa visible. Una capa en proceso sin noticias del worker durante 90 s lo indica.
+
+| Fecha      | Revisión | Entorno                                                                                                                      | Comprobación                                                                                                                                                                 | Resultado |
+| ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 13/10/2026 | rama     | Local: Node 22.22, PostgreSQL 16 + PostGIS 3 nativos, Python 3.13, rejilla EGM08-REDNAP, Chromium build 1194 con SwiftShader | Lint, formato, tipos; `npm test` 96/96 (18 ficheros); `npm run test:integration` 39/39 (+1 de S3 sin servidor); `pytest` 14/14; `npm run build`                              | Correcto  |
+| 13/10/2026 | rama     | Igual, `npm run test:e2e` con API, worker y Vite reales                                                                      | 7/7: los dos flujos anteriores, encuadre junto al panel a 1280 y 1440 px, créditos visibles al medir en el móvil y axe sin infracciones en cinco páginas, escritorio y móvil | Correcto  |
+
 ## Límites del entorno
 
 - No hay despliegue público ni recursos en AWS; [aws.md](aws.md) es un plan.

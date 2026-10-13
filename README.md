@@ -157,18 +157,18 @@ Opcionalmente configura `VITE_CESIUM_ION_TOKEN` y reconstruye la web. El botón 
 ## Tests
 
 ```bash
-npm test                      # 81 pruebas unitarias: dominio, contratos, ion, cámara, caché realtime, cliente API, formato, rutas,
-                              # detección LAS/LAZ, geoide, almacenamiento, configuración y estados del worker,
-                              # estilos de nubes de puntos y fórmulas de medición
-npm run test:integration       # crea/migra geotwin_test; 37 pruebas con PostGIS real, 9 de ellas del pipeline LiDAR
-python -m pytest apps/worker/python/tests   # 13 pruebas: lectura, conversión real con py3dtiles y alturas
+npm test                      # 96 pruebas unitarias: dominio, contratos, ion, cámara y encuadre junto al panel, caché realtime,
+                              # cliente API, formato, rutas, errores HTTP, detección LAS/LAZ, geoide, almacenamiento,
+                              # configuración, estados y limpieza del worker, estilos de nubes de puntos y medición
+npm run test:integration       # crea/migra geotwin_test; 39 pruebas con PostGIS real, 10 de ellas del pipeline LiDAR
+python -m pytest apps/worker/python/tests   # 14 pruebas: lectura, conversión real con py3dtiles, alturas y progreso
 npx playwright install chromium
-npm run test:e2e               # arranca API, worker LiDAR y Vite: 2 flujos reales en Chromium
+npm run test:e2e               # arranca API, worker LiDAR y Vite: 7 pruebas reales en Chromium
 ```
 
 Las pruebas de integración requieren PostgreSQL activo en 55432. Las del pipeline LiDAR convierten de verdad con py3dtiles: usan el Python de `LIDAR_PYTHON` y se saltan (con aviso) si no tiene las dependencias, salvo con `REQUIRE_LIDAR_TESTS=true`, como en la CI. Con `GEOID_GRID_DIR` apuntando a la rejilla oficial se prueba además la corrección punto a punto, y con `S3_TEST_ENDPOINT` el driver S3 contra un MinIO real (la CI hace ambas cosas). Utilizan **únicamente** la base `geotwin_test` y rechazan otro nombre antes de limpiar fixtures. `TEST_DATABASE_URL` permite ajustar host y credenciales. El usuario local de PostgreSQL debe poder crear esa base; si no existe, se crea desde la base de mantenimiento `postgres` del mismo servidor. No uses una base de negocio para los tests.
 
-El E2E también usa `geotwin_test`, desactiva el simulador periódico y mantiene disponible la inyección controlada; no usa mocks de REST. Arranca además el worker LiDAR (necesita un `LIDAR_PYTHON` con py3dtiles, como las pruebas de integración) con almacenamiento local en `data/e2e-storage`: el segundo flujo sube la nube sintética desde el panel Capas, espera a que esté lista por WebSocket, la oculta y la muestra, cambia el modo de color, mide una distancia y la borra. Selecciona la capa local real para que el test no dependa del servicio de ortofotos. Necesita los puertos 3001 y 5173 libres y un navegador con WebGL (se configura SwiftShader en CI). Los informes de fallo se guardan en `test-results/`. La CI ejecuta checks, integración, build, E2E y un arranque de Compose; los resultados y la fecha de cada ejecución están en [docs/verification.md](docs/verification.md).
+El E2E también usa `geotwin_test`, desactiva el simulador periódico y mantiene disponible la inyección controlada; no usa mocks de REST. Arranca además el worker LiDAR (necesita un `LIDAR_PYTHON` con py3dtiles, como las pruebas de integración) con almacenamiento local en `data/e2e-storage`: el segundo flujo sube la nube sintética desde el panel Capas, espera a que esté lista por WebSocket, la oculta y la muestra, cambia el modo de color, mide una distancia y la borra. Otras pruebas comprueban que el encuadre deja todas las instalaciones fuera del panel Capas a 1280 y 1440 px, que en el móvil la herramienta Medir no tapa los créditos, y pasan axe (WCAG 2.1 AA) por las cinco páginas en escritorio y móvil. Selecciona la capa local real para que el test no dependa del servicio de ortofotos. Necesita los puertos 3001 y 5173 libres y un navegador con WebGL (se configura SwiftShader en CI). Los informes de fallo se guardan en `test-results/`. La CI ejecuta checks, integración, build, E2E y un arranque de Compose; los resultados y la fecha de cada ejecución están en [docs/verification.md](docs/verification.md).
 
 Si los puertos 3001 o 5173 están ocupados, `API_PORT` y `WEB_PORT` cambian los de Vite, su proxy y los servidores del E2E. `PLAYWRIGHT_CHROMIUM_PATH` usa un Chromium ya instalado cuando no coincide con la versión fijada de Playwright.
 
