@@ -8,6 +8,10 @@
 
 ![Gemelo digital con terreno y edificios 3D](docs/screenshots/terrain-buildings.jpg)
 
+| Anomalía simulada en Pump 01 (atlas local, sin red)                           | Red completa en un móvil                                |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------- |
+| ![Gemelo digital con una anomalía crítica](docs/screenshots/digital-twin.png) | ![Gemelo digital a 390 px](docs/screenshots/mobile.png) |
+
 ---
 
 **Monitorización de infraestructuras con gemelos digitales 3D.** MVP integrado para demostrar ingeniería full-stack geoespacial: React, CesiumJS, Fastify, PostgreSQL/PostGIS y WebSockets.
@@ -56,12 +60,13 @@ npm run format:check
 - Dashboard calculado mediante SQL, filtros por instalación y tendencia de sensores.
 - Visor Cesium real: la cámara encuadra los activos (toda la red o la instalación elegida) en escritorio y en móvil, selección mediante clic, fly-to, marcadores y volúmenes de activos con color operativo, búsqueda y controles de navegación. Cambiar de instalación no reconstruye el visor.
 - Inspector de activos con sensores, última lectura, histórico y umbrales. Edición persistente del nombre, que llega a los demás clientes por WebSocket.
+- Enlaces compartibles: la vista, la instalación y el activo seleccionados viven en la URL (por ejemplo `/gemelo?instalacion=…&activo=…`). Abrir el enlace muestra lo mismo y el botón Atrás del navegador vuelve a la vista anterior.
 - Telemetría cada 5 segundos, persistida antes de publicar eventos; secuencia reproducible y anomalías periódicas. Cada tick usa un número fijo de sentencias SQL, sea cual sea el número de sensores.
 - Fallos controlados desde la UI: una lectura crítica crea una incidencia, actualiza el activo y se propaga a clientes conectados.
 - Registro manual de incidencias y resolución idempotente con histórico de resolución.
-- Reconexión WebSocket con espera exponencial y sincronización REST. Las lecturas y los cambios de estado se escriben directamente en la caché de TanStack Query; solo las alertas provocan una recarga REST. Zustand conserva únicamente estado de interfaz.
+- Reconexión WebSocket con espera exponencial y sincronización REST. Las lecturas y los cambios de estado se escriben directamente en la caché de TanStack Query; solo las alertas provocan una recarga REST. Zustand conserva únicamente estado de interfaz, sincronizado con la URL.
 - Retención configurable de lecturas (`READINGS_RETENTION_HOURS`, 24 h en la demo).
-- Proximidad PostGIS con `ST_DWithin(location::geography, point::geography, radius)` e índice GiST sobre la misma expresión. El radio y la distancia se expresan en metros.
+- Proximidad PostGIS con `ST_DWithin(location::geography, point::geography, radius)` e índice GiST sobre la misma expresión. El radio y la distancia se expresan en metros. La búsqueda se centra en el activo seleccionado, si no en la instalación elegida y, si no, en el centro de la red.
 - OpenAPI generado desde los mismos esquemas Zod usados para entrada, salida y contratos compartidos.
 
 ## Cesium sin token
@@ -75,13 +80,13 @@ Opcionalmente configura `VITE_CESIUM_ION_TOKEN` y reconstruye la web. El botón 
 ## Tests
 
 ```bash
-npm test                      # 25 pruebas unitarias: dominio, contratos, ion, cámara, caché realtime, cliente API, formato
-npm run test:integration       # crea/migra geotwin_test; 26 pruebas con PostGIS real
+npm test                      # 30 pruebas unitarias: dominio, contratos, ion, cámara, caché realtime, cliente API, formato, rutas
+npm run test:integration       # crea/migra geotwin_test; 28 pruebas con PostGIS real
 npx playwright install chromium
 npm run test:e2e               # arranca API y Vite para el flujo real en Chromium
 ```
 
-Las pruebas de integración requieren PostgreSQL activo en 55432. Utilizan **únicamente** la base `geotwin_test` y rechazan otro nombre antes de limpiar fixtures. `TEST_DATABASE_URL` permite ajustar host y credenciales. El usuario local de PostgreSQL debe poder crear esa base. No uses una base de negocio para los tests.
+Las pruebas de integración requieren PostgreSQL activo en 55432. Utilizan **únicamente** la base `geotwin_test` y rechazan otro nombre antes de limpiar fixtures. `TEST_DATABASE_URL` permite ajustar host y credenciales. El usuario local de PostgreSQL debe poder crear esa base; si no existe, se crea desde la base de mantenimiento `postgres` del mismo servidor. No uses una base de negocio para los tests.
 
 El E2E también usa `geotwin_test`, desactiva el simulador periódico y mantiene disponible la inyección controlada; no usa mocks de REST. Selecciona la capa local real para que el test no dependa del servicio de ortofotos. Necesita los puertos 3001 y 5173 libres y un navegador con WebGL (se configura SwiftShader en CI). Los informes de fallo se guardan en `test-results/`. La CI ejecuta checks, integración, build, E2E y un arranque de Compose; los resultados y la fecha de cada ejecución están en [docs/verification.md](docs/verification.md).
 

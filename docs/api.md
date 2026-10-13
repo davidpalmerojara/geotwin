@@ -36,7 +36,7 @@ Resolución no recibe cuerpo; no envíes `Content-Type: application/json` vacío
 
 ## Errores
 
-Validación o JSON mal formado devuelve 400, recurso inexistente 404, cuerpo de más de 16 KB 413 (`PAYLOAD_TOO_LARGE`), tipo de contenido no admitido 415, creación válida 201, lectura/actualización 200 y fallo interno 500. Los demás errores 4xx de Fastify conservan su código. La ausencia del endpoint demo cuando está deshabilitado devuelve 404. WebSocket rechaza un Origin ajeno a la allowlist con 403. Los errores internos se registran con request ID y no exponen detalles SQL al cliente.
+Validación o JSON mal formado devuelve 400, recurso inexistente 404, cuerpo de más de 16 KB 413 (`PAYLOAD_TOO_LARGE`), tipo de contenido no admitido 415, creación válida 201, lectura/actualización 200 y fallo interno 500. Los demás errores 4xx de Fastify conservan su código. La ausencia del endpoint demo cuando está deshabilitado devuelve 404. WebSocket rechaza un Origin ajeno a la allowlist con 403; las conexiones sin cabecera Origin (clientes que no son navegadores) se aceptan, porque la allowlist protege frente a páginas web ajenas y no autentica a nadie. Los errores internos se registran con request ID y no exponen detalles SQL al cliente. Todas las respuestas, también las de error, llevan `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` y `X-Frame-Options: DENY`.
 
 ```json
 { "error": { "code": "NOT_FOUND", "message": "Activo no encontrado", "request_id": "req-12" } }
@@ -46,13 +46,14 @@ Validación o JSON mal formado devuelve 400, recurso inexistente 404, cuerpo de 
 
 Mensaje JSON: `{ "type": "...", "data": { ... } }`, validado con `realtimeEventSchema`.
 
-| Evento                 | Datos                                                                  |
-| ---------------------- | ---------------------------------------------------------------------- |
-| `sync:required`        | `connected_at`; se emite al conectar y pide sincronización REST        |
-| `sensor:reading`       | sensor, activo, métrica, unidad, valor, fecha, simulated               |
-| `asset:status_changed` | `asset_id`, `status`                                                   |
-| `asset:updated`        | Activo completo tras un cambio de nombre                               |
-| `alert:created`        | Alerta completa; también escalado warning → critical sobre el mismo ID |
-| `alert:resolved`       | Alerta completa, con `resolved_at` y `resolved_by`                     |
+| Evento                 | Datos                                                           |
+| ---------------------- | --------------------------------------------------------------- |
+| `sync:required`        | `connected_at`; se emite al conectar y pide sincronización REST |
+| `sensor:reading`       | sensor, activo, métrica, unidad, valor, fecha, simulated        |
+| `asset:status_changed` | `asset_id`, `status`                                            |
+| `asset:updated`        | Activo completo tras un cambio de nombre                        |
+| `alert:created`        | Alerta nueva completa                                           |
+| `alert:updated`        | Alerta completa tras escalar de warning a critical (mismo ID)   |
+| `alert:resolved`       | Alerta completa, con `resolved_at` y `resolved_by`              |
 
 Las alertas incluyen `resolved_by`: `operator` cuando alguien la resuelve y `auto_recovery` cuando una anomalía natural del simulador vuelve al rango normal. Solo se publican cambios confirmados en PostgreSQL. Los eventos no sustituyen la fuente de verdad REST. No existe replay por cursor ni outbox en este MVP.
