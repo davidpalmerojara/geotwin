@@ -180,3 +180,18 @@ def test_multi_chunk_laz_does_not_hang(tmp_path):
     assert done.returncode == 0, done.stdout[-500:] + done.stderr[-500:]
     assert json.loads(done.stdout.strip().splitlines()[-1])["event"] == "result"
     assert len(leaf_points(out)[0]) == 120_000
+
+
+def test_progress_never_goes_backwards(capsys, monkeypatch):
+    clock = iter(range(0, 100))
+    monkeypatch.setattr(tool.time, "monotonic", lambda: float(next(clock)))
+    progress = tool.Progress("tiling")
+    # What py3dtiles' counters gave on a 6 M point tile: up, down for a while, then up again.
+    for fraction in (0.58, 0.59, 0.60, 0.57, 0.53, 0.47, 0.37, 0.49, 0.75, 1.0):
+        progress(fraction)
+    progress(0.9, force=True)
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    fractions = [line["fraction"] for line in lines]
+    assert fractions == sorted(fractions)
+    assert fractions[0] == 0.58 and fractions[-1] == 1.0
+    assert 0.57 not in fractions and 0.37 not in fractions

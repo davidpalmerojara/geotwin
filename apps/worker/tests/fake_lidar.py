@@ -59,6 +59,8 @@ else:
     (out / "tileset.json").write_text('{"asset":{"version":"1.0"}}')
     (out / "points" / "r.pnts").write_bytes(b"pnts" + bytes(60))
     Path(os.environ["FAKE_LIDAR_ARGS"]).write_text(json.dumps(sys.argv[1:]))
-    for f in (0.3, 0.9):
-        emit("progress", stage="tiling", fraction=f)
+    # FAKE_LIDAR_TILING: comma-separated fractions, FAKE_LIDAR_PAUSE seconds before each one.
+    for f in os.environ.get("FAKE_LIDAR_TILING", "0.3,0.9").split(","):
+        time.sleep(float(os.environ.get("FAKE_LIDAR_PAUSE", "0")))
+        emit("progress", stage="tiling", fraction=float(f))
     emit("result", tileset="tileset.json", files=["points/r.pnts", "tileset.json"], bytes=92)

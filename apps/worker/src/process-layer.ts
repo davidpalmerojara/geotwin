@@ -76,7 +76,8 @@ export async function processLayer(job: LayerJobContext, deps: Deps): Promise<Ou
     const [from, to] = STAGES[stage];
     const value = Math.round(from + (to - from) * Math.max(0, Math.min(1, fraction)));
     const now = Date.now();
-    if (stage === last.stage && (value === last.value || now - last.at < 1000)) return;
+    // Never move the bar back within a stage, whatever the converter's estimate says.
+    if (stage === last.stage && (value <= last.value || now - last.at < 1000)) return;
     last = { stage, at: now, value };
     await repo.progress(layer.id, job.id, stage, value);
   };

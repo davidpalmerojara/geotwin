@@ -51,13 +51,19 @@ def emit(event: str, **data: Any) -> None:
 
 
 class Progress:
-    """Throttled progress lines (at most every 0.5 s or 5 %)."""
+    """Throttled progress lines (at most every 0.5 s or 5 %) that never go backwards.
+
+    py3dtiles' own counters can drop mid-run (points move between tiling processes), so a
+    lower estimate keeps the last value: a progress bar that goes back reads as a fault.
+    """
 
     def __init__(self, stage: str) -> None:
         self.stage, self.last, self.at = stage, -1.0, 0.0
 
     def __call__(self, fraction: float, force: bool = False) -> None:
-        fraction = max(0.0, min(1.0, fraction))
+        fraction = max(0.0, min(1.0, fraction), self.last)
+        if fraction == self.last and not force:
+            return
         now = time.monotonic()
         if force or fraction - self.last >= 0.05 or now - self.at >= 0.5:
             self.last, self.at = fraction, now

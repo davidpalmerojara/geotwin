@@ -101,6 +101,8 @@ beforeEach(async () => {
   argsFile = join(dir, 'args.json');
   process.env.FAKE_LIDAR_ARGS = argsFile;
   process.env.FAKE_LIDAR_MODE = 'ok';
+  delete process.env.FAKE_LIDAR_TILING;
+  delete process.env.FAKE_LIDAR_PAUSE;
   await storage.put(`layers/${LAYER}/source`, Readable.from([Buffer.from('LASF')]));
 });
 afterEach(async () => {
@@ -135,6 +137,18 @@ describe('Layer job state machine', () => {
     ]);
     expect(existsSync(join(dir, `geotwin-layer-${LAYER}-`))).toBe(false);
   });
+  it('never moves the progress back when the converter estimate drops', async () => {
+    // Spaced out past the one-second throttle, so every estimate would otherwise be written.
+    process.env.FAKE_LIDAR_TILING = '0.6,0.4,0.8';
+    process.env.FAKE_LIDAR_PAUSE = '1.1';
+    const repo = new FakeRepo();
+    expect(await processLayer(job(), deps(repo))).toBe('ready');
+    const tiling = repo.log
+      .filter((l) => l.startsWith('progress:tiling'))
+      .map((l) => Number(l.split(':')[2]));
+    expect(tiling).toEqual([15, 60, 75]);
+  }, 15000);
+
   it('replaces an older run when a layer is processed again', async () => {
     await storage.put(`layers/${LAYER}/tiles/old-run/tileset.json`, Readable.from(['{}']));
     await processLayer(job(), deps(new FakeRepo('failed')));
