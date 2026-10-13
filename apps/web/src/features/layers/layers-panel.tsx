@@ -328,6 +328,22 @@ export function LayersPanel() {
                 </select>
               </label>
             </div>
+            <label className="layer-check">
+              <input
+                type="checkbox"
+                aria-label="Realzar bordes (EDL)"
+                aria-describedby="edl-help"
+                checked={view.edl}
+                onChange={(e) => view.setEdl(e.target.checked)}
+              />
+              <span>
+                Realzar bordes (EDL)
+                <small id="edl-help">
+                  Oscurece los saltos de profundidad: ayuda a leer volúmenes, pero dibuja contornos
+                  y la nube parece menos natural.
+                </small>
+              </span>
+            </label>
             {withGround > 0 && (
               <label className="layer-check">
                 <input

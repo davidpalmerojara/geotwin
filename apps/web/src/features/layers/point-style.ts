@@ -55,8 +55,29 @@ export const HEIGHT_RAMP = [
   '#d7191c',
 ];
 
-// maximumScreenSpaceError per quality level: lower means more detail and more tiles.
-export const QUALITY_SSE: Record<Quality, number> = { low: 24, medium: 12, high: 4 };
+/**
+ * Quality presets: `sse` is the tilesets' maximumScreenSpaceError (lower means finer tiles, more
+ * of them) and `cacheMB` the tile cache of each layer (a PNOA sheet holds about 100 MB of tiles,
+ * so «Alta» can keep a whole sheet loaded while the camera moves around it).
+ */
+export const QUALITY: Record<Quality, { sse: number; cacheMB: number }> = {
+  low: { sse: 16, cacheMB: 64 },
+  medium: { sse: 12, cacheMB: 128 },
+  high: { sse: 3, cacheMB: 256 },
+};
+
+/**
+ * Defaults for a device: phones and small or low-memory devices start at «Baja» with 3 px
+ * points, so they stay responsive; the rest at «Media» with 4 px.
+ */
+export function displayDefaults(device: {
+  narrow: boolean;
+  coarsePointer: boolean;
+  memoryGB?: number;
+}): { quality: Quality; pointSize: number } {
+  const small = device.narrow || device.coarsePointer || (device.memoryGB ?? 8) <= 4;
+  return small ? { quality: 'low', pointSize: 3 } : { quality: 'medium', pointSize: 4 };
+}
 
 const CLASS = '${classification}';
 
@@ -169,21 +190,41 @@ export function pointSpacing(layer: Pick<Layer, 'bbox' | 'point_count'>) {
 }
 
 /**
- * Point-cloud shading: attenuation sizes points by the tile's geometric error (so sparse,
- * coarse tiles still look solid) up to `pointSize` pixels, and eye-dome lighting adds depth
- * cues to points that carry no normals.
+ * Point-cloud shading. Attenuation sizes each point from its tile's geometric error (the layer's
+ * point spacing for the finest tiles), up to `pointSize` pixels: coarse tiles seen from afar get
+ * points large enough to close the gaps, and close up no point grows past `pointSize`, so the
+ * cloud does not turn into blobs. Measured on the Laguna sheets, 4 px closes the gaps at middle
+ * distances and 5-6 px already looks like overlapping scales. Eye-dome lighting darkens every
+ * depth step (building edges, tree crowns): it helps to read shapes but draws outlines that make
+ * the cloud look like a drawing, so it is optional and softer than Cesium's default (1, 1).
  */
-export function shadingFor(pointSize: number, baseResolution?: number) {
+export function shadingFor(pointSize: number, baseResolution?: number, edl = false) {
   return {
     attenuation: true,
     maximumAttenuation: Math.min(Math.max(pointSize, 1), 8),
     geometricErrorScale: 1,
     baseResolution,
-    eyeDomeLighting: true,
-    eyeDomeLightingStrength: 0.8,
-    eyeDomeLightingRadius: 1.0,
+    eyeDomeLighting: edl,
+    eyeDomeLightingStrength: 0.35,
+    eyeDomeLightingRadius: 0.75,
   };
 }
+
+/**
+ * Fragment shader for round points (Cesium CustomShader, MODIFY_MATERIAL mode). Square points
+ * read as pixel blocks; a disc with a slightly darker rim reads as a small rounded splat. There
+ * is no vertex shader on purpose: a custom one would replace the size Cesium's attenuation gives
+ * each point. It only discards fragments outside the circle and shades the rest, so the 3D Tiles
+ * style (RGB, height ramp, classification) is left as it is, and picking still hits the discs.
+ */
+export const ROUND_POINTS_GLSL = `
+void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+  vec2 offset = gl_PointCoord - vec2(0.5);
+  float r2 = dot(offset, offset) * 4.0;
+  if (r2 > 1.0) discard;
+  material.diffuse *= 1.0 - 0.18 * r2;
+}
+`;
 
 /** How far to lower a tileset so its lowest point rests on the bare ellipsoid (basic globe). */
 export function globeShift(range: { min: number } | undefined, onTerrain: boolean) {

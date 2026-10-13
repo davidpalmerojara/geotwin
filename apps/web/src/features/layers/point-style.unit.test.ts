@@ -9,7 +9,10 @@ import {
   heightExpression,
   HEIGHT_RAMP,
   pointSpacing,
+  displayDefaults,
+  QUALITY,
   rampBounds,
+  ROUND_POINTS_GLSL,
   shadingFor,
 } from './point-style';
 import { mebibytes, QUIET_AFTER_MS, quietMinutes, validateFile } from './upload';
@@ -128,15 +131,45 @@ describe('Point-cloud style builders', () => {
     expect(globeShift({ min: 751.6 }, true)).toBe(0);
     expect(globeShift(undefined, false)).toBe(0);
   });
-  it('shading attenuates up to the chosen point size with eye-dome lighting', () => {
+  it('shading attenuates up to the chosen point size, with optional soft eye-dome lighting', () => {
     expect(shadingFor(3)).toMatchObject({
       attenuation: true,
       maximumAttenuation: 3,
-      eyeDomeLighting: true,
+      geometricErrorScale: 1,
+      eyeDomeLighting: false,
     });
     expect(shadingFor(3, 0.45).baseResolution).toBe(0.45);
     expect(shadingFor(0).maximumAttenuation).toBe(1);
     expect(shadingFor(40).maximumAttenuation).toBe(8);
+    // When asked for, softer than Cesium's default strength and radius (1 and 1).
+    const edl = shadingFor(4, 0.45, true);
+    expect(edl.eyeDomeLighting).toBe(true);
+    expect(edl.eyeDomeLightingStrength).toBeLessThan(1);
+    expect(edl.eyeDomeLightingRadius).toBeLessThan(1);
+  });
+  it('quality presets ask for finer tiles and a larger cache as they go up', () => {
+    expect(QUALITY.low.sse).toBeGreaterThan(QUALITY.medium.sse);
+    expect(QUALITY.medium.sse).toBeGreaterThan(QUALITY.high.sse);
+    expect(QUALITY.low.cacheMB).toBeLessThan(QUALITY.medium.cacheMB);
+    expect(QUALITY.medium.cacheMB).toBeLessThan(QUALITY.high.cacheMB);
+    // «Alta» holds a whole PNOA sheet (about 100 MB of tiles).
+    expect(QUALITY.high.cacheMB).toBeGreaterThanOrEqual(128);
+  });
+  it('starts phones and small devices lighter than desktops', () => {
+    const desktop = { narrow: false, coarsePointer: false, memoryGB: 8 };
+    expect(displayDefaults(desktop)).toEqual({ quality: 'medium', pointSize: 4 });
+    expect(displayDefaults({ ...desktop, narrow: true })).toEqual({ quality: 'low', pointSize: 3 });
+    expect(displayDefaults({ ...desktop, coarsePointer: true }).quality).toBe('low');
+    expect(displayDefaults({ ...desktop, memoryGB: 4 }).quality).toBe('low');
+    // Browsers that do not report memory are not treated as small.
+    expect(displayDefaults({ narrow: false, coarsePointer: false }).quality).toBe('medium');
+  });
+  it('round points only discard outside the disc and leave the size to Cesium', () => {
+    expect(ROUND_POINTS_GLSL).toContain('void fragmentMain(FragmentInput fsInput');
+    expect(ROUND_POINTS_GLSL).toContain('gl_PointCoord');
+    expect(ROUND_POINTS_GLSL).toMatch(/if \(r2 > 1\.0\) discard;/);
+    // A vertex shader would replace the attenuated point size.
+    expect(ROUND_POINTS_GLSL).not.toContain('vertexMain');
   });
 });
 

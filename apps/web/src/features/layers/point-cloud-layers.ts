@@ -9,6 +9,7 @@ import {
   Cesium3DTileset,
   Cesium3DTileStyle,
   Credit,
+  CustomShader,
   HeadingPitchRange,
   Math as CesiumMath,
   Matrix4,
@@ -27,7 +28,8 @@ import {
   globeShift,
   heightExpression,
   pointSpacing,
-  QUALITY_SSE,
+  QUALITY,
+  ROUND_POINTS_GLSL,
   shadingFor,
 } from './point-style';
 import { SharedCredits } from './shared-credits';
@@ -56,6 +58,7 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
     classes = useLayerView((s) => s.classes),
     pointSize = useLayerView((s) => s.pointSize),
     quality = useLayerView((s) => s.quality),
+    edl = useLayerView((s) => s.edl),
     realHeight = useLayerView((s) => s.realHeight),
     flyTo = useLayerView((s) => s.flyTo),
     setRender = useLayerView((s) => s.setRender);
@@ -87,8 +90,10 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
         setRender(id, 'loading');
         const target = entry;
         Cesium3DTileset.fromUrl(layer.tileset_url!, {
-          maximumScreenSpaceError: QUALITY_SSE[quality],
-          pointCloudShading: new PointCloudShading(shadingFor(pointSize, pointSpacing(layer))),
+          maximumScreenSpaceError: QUALITY[quality].sse,
+          cacheBytes: QUALITY[quality].cacheMB * MIB,
+          maximumCacheOverflowBytes: QUALITY[quality].cacheMB * MIB,
+          pointCloudShading: new PointCloudShading(shadingFor(pointSize, pointSpacing(layer), edl)),
           // Points are unlit: the image-based lighting map Cesium keeps per tileset is never
           // used, and updating it reads pixels back from the GPU, which stalls every frame.
           environmentMapOptions: { enabled: false },
@@ -99,6 +104,8 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
               return;
             }
             target.tileset = tileset;
+            // Round points: a fragment-only shader, so Cesium's attenuation still sizes them.
+            tileset.customShader = new CustomShader({ fragmentShaderText: ROUND_POINTS_GLSL });
             // The layer may have been hidden while its tileset.json was loading.
             tileset.show = !useLayerView.getState().hidden[id];
             if (layer.attribution) target.attribution = layer.attribution;
@@ -132,12 +139,12 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
           viewer,
           layer,
           entry,
-          { colorMode, classes, pointSize, quality, realHeight },
+          { colorMode, classes, pointSize, quality, realHeight, edl },
           onTerrain,
         );
     }
     viewer.scene.requestRender();
-  }, [viewer, ready, layers, colorMode, classes, pointSize, quality, realHeight, onTerrain]);
+  }, [viewer, ready, layers, colorMode, classes, pointSize, quality, realHeight, edl, onTerrain]);
 
   // Fly to a layer: its loaded bounding volume, or the footprint the worker measured.
   useEffect(() => {
@@ -181,8 +188,9 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
 
 type Display = Pick<
   ReturnType<typeof useLayerView.getState>,
-  'colorMode' | 'classes' | 'pointSize' | 'quality' | 'realHeight'
+  'colorMode' | 'classes' | 'pointSize' | 'quality' | 'realHeight' | 'edl'
 >;
+const MIB = 1024 * 1024;
 /** Metres the layer is lowered: on the bare globe it rests on the ellipsoid unless told not to. */
 function placementShift(layer: Layer, realHeight: boolean, onTerrain: boolean) {
   return realHeight ? 0 : globeShift(ellipsoidalRange(layer), onTerrain);
@@ -216,8 +224,14 @@ function apply(viewer: Viewer, layer: Layer, entry: Loaded, view: Display, onTer
     entry.styleKey = styleKey;
     tileset.style = new Cesium3DTileStyle(style);
   }
-  Object.assign(tileset.pointCloudShading, shadingFor(view.pointSize, pointSpacing(layer)));
-  tileset.maximumScreenSpaceError = QUALITY_SSE[view.quality];
+  Object.assign(
+    tileset.pointCloudShading,
+    shadingFor(view.pointSize, pointSpacing(layer), view.edl),
+  );
+  const preset = QUALITY[view.quality];
+  tileset.maximumScreenSpaceError = preset.sse;
+  tileset.cacheBytes = preset.cacheMB * MIB;
+  tileset.maximumCacheOverflowBytes = preset.cacheMB * MIB;
   syncCredit(viewer, entry, tileset.show);
 }
 
