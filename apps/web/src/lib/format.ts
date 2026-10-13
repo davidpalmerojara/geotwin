@@ -30,3 +30,10 @@ export function initials(name: string) {
   const words = name.split(/\s+/).filter(Boolean);
   return ((words[0]?.[0] ?? '') + (words[1]?.[0] ?? '')).toUpperCase() || '—';
 }
+/** Spanish number with a fixed number of decimals: 1234,5 · 18.245,6 · 5540. */
+export function number(value: number, digits = 0) {
+  return value.toLocaleString('es-ES', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}

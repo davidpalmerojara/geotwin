@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useUI } from '../stores/ui';
+import { LAYERS_KEY } from './realtime-cache';
 export const useAssets = () => {
   const id = useUI((s) => s.installationId);
   return useQuery({
@@ -37,3 +38,8 @@ export function useSync() {
   const client = useQueryClient();
   return () => client.invalidateQueries({ queryKey: ['geo'] });
 }
+// No polling: layer:* WebSocket events keep the list current (see realtime-cache.ts).
+export const useLayers = () =>
+  useQuery({ queryKey: [...LAYERS_KEY], queryFn: api.layers, staleTime: Infinity });
+export const useLayerLimits = () =>
+  useQuery({ queryKey: ['layer-limits'], queryFn: api.layerLimits, staleTime: Infinity });

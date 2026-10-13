@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
-import type { Alert, Asset, Reading, Sensor } from '@geotwin/shared';
-import { applyRealtimeEvents, READINGS_WINDOW } from './realtime-cache';
+import type { Alert, Asset, Layer, Reading, Sensor } from '@geotwin/shared';
+import { applyRealtimeEvents, LAYERS_KEY, READINGS_WINDOW } from './realtime-cache';
 const assetId = '20000000-0000-4000-8000-000000000001';
 const sensorId = '30000000-0000-4000-8000-000000000001';
 const asset: Asset = {
@@ -123,5 +123,77 @@ describe('Realtime cache updates', () => {
       expect(invalidated(client, ['geo', 'assets', ''])).toBe(false);
       expect(invalidated(client, ['geo', 'sensors', assetId])).toBe(false);
     }
+  });
+});
+describe('LiDAR layer events', () => {
+  const layer: Layer = {
+    id: '50000000-0000-4000-8000-000000000001',
+    organization_id: '00000000-0000-4000-8000-000000000001',
+    name: 'Nube sintética',
+    kind: 'pointcloud',
+    status: 'queued',
+    stage: 'queued',
+    progress: 0,
+    error: null,
+    source: { filename: 'nube.laz', format: 'laz', size_bytes: 56000, sha256: 'a'.repeat(64) },
+    crs_in: 'EPSG:25830',
+    vertical: { datum: 'orthometric', override_m: null, geoid_offset_m: null, method: null },
+    point_count: null,
+    point_format: null,
+    bbox: null,
+    center: null,
+    height_range_m: null,
+    tileset_url: null,
+    attribution: null,
+    created_at: '2026-10-13T08:00:00.000Z',
+    updated_at: '2026-10-13T08:00:00.000Z',
+  };
+  const list = (client: QueryClient) => client.getQueryData<Layer[]>(LAYERS_KEY);
+  it('adds a layer created elsewhere once and patches its progress without a request', () => {
+    const client = new QueryClient();
+    client.setQueryData(LAYERS_KEY, []);
+    applyRealtimeEvents(client, [
+      { type: 'layer:created', data: layer },
+      { type: 'layer:created', data: layer },
+      {
+        type: 'layer:progress',
+        data: { id: layer.id, status: 'processing', stage: 'tiling', progress: 42 },
+      },
+    ]);
+    expect(list(client)).toHaveLength(1);
+    expect(list(client)![0]).toMatchObject({ status: 'processing', stage: 'tiling', progress: 42 });
+    expect(invalidated(client, [...LAYERS_KEY])).toBe(false);
+  });
+  it('replaces the row on ready, keeps the newest row and removes deleted layers', () => {
+    const client = new QueryClient();
+    client.setQueryData(LAYERS_KEY, [layer]);
+    const ready: Layer = {
+      ...layer,
+      status: 'ready',
+      stage: 'done',
+      progress: 100,
+      tileset_url: `/api/layers/${layer.id}/tiles/job/tileset.json`,
+      updated_at: '2026-10-13T08:00:09.000Z',
+    };
+    applyRealtimeEvents(client, [{ type: 'layer:ready', data: ready }]);
+    expect(list(client)![0]!.tileset_url).toBe(ready.tileset_url);
+    // An older row arriving late does not undo the newer one.
+    applyRealtimeEvents(client, [{ type: 'layer:failed', data: { ...layer, status: 'failed' } }]);
+    expect(list(client)![0]!.status).toBe('ready');
+    // A reprocess sends the ready layer back to the queue.
+    applyRealtimeEvents(client, [
+      {
+        type: 'layer:progress',
+        data: { id: layer.id, status: 'queued', stage: 'queued', progress: 0 },
+      },
+    ]);
+    expect(list(client)![0]!.status).toBe('queued');
+    applyRealtimeEvents(client, [{ type: 'layer:deleted', data: { id: layer.id } }]);
+    expect(list(client)).toEqual([]);
+  });
+  it('leaves an unloaded layer list alone (it loads fresh when first needed)', () => {
+    const client = new QueryClient();
+    applyRealtimeEvents(client, [{ type: 'layer:created', data: layer }]);
+    expect(list(client)).toBeUndefined();
   });
 });

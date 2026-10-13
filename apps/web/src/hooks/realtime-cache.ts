@@ -1,5 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
-import type { Asset, Reading, RealtimeEvent, Sensor } from '@geotwin/shared';
+import type { Asset, Layer, Reading, RealtimeEvent, Sensor } from '@geotwin/shared';
+// The LiDAR layer list (api.layers): kept current by layer:* events alone, never polled.
+export const LAYERS_KEY = ['geo', 'layers'] as const;
 // Matches the history size the inspector requests (api.readings).
 export const READINGS_WINDOW = 120;
 type AssetWithDistance = Asset & { distance_m?: number };
@@ -9,7 +11,8 @@ type AssetWithDistance = Asset & { distance_m?: number };
  * Readings, status changes and renames carry everything the views need, so they are
  * written straight into the cached data (no request). Alert events change counts and
  * lists the payload cannot patch safely, so they invalidate the alert and summary
- * queries and those refetch over REST. Reconnects still trigger a full resync.
+ * queries and those refetch over REST. Layer events carry the whole layer (or its progress), so
+ * the layer list is patched in place too. Reconnects still trigger a full resync.
  */
 export function applyRealtimeEvents(client: QueryClient, events: RealtimeEvent[]) {
   let alertsChanged = false;
@@ -29,6 +32,23 @@ export function applyRealtimeEvents(client: QueryClient, events: RealtimeEvent[]
       case 'alert:updated':
       case 'alert:resolved':
         alertsChanged = true;
+        break;
+      case 'layer:created':
+      case 'layer:ready':
+      case 'layer:failed':
+        upsertLayer(client, event.data);
+        break;
+      case 'layer:progress':
+        client.setQueryData<Layer[]>(LAYERS_KEY, (list) =>
+          // Also a reprocess: a ready layer goes back to queued (the worker never reports progress
+          // after ready, and one API relays NOTIFYs in order).
+          list?.map((layer) => (layer.id === event.data.id ? { ...layer, ...event.data } : layer)),
+        );
+        break;
+      case 'layer:deleted':
+        client.setQueryData<Layer[]>(LAYERS_KEY, (list) =>
+          list?.filter((layer) => layer.id !== event.data.id),
+        );
         break;
       case 'sync:required':
         break;
@@ -78,4 +98,14 @@ function patchList(list: AssetWithDistance[] | undefined, id: string, patch: Par
   return list?.some((a) => a.id === id)
     ? list.map((a) => (a.id === id ? { ...a, ...patch } : a))
     : list;
+}
+function upsertLayer(client: QueryClient, layer: Layer) {
+  client.setQueryData<Layer[]>(LAYERS_KEY, (list) => {
+    if (!list) return list;
+    const current = list.find((l) => l.id === layer.id);
+    if (!current) return [layer, ...list];
+    // Events can overtake each other between processes: keep the newest row.
+    if (current.updated_at > layer.updated_at) return list;
+    return list.map((l) => (l.id === layer.id ? layer : l));
+  });
 }

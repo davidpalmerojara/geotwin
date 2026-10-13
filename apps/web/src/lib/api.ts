@@ -8,6 +8,9 @@ import {
   summarySchema,
   healthSchema,
   organizationSchema,
+  layerSchema,
+  layerLimitsSchema,
+  type Layer,
 } from '@geotwin/shared';
 export function queryString(values: Record<string, string | number | undefined>) {
   const params = new URLSearchParams();
@@ -37,23 +40,69 @@ export async function request<T>(
       ...init?.headers,
     },
   });
+  return parseResponse(response.status, response.ok, await response.text(), schema);
+}
+/** Shared by fetch and the upload request (XMLHttpRequest, for its progress events). */
+export function parseResponse<T>(status: number, ok: boolean, text: string, schema: z.ZodType<T>) {
   // A proxy (nginx 502, a gateway timeout) can answer with HTML or an empty body.
-  const text = await response.text();
   let data: unknown;
   try {
     data = text ? JSON.parse(text) : undefined;
   } catch {
     data = undefined;
   }
-  if (!response.ok) {
+  if (!ok) {
     const result = z.object({ error: z.object({ message: z.string() }) }).safeParse(data);
-    throw new ApiError(
-      response.status,
-      result.success ? result.data.error.message : `Error HTTP ${response.status}`,
-    );
+    throw new ApiError(status, result.success ? result.data.error.message : `Error HTTP ${status}`);
   }
-  if (data === undefined) throw new ApiError(response.status, 'Respuesta no válida de la API');
+  if (data === undefined) throw new ApiError(status, 'Respuesta no válida de la API');
   return schema.parse(data);
+}
+export interface UploadOptions {
+  name?: string;
+  attribution?: string;
+}
+/**
+ * Uploads one LAS/LAZ file as multipart/form-data. XMLHttpRequest instead of fetch because
+ * fetch still has no upload progress events; `signal` cancels the transfer.
+ */
+export function uploadLayer(
+  file: File,
+  options: UploadOptions,
+  onProgress: (fraction: number) => void,
+  signal?: AbortSignal,
+): Promise<Layer> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/layers${queryString({ ...options })}`);
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total) onProgress(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      try {
+        resolve(
+          parseResponse(
+            xhr.status,
+            xhr.status >= 200 && xhr.status < 300,
+            xhr.responseText,
+            layerSchema,
+          ),
+        );
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+    // The API closes the connection on 413/415 before reading the body: some browsers then
+    // report a network error instead of the response.
+    xhr.onerror = () =>
+      reject(new ApiError(0, 'Se cortó la subida. Comprueba el tamaño y el tipo del fichero.'));
+    xhr.onabort = () => reject(new ApiError(0, 'Subida cancelada.'));
+    signal?.addEventListener('abort', () => xhr.abort(), { once: true });
+    const form = new FormData();
+    form.append('file', file, file.name);
+    xhr.send(form);
+  });
 }
 export const api = {
   health: () => request('/health', healthSchema),
@@ -90,6 +139,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ asset_id, severity, message }),
     }),
+  layers: () => request('/layers', z.array(layerSchema)),
+  layerLimits: () => request('/layers/limits', layerLimitsSchema),
+  deleteLayer: async (id: string) => {
+    const response = await fetch(`/api/layers/${id}`, { method: 'DELETE' });
+    // 204 has no body; errors use the JSON error contract.
+    if (!response.ok) parseResponse(response.status, false, await response.text(), z.unknown());
+  },
   rename: (id: string, name: string) =>
     request(`/assets/${id}`, assetSchema, { method: 'PATCH', body: JSON.stringify({ name }) }),
 };
