@@ -96,6 +96,8 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
               return;
             }
             target.tileset = tileset;
+            // The layer may have been hidden while its tileset.json was loading.
+            tileset.show = !useLayerView.getState().hidden[id];
             if (layer.attribution) target.credit = new Credit(escapeHtml(layer.attribution), true);
             viewer.scene.primitives.add(tileset);
             tileset.tileFailed.addEventListener(() => setRender(id, 'error'));
@@ -164,7 +166,11 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
   useEffect(() => {
     const current = loaded.current;
     return () => {
-      for (const entry of current.values()) if (viewer) dispose(viewer, entry);
+      for (const [id, entry] of current) {
+        if (viewer) dispose(viewer, entry);
+        // A new viewer starts from scratch: do not report this one's tilesets as shown.
+        useLayerView.getState().setRender(id, null);
+      }
       current.clear();
     };
   }, [viewer]);
