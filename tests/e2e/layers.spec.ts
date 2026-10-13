@@ -93,6 +93,18 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   await page.keyboard.press('Escape');
   await expect(results).toBeHidden();
 
+  // A rejected file while the panel is scrolled down to the style controls: the message is
+  // scrolled into view instead of appearing out of sight above the list.
+  const body = panel.locator('#layers-body');
+  await body.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+  await expect(panel.getByText('Altura real sobre el globo básico')).toBeInViewport();
+  await panel
+    .getByLabel('Fichero LAS o LAZ')
+    .setInputFiles({ name: 'notas.txt', mimeType: 'text/plain', buffer: Buffer.from('hola') });
+  const alert = panel.getByRole('alert');
+  await expect(alert).toContainText('«notas.txt» no es un fichero .las o .laz.');
+  await expect(alert).toBeInViewport();
+
   // Delete with confirmation: the row, the tileset and the credit go away.
   await row.getByRole('button', { name: `Borrar ${name}` }).click();
   await page.getByRole('button', { name: 'Borrar capa' }).click();

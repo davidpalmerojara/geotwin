@@ -62,7 +62,10 @@ export function LayersPanel() {
     typeof window === 'undefined' ? true : window.matchMedia('(min-width: 951px)').matches,
   );
   const [upload, setUpload] = useState<{ name: string; progress: number } | null>(null);
-  const [message, setMessage] = useState('');
+  // A rejected upload or delete: shown under the drop zone and scrolled into view each time.
+  const [message, setMessageState] = useState({ text: '', seq: 0 });
+  const setMessage = (text: string) => setMessageState((m) => ({ text, seq: m.seq + 1 }));
+  const messageRef = useRef<HTMLParagraphElement>(null);
   const [dragging, setDragging] = useState(false);
   const [options, setOptions] = useState<UploadOptions>({});
   const [confirm, setConfirm] = useState<Layer | null>(null);
@@ -83,6 +86,10 @@ export function LayersPanel() {
       else if (layer.status === 'failed') followed.current.delete(layer.id);
   }, [list, view]);
   useEffect(() => () => abort.current?.abort(), []);
+  // The panel may be scrolled down to the style controls: never leave the message out of view.
+  useEffect(() => {
+    if (message.text) messageRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [message]);
 
   const start = async (file: File | undefined) => {
     if (!file || upload) return;
@@ -234,9 +241,9 @@ export function LayersPanel() {
             />
           </label>
         </details>
-        {message && (
-          <p className="layer-message" role="alert">
-            <AlertTriangle size={14} /> {message}
+        {message.text && (
+          <p className="layer-message" role="alert" ref={messageRef}>
+            <AlertTriangle size={14} /> {message.text}
           </p>
         )}
         {layers.isError ? (
