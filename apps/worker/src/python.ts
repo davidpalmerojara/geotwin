@@ -34,8 +34,11 @@ export interface RunOptions {
 }
 
 /**
- * Runs one geotwin_lidar.py command and resolves with its `result` line. The child is killed
- * (SIGTERM, then SIGKILL after 5 s) when `signal` aborts, e.g. on job timeout or cancellation.
+ * Runs one geotwin_lidar.py command and resolves with its `result` line. When `signal` aborts
+ * (job timeout, cancellation, layer deleted) the whole process group is killed: SIGTERM, then
+ * SIGKILL after 5 s. The group matters because py3dtiles forks worker processes; killing only
+ * the main one left them orphaned, still holding the stdout pipe, so 'close' never fired and the
+ * job (and with concurrency 1, the whole queue) hung until pg-boss expired it.
  */
 export function runLidarTool(args: string[], options: RunOptions) {
   return new Promise<Record<string, unknown>>((resolve, reject) => {
@@ -47,7 +50,19 @@ export function runLidarTool(args: string[], options: RunOptions) {
     const child = spawn(options.python, ['-I', options.script, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONUNBUFFERED: '1', ...options.env },
+      // Its own process group, so the converter and every process it forks can be killed at once.
+      detached: true,
     });
+    const killGroup = (signal: NodeJS.Signals) => {
+      try {
+        if (child.pid) process.kill(-child.pid, signal);
+      } catch {
+        // ESRCH: the group is already gone.
+      }
+    };
+    // A worker that exits (even on an unhandled error) takes its converters with it.
+    const onExit = () => killGroup('SIGKILL');
+    process.once('exit', onExit);
     let result: Record<string, unknown> | undefined;
     let failure: LidarToolError | undefined;
     let stderr = '';
@@ -67,13 +82,14 @@ export function runLidarTool(args: string[], options: RunOptions) {
     });
     let killTimer: ReturnType<typeof setTimeout> | undefined;
     const onAbort = () => {
-      child.kill('SIGTERM');
-      killTimer = setTimeout(() => child.kill('SIGKILL'), 5000);
+      killGroup('SIGTERM');
+      killTimer = setTimeout(() => killGroup('SIGKILL'), 5000);
       killTimer.unref();
     };
     options.signal?.addEventListener('abort', onAbort, { once: true });
     child.once('error', (error) => {
       options.signal?.removeEventListener('abort', onAbort);
+      process.removeListener('exit', onExit);
       reject(
         new LidarToolError(
           'PYTHON_UNAVAILABLE',
@@ -84,7 +100,10 @@ export function runLidarTool(args: string[], options: RunOptions) {
     });
     child.once('close', (code, signalName) => {
       options.signal?.removeEventListener('abort', onAbort);
+      process.removeListener('exit', onExit);
       clearTimeout(killTimer);
+      // Nothing of this run may outlive it (forked helpers of a crashed converter included).
+      killGroup('SIGKILL');
       if (options.signal?.aborted) reject(abortError(options.signal));
       else if (code === 0 && result) resolve(result);
       else if (failure) reject(failure);
