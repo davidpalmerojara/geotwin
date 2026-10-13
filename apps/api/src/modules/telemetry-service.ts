@@ -96,7 +96,7 @@ export class TelemetryService {
     // A new anomaly opens one alert per sensor (partial unique index); a critical reading
     // escalates an existing warning. Both CTEs read the same snapshot, so they never overlap.
     const opened = anomalies.length
-      ? await client.query<{ id: string }>(
+      ? await client.query<{ id: string; kind: 'created' | 'escalated' }>(
           `WITH input AS (
             SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::text[])
             AS t(sensor_id, asset_id, severity, message)
@@ -110,7 +110,8 @@ export class TelemetryService {
             WHERE al.sensor_id=i.sensor_id AND al.status='active'
               AND al.severity='warning' AND i.severity='critical'
             RETURNING al.id
-          ) SELECT id FROM inserted UNION ALL SELECT id FROM escalated`,
+          ) SELECT id, 'created' AS kind FROM inserted
+          UNION ALL SELECT id, 'escalated' AS kind FROM escalated`,
           [
             anomalies.map((m) => m.sensor.id),
             anomalies.map((m) => m.sensor.asset_id),
@@ -120,11 +121,16 @@ export class TelemetryService {
           ],
         )
       : { rows: [] };
+    // A new alert is alert:created; an escalation changes an existing one (alert:updated).
+    const escalated = new Set(opened.rows.filter((r) => r.kind === 'escalated').map((r) => r.id));
     for (const alert of await this.alertsById(
       client,
       opened.rows.map((r) => r.id),
     ))
-      events.push({ type: 'alert:created', data: alert });
+      events.push({
+        type: escalated.has(alert.id) ? 'alert:updated' : 'alert:created',
+        data: alert,
+      });
     // Natural simulator anomalies close themselves once the reading is back in range.
     // Injected anomalies keep their override and manual incidents have no sensor, so both
     // stay active until someone resolves them.

@@ -204,6 +204,7 @@ export const realtimeEventSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('asset:updated'), data: assetSchema }),
   z.object({ type: z.literal('alert:created'), data: alertSchema }),
+  z.object({ type: z.literal('alert:updated'), data: alertSchema }),
   z.object({ type: z.literal('alert:resolved'), data: alertSchema }),
   z.object({ type: z.literal('sync:required'), data: z.object({ connected_at: z.string() }) }),
   z.object({ type: z.literal('layer:created'), data: layerSchema }),

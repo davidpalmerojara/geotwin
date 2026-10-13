@@ -179,6 +179,8 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     expect(statements).toBeLessThanOrEqual(12);
   });
   it('stamps readings after the lock is acquired, not at transaction start', async () => {
+    // Only rows written by this tick: ids above the seeded history.
+    const lastId = (await db.query('SELECT max(id) AS id FROM sensor_readings')).rows[0].id;
     const holder = await db.connect();
     let releasedAt: string;
     try {
@@ -192,12 +194,12 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     } finally {
       holder.release();
     }
-    const earliest = await db.query<{ late: boolean }>(
-      `SELECT min(recorded_at) > $1::timestamptz AS late FROM sensor_readings
-      WHERE recorded_at > now() - interval '1 minute' AND recorded_at > date_trunc('minute', now())`,
-      [releasedAt],
+    const earliest = await db.query<{ late: boolean; n: number }>(
+      `SELECT min(recorded_at) > $1::timestamptz AS late, count(*)::int AS n
+      FROM sensor_readings WHERE id > $2`,
+      [releasedAt, lastId],
     );
-    expect(earliest.rows[0]!.late).toBe(true);
+    expect(earliest.rows[0]).toEqual({ late: true, n: 36 });
   });
   it('opens natural anomalies once per sensor and closes them when the reading recovers', async () => {
     const events: RealtimeEvent[] = [];
@@ -355,6 +357,21 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     expect(critical.id).toBe(warning.id);
     expect(critical.severity).toBe('critical');
   });
+  it('announces an escalation as alert:updated, not as a new alert', async () => {
+    const events: RealtimeEvent[] = [];
+    const service = new TelemetryService(db, (e) => events.push(...e));
+    const warning = await service.simulate(sensorId, 'warning');
+    expect(events.filter((e) => e.type === 'alert:created')).toHaveLength(1);
+    events.length = 0;
+    await service.simulate(sensorId, 'critical');
+    const alertEvents = events.filter((e) => e.type.startsWith('alert:'));
+    expect(alertEvents).toEqual([
+      {
+        type: 'alert:updated',
+        data: expect.objectContaining({ id: warning.id, severity: 'critical' }),
+      },
+    ]);
+  });
   it('keeps the asset critical until all its incidents are resolved', async () => {
     const a = (
       await app.inject({
@@ -462,6 +479,16 @@ describe('Real API and PostgreSQL/PostGIS', () => {
       payload: '{"asset_id":',
     });
     expect(malformed.statusCode).toBe(400);
+  });
+  it('sends baseline security headers, also on errors', async () => {
+    for (const path of ['/api/health', '/api/assets/not-a-uuid', '/api/no-such-route']) {
+      const response = await app.inject(path);
+      expect(response.headers).toMatchObject({
+        'x-content-type-options': 'nosniff',
+        'referrer-policy': 'strict-origin-when-cross-origin',
+        'x-frame-options': 'DENY',
+      });
+    }
   });
   it('serves the organization and its place name from the database', async () => {
     const organization = organizationSchema.parse((await app.inject('/api/organization')).json());

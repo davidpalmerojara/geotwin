@@ -102,7 +102,6 @@ describe('Realtime cache updates', () => {
     expect(client.getQueryData<Asset>(['geo', 'asset', assetId])!.name).toBe('Pump 01 · Revisada');
   });
   it('invalidates only alert and summary queries on alert events', () => {
-    const client = setup();
     const alert: Alert = {
       id: '40000000-0000-4000-8000-000000000001',
       asset_id: assetId,
@@ -116,10 +115,13 @@ describe('Realtime cache updates', () => {
       resolved_by: null,
       asset_name: 'Pump 01',
     };
-    applyRealtimeEvents(client, [{ type: 'alert:created', data: alert }]);
-    expect(invalidated(client, ['geo', 'summary', ''])).toBe(true);
-    expect(invalidated(client, ['geo', 'alerts', '', undefined, 'active'])).toBe(true);
-    expect(invalidated(client, ['geo', 'assets', ''])).toBe(false);
-    expect(invalidated(client, ['geo', 'sensors', assetId])).toBe(false);
+    for (const type of ['alert:created', 'alert:updated', 'alert:resolved'] as const) {
+      const client = setup();
+      applyRealtimeEvents(client, [{ type, data: alert }]);
+      expect(invalidated(client, ['geo', 'summary', ''])).toBe(true);
+      expect(invalidated(client, ['geo', 'alerts', '', undefined, 'active'])).toBe(true);
+      expect(invalidated(client, ['geo', 'assets', ''])).toBe(false);
+      expect(invalidated(client, ['geo', 'sensors', assetId])).toBe(false);
+    }
   });
 });

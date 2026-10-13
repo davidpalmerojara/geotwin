@@ -71,7 +71,7 @@ Resolución no recibe cuerpo; no envíes `Content-Type: application/json` vacío
 
 ## Errores
 
-Validación o JSON mal formado devuelve 400, recurso inexistente 404, conflicto 409 (capa duplicada o que todavía se procesa), cuerpo JSON de más de 16 KB o fichero por encima del límite 413 (`PAYLOAD_TOO_LARGE`), tipo de contenido no admitido 415, creación válida 201, lectura/actualización 200 y fallo interno 500. Los demás errores 4xx de Fastify conservan su código. La ausencia del endpoint demo cuando está deshabilitado devuelve 404. WebSocket rechaza un Origin ajeno a la allowlist con 403. Los errores internos se registran con request ID y no exponen detalles SQL al cliente.
+Validación o JSON mal formado devuelve 400, recurso inexistente 404, conflicto 409 (capa duplicada o que todavía se procesa), cuerpo JSON de más de 16 KB o fichero por encima del límite 413 (`PAYLOAD_TOO_LARGE`), tipo de contenido no admitido 415, creación válida 201, lectura/actualización 200 y fallo interno 500. Los demás errores 4xx de Fastify conservan su código. La ausencia del endpoint demo cuando está deshabilitado devuelve 404. WebSocket rechaza un Origin ajeno a la allowlist con 403; las conexiones sin cabecera Origin (clientes que no son navegadores) se aceptan, porque la allowlist protege frente a páginas web ajenas y no autentica a nadie. Los errores internos se registran con request ID y no exponen detalles SQL al cliente. Todas las respuestas, también las de error, llevan `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` y `X-Frame-Options: DENY`.
 
 ```json
 { "error": { "code": "NOT_FOUND", "message": "Activo no encontrado", "request_id": "req-12" } }
@@ -81,19 +81,20 @@ Validación o JSON mal formado devuelve 400, recurso inexistente 404, conflicto 
 
 Mensaje JSON: `{ "type": "...", "data": { ... } }`, validado con `realtimeEventSchema`.
 
-| Evento                 | Datos                                                                  |
-| ---------------------- | ---------------------------------------------------------------------- |
-| `sync:required`        | `connected_at`; se emite al conectar y pide sincronización REST        |
-| `sensor:reading`       | sensor, activo, métrica, unidad, valor, fecha, simulated               |
-| `asset:status_changed` | `asset_id`, `status`                                                   |
-| `asset:updated`        | Activo completo tras un cambio de nombre                               |
-| `alert:created`        | Alerta completa; también escalado warning → critical sobre el mismo ID |
-| `alert:resolved`       | Alerta completa, con `resolved_at` y `resolved_by`                     |
-| `layer:created`        | Capa completa recién subida                                            |
-| `layer:progress`       | `id`, `status`, `stage`, `progress` (como mucho uno por segundo)       |
-| `layer:ready`          | Capa completa con `tileset_url`                                        |
-| `layer:failed`         | Capa completa con `error`                                              |
-| `layer:deleted`        | `id`                                                                   |
+| Evento                 | Datos                                                            |
+| ---------------------- | ---------------------------------------------------------------- |
+| `sync:required`        | `connected_at`; se emite al conectar y pide sincronización REST  |
+| `sensor:reading`       | sensor, activo, métrica, unidad, valor, fecha, simulated         |
+| `asset:status_changed` | `asset_id`, `status`                                             |
+| `asset:updated`        | Activo completo tras un cambio de nombre                         |
+| `alert:created`        | Alerta nueva completa                                            |
+| `alert:updated`        | Alerta completa tras escalar de warning a critical (mismo ID)    |
+| `alert:resolved`       | Alerta completa, con `resolved_at` y `resolved_by`               |
+| `layer:created`        | Capa completa recién subida                                      |
+| `layer:progress`       | `id`, `status`, `stage`, `progress` (como mucho uno por segundo) |
+| `layer:ready`          | Capa completa con `tileset_url`                                  |
+| `layer:failed`         | Capa completa con `error`                                        |
+| `layer:deleted`        | `id`                                                             |
 
 Los eventos `layer:*` los produce el worker, otro proceso: llegan por `LISTEN/NOTIFY` de PostgreSQL a todas las réplicas de la API y de ahí a sus WebSockets. Si la conexión de escucha se corta, al recuperarla se envía `sync:required`.
 
