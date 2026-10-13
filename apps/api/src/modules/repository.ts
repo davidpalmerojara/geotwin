@@ -10,7 +10,8 @@ import type {
 import type { Database, Transaction } from '../db/pool.js';
 import { ORGANIZATION_ID } from '../config/env.js';
 export const assetColumns = `a.id,a.organization_id,a.installation_id,a.name,a.type,a.status,
- json_build_object('lat',ST_Y(a.location),'lng',ST_X(a.location)) AS location,a.created_at,a.updated_at`;
+ json_build_object('lat',ST_Y(a.location),'lng',ST_X(a.location)) AS location,a.mount_height_m,
+ a.created_at,a.updated_at`;
 export const alertColumns = `al.*,a.name AS asset_name`;
 type Queryable = Database | Transaction;
 // The search box matches literal text: % and _ are not wildcards for the user.

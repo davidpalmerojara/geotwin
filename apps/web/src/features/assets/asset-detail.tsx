@@ -23,7 +23,7 @@ import {
 import { api } from '../../lib/api';
 import { time, date } from '../../lib/utils';
 import { useAlerts, useHealth, useInstallations, useSync } from '../../hooks/data';
-import { assetTypeLabel, coordinates, metricLabel } from '../../lib/format';
+import { assetTypeLabel, coordinates, metricLabel, number } from '../../lib/format';
 import { Status, Loading, ErrorState, Empty } from '../../components/common';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../components/ui/dialog';
@@ -205,6 +205,7 @@ function AssetInspector({ id }: { id: string }) {
       <div className="coordinates">
         <MapPin size={13} />
         {coordinates(a.location.lat, a.location.lng)}
+        {a.mount_height_m > 0 && ` · a ${number(a.mount_height_m, 1)} m sobre el suelo`}
       </div>
       <div className="detail-section">
         <div className="detail-section-title">

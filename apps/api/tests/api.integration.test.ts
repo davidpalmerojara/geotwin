@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from 'vitest';
 import WebSocket from 'ws';
+import { z } from 'zod';
 import { connect } from 'node:net';
 import type { FastifyInstance } from 'fastify';
 import { createPool } from '../src/db/pool.js';
@@ -73,15 +74,15 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     );
   });
   it('performs spatial proximity in meters and returns true distances', async () => {
-    const nearby = await app.inject('/api/assets/nearby?lat=41.655&lng=-4.737&radius=500');
+    // Centre of the «Depósito elevado del cerro» installation: its six assets lie within 60 m.
+    const centre = 'lat=41.584019&lng=-4.710608';
+    const nearby = await app.inject(`/api/assets/nearby?${centre}&radius=100`);
     expect(nearby.json()).toHaveLength(6);
     for (const a of nearby.json()) {
       expect(a.distance_m).toBeGreaterThan(0);
-      expect(a.distance_m).toBeLessThan(500);
+      expect(a.distance_m).toBeLessThan(60);
     }
-    expect(
-      (await app.inject('/api/assets/nearby?lat=41.655&lng=-4.737&radius=50')).json(),
-    ).toHaveLength(0);
+    expect((await app.inject(`/api/assets/nearby?${centre}&radius=5`)).json()).toHaveLength(0);
     const asset = assetSchema.parse((await app.inject(`/api/assets/${assetId}`)).json());
     expect(
       (
@@ -115,7 +116,7 @@ describe('Real API and PostgreSQL/PostGIS', () => {
       expect(
         (await app.inject(`/api/assets?search=${encodeURIComponent(wildcard)}`)).json(),
       ).toHaveLength(0);
-    expect((await app.inject('/api/assets?search=pump')).json()).toHaveLength(3);
+    expect((await app.inject('/api/assets?search=PASARELA')).json()).toHaveLength(4);
   });
   it('persists one deterministic reading per sensor and tick', async () => {
     const events: RealtimeEvent[] = [];
@@ -510,7 +511,7 @@ describe('Real API and PostgreSQL/PostGIS', () => {
   });
   it('serves the organization and its place name from the database', async () => {
     const organization = organizationSchema.parse((await app.inject('/api/organization')).json());
-    expect(organization.region).toBe('Valladolid, España');
+    expect(organization.region).toBe('Laguna de Duero (Valladolid)');
   });
   it('returns the newest readings per asset in ascending time, per sensor when asked', async () => {
     const all = (await app.inject(`/api/assets/${assetId}/readings?limit=5`)).json();
@@ -542,6 +543,46 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     } finally {
       await secure.close();
     }
+  });
+  it('seeds Laguna de Duero by default: assets on measured places, mounting heights, levels', async () => {
+    const assets = z.array(assetSchema).parse((await app.inject('/api/assets')).json());
+    expect(assets).toHaveLength(18);
+    // Every asset inside the eight PNOA tiles loaded for the demo (X 355-358 km, Y 4603-4606 km).
+    for (const a of assets) {
+      expect(a.location.lng).toBeGreaterThan(-4.74);
+      expect(a.location.lng).toBeLessThan(-4.7);
+      expect(a.location.lat).toBeGreaterThan(41.56);
+      expect(a.location.lat).toBeLessThan(41.6);
+    }
+    const byName = (name: string) => assets.find((a) => a.name === name)!;
+    expect(byName('Pasarela LoRa · torre sur').mount_height_m).toBeCloseTo(41.9, 1);
+    expect(byName('Depósito elevado').mount_height_m).toBeCloseTo(33.1, 1);
+    expect(byName('Sonda de nivel · laguna').mount_height_m).toBe(0);
+    const probe = byName('Sonda de nivel · laguna');
+    const sensors = (await app.inject(`/api/sensors?asset_id=${probe.id}`)).json();
+    expect(
+      sensors.map((s: { metric_type: string; unit: string }) => [s.metric_type, s.unit]),
+    ).toEqual([
+      ['level', 'm'],
+      ['temperature', '°C'],
+    ]);
+    const installations = (await app.inject('/api/installations')).json();
+    expect(installations.map((i: { name: string }) => i.name).sort()).toEqual([
+      'Depósito elevado del cerro',
+      'Laguna y zona deportiva',
+      'Torrelago · torres residenciales',
+    ]);
+  });
+  it('keeps the Valladolid scenario available as a second seed', async () => {
+    await db.query('TRUNCATE organizations CASCADE');
+    await seed(db, 'valladolid');
+    const organization = organizationSchema.parse((await app.inject('/api/organization')).json());
+    expect(organization.region).toBe('Valladolid, España');
+    const assets = (await app.inject('/api/assets')).json();
+    expect(assets).toHaveLength(18);
+    expect(assets.every((a: { mount_height_m: number }) => a.mount_height_m === 0)).toBe(true);
+    expect((await app.inject('/api/sensors')).json()).toHaveLength(36);
+    await expect(seed(db, 'atlantis')).rejects.toThrow(/Unknown seed/);
   });
   it('reruns seeds without replacing readings or active incidents', async () => {
     await app.inject({

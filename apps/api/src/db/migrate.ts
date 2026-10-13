@@ -30,11 +30,25 @@ export async function migrate(db: Database) {
     }
   });
 }
-export async function seed(db: Database) {
+/** Demo scenarios in database/seeds (one SQL file each). Laguna de Duero is the default. */
+export const DEFAULT_SEED = 'laguna-de-duero';
+export async function seedNames() {
   const folder = fileURLToPath(new URL('../../../../database/seeds/', import.meta.url));
+  return (await readdir(folder))
+    .filter((f) => f.endsWith('.sql'))
+    .map((f) => f.slice(0, -4))
+    .sort();
+}
+/**
+ * Runs one demo scenario (idempotent: it only inserts what is missing). A database keeps the
+ * scenario it was first seeded with, because both share the same ids.
+ */
+export async function seed(db: Database, name = process.env.DEMO_SEED || DEFAULT_SEED) {
+  const names = await seedNames();
+  if (!names.includes(name))
+    throw new Error(`Unknown seed "${name}". Available: ${names.join(', ')}`);
+  const file = fileURLToPath(new URL(`../../../../database/seeds/${name}.sql`, import.meta.url));
   await transaction(db, async (client) => {
-    for (const name of (await readdir(folder)).filter((f) => f.endsWith('.sql')).sort()) {
-      await client.query(await readFile(`${folder}/${name}`, 'utf8'));
-    }
+    await client.query(await readFile(file, 'utf8'));
   });
 }

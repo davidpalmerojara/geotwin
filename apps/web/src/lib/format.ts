@@ -24,7 +24,9 @@ export const metricLabel = (metric: string) =>
       ? 'Vibración'
       : metric === 'pressure'
         ? 'Presión'
-        : metric;
+        : metric === 'level'
+          ? 'Nivel'
+          : metric;
 /** Two-letter initials for an organization badge. */
 export function initials(name: string) {
   const words = name.split(/\s+/).filter(Boolean);

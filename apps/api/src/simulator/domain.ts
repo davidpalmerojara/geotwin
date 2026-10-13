@@ -36,5 +36,6 @@ const metricLabels: Record<Sensor['metric_type'], string> = {
   temperature: 'Temperatura',
   vibration: 'Vibración',
   pressure: 'Presión',
+  level: 'Nivel',
 };
 export const metricLabel = (metric: Sensor['metric_type']) => metricLabels[metric];

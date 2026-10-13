@@ -47,6 +47,8 @@ services:
       HOST: 0.0.0.0
       PORT: 3001
       DEMO_MODE: ${DEMO_MODE:-true}
+      # Demo scenario seeded into a new database: laguna-de-duero (default) or valladolid.
+      DEMO_SEED: ${DEMO_SEED:-laguna-de-duero}
       SIMULATOR_ENABLED: ${SIMULATOR_ENABLED:-true}
       SIMULATOR_INTERVAL_MS: ${SIMULATOR_INTERVAL_MS:-5000}
       READINGS_RETENTION_HOURS: ${READINGS_RETENTION_HOURS:-24}
@@ -78,6 +80,8 @@ services:
       # Optional official geoid: put es_ign_egm08-rednap.tif in ./data/geoid (see README).
       GEOID_GRID_DIR: /opt/geoid
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+      LIDAR_EXCLUDE_CLASSES: ${LIDAR_EXCLUDE_CLASSES:-7,12,18}
+      DTM_CELL_M: ${DTM_CELL_M:-2}
     volumes: ['./data/geoid:/opt/geoid:ro']
     depends_on:
       # The API runs the migrations; the worker starts once they are applied.

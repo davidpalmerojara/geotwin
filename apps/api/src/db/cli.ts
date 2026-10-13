@@ -24,8 +24,8 @@ if (command === 'test') {
 const db = createPool(command === 'test' ? url : env.DATABASE_URL);
 try {
   if (command === 'migrate' || command === 'test') await migrate(db);
-  else if (command === 'seed') await seed(db);
-  else throw new Error('Usage: cli.ts migrate|seed|test');
+  else if (command === 'seed') await seed(db, process.argv[3]);
+  else throw new Error('Usage: cli.ts migrate|seed [laguna-de-duero|valladolid]|test');
   console.log(`Database ${command} complete`);
 } finally {
   await db.end();

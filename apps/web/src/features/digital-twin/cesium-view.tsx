@@ -72,6 +72,9 @@ const groundOf =
   (lng, lat) =>
     terrain ? terrainHeight(terrain, lng, lat) : 0;
 const colors = { healthy: '#34d399', warning: '#fbbf24', critical: '#fb7185' };
+// A ground asset gets a tall marker volume; one on a roof or tower top, a small one on top of it.
+const assetBox = (a: Asset) =>
+  a.mount_height_m > 0 ? new Cartesian3(7, 7, 5) : new Cartesian3(14, 14, 24);
 // Oblique view that fits every point on desktop and on a portrait phone, in the part of the map
 // that floating panels (the «Capas» panel) leave visible.
 function flyToPoints(v: Viewer, points: LatLng[], duration: number, ground: Ground) {
@@ -267,7 +270,7 @@ export default function CesiumView({
       if (existing) {
         existing.name = a.name;
         existing.position = new ConstantPositionProperty(
-          Cartesian3.fromDegrees(a.location.lng, a.location.lat, 0),
+          Cartesian3.fromDegrees(a.location.lng, a.location.lat, a.mount_height_m),
         );
         if (existing.point) existing.point.color = new ConstantProperty(color);
         if (existing.box) {
@@ -282,24 +285,26 @@ export default function CesiumView({
         v.entities.add({
           id,
           name: a.name,
-          position: Cartesian3.fromDegrees(a.location.lng, a.location.lat, 0),
+          // Height above the terrain: 0 on the ground, the roof for a rooftop gateway.
+          position: Cartesian3.fromDegrees(a.location.lng, a.location.lat, a.mount_height_m),
           point: {
-            heightReference: HeightReference.CLAMP_TO_TERRAIN,
+            heightReference: HeightReference.RELATIVE_TO_TERRAIN,
             pixelSize: 13,
             color,
             outlineColor: Color.WHITE,
             outlineWidth: 2,
             disableDepthTestDistance: Infinity,
           },
+          // Demo volume standing on the ground or on the mounting point (bottom at the position).
           box: {
-            heightReference: HeightReference.CLAMP_TO_TERRAIN,
-            dimensions: new Cartesian3(22, 22, 55),
+            heightReference: HeightReference.RELATIVE_TO_TERRAIN,
+            dimensions: assetBox(a),
             material: color.withAlpha(0.55),
             outline: true,
             outlineColor: color,
           },
           label: {
-            heightReference: HeightReference.CLAMP_TO_TERRAIN,
+            heightReference: HeightReference.RELATIVE_TO_TERRAIN,
             text: a.name,
             font: '13px sans-serif',
             show: selectedId === a.id,
@@ -383,7 +388,11 @@ export default function CesiumView({
     const entity = v.entities.getById(`asset:${selectedId}`)?.position?.getValue(JulianDate.now());
     if (!asset || !entity) return;
     const { lng, lat } = asset.location;
-    const position = Cartesian3.fromDegrees(lng, lat, groundRef.current(lng, lat));
+    const position = Cartesian3.fromDegrees(
+      lng,
+      lat,
+      groundRef.current(lng, lat) + asset.mount_height_m,
+    );
     v.camera.flyToBoundingSphere(new BoundingSphere(position, 60), {
       duration: 1,
       offset: new HeadingPitchRange(0, CesiumMath.toRadians(-45), 650),

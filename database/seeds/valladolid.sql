@@ -1,3 +1,4 @@
+-- Alternative demo scenario: Valladolid city (npm run db:seed -- valladolid, or DEMO_SEED=valladolid).
 -- Fictional facilities / assets at real geographic coordinates. All telemetry is simulated.
 INSERT INTO organizations(id,name,region) VALUES('00000000-0000-4000-8000-000000000001','Valladolid Infrastructure Lab','Valladolid, España')
 ON CONFLICT(id) DO UPDATE SET region=coalesce(organizations.region,excluded.region);

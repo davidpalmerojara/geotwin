@@ -11,6 +11,8 @@ export const assetSchema = z.object({
   type: z.enum(['pump', 'transformer', 'reservoir', 'gateway', 'valve', 'turbine']),
   status: assetStatus,
   location: locationSchema,
+  // Height of the mounting point above the ground in metres (0: at ground level).
+  mount_height_m: z.number().min(0),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -30,7 +32,7 @@ export const installationSchema = z.object({
 export const sensorSchema = z.object({
   id: uuid,
   asset_id: uuid,
-  metric_type: z.enum(['temperature', 'vibration', 'pressure']),
+  metric_type: z.enum(['temperature', 'vibration', 'pressure', 'level']),
   unit: z.string(),
   warning_threshold: z.number(),
   critical_threshold: z.number(),

@@ -12,6 +12,7 @@ const asset: Asset = {
   type: 'pump',
   status: 'healthy',
   location: { lat: 41.65, lng: -4.73 },
+  mount_height_m: 0,
   created_at: '2026-10-12T08:00:00.000Z',
   updated_at: '2026-10-12T08:00:00.000Z',
 };
