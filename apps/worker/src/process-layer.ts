@@ -36,6 +36,8 @@ export interface Deps {
     | 'GEOID_GRID_DIR'
     | 'GEOID_OFFSET_M'
     | 'LAYER_JOB_TIMEOUT_SECONDS'
+    | 'LIDAR_EXCLUDE_CLASSES'
+    | 'DTM_CELL_M'
   >;
   log: Logger;
 }
@@ -95,10 +97,19 @@ export async function processLayer(job: LayerJobContext, deps: Deps): Promise<Ou
   const gone = new AbortController();
   const signal = AbortSignal.any([job.signal, gone.signal]);
   const python = { python: env.LIDAR_PYTHON, script: env.LIDAR_SCRIPT, signal };
+  // Wall time of each stage, logged with the result (seconds).
+  const timings: Record<string, number> = {};
+  let mark = Date.now();
+  const lap = (stage: string) => {
+    const now = Date.now();
+    timings[stage] = Math.round((now - mark) / 100) / 10;
+    mark = now;
+  };
   try {
     const source = join(dir, `source.${layer.source_format}`);
     await report('downloading', 0);
     await storage.download(layer.source_key, source);
+    lap('download_s');
     await report('inspecting', 0);
     const info = inspectSchema.parse(
       await runLidarTool(
@@ -113,6 +124,7 @@ export async function processLayer(job: LayerJobContext, deps: Deps): Promise<Ou
       ),
     );
     await chain;
+    lap('inspect_s');
     const plan = planVertical({
       datum: layer.vertical_datum,
       layerOverride: layer.geoid_override_m,
@@ -123,24 +135,31 @@ export async function processLayer(job: LayerJobContext, deps: Deps): Promise<Ou
     log.info({ layerId: layer.id, plan, points: info.point_count }, 'Vertical datum plan');
     await report('tiling', 0);
     const out = join(dir, 'tiles');
-    await runLidarTool(
-      [
-        'convert',
-        source,
-        out,
-        '--crs-in',
-        info.crs_in,
-        '--jobs',
-        String(env.TILER_JOBS),
-        ...(plan.exact
-          ? ['--exact-geoid', '--grid-dir', env.GEOID_GRID_DIR ?? '']
-          : ['--z-offset', String(plan.offset_m)]),
-        ...(info.color_scale ? ['--color-scale', String(info.color_scale)] : []),
-        ...(env.TILER_CACHE_MB ? ['--cache-mb', String(env.TILER_CACHE_MB)] : []),
-      ],
-      { ...python, onProgress: (f) => queueReport('tiling', f) },
+    const converted = convertSchema.parse(
+      await runLidarTool(
+        [
+          'convert',
+          source,
+          out,
+          '--crs-in',
+          info.crs_in,
+          '--jobs',
+          String(env.TILER_JOBS),
+          ...(plan.exact
+            ? ['--exact-geoid', '--grid-dir', env.GEOID_GRID_DIR ?? '']
+            : ['--z-offset', String(plan.offset_m)]),
+          ...(info.color_scale ? ['--color-scale', String(info.color_scale)] : []),
+          ...(env.TILER_CACHE_MB ? ['--cache-mb', String(env.TILER_CACHE_MB)] : []),
+          '--exclude-classes',
+          env.LIDAR_EXCLUDE_CLASSES.join(','),
+          '--dtm-cell',
+          String(env.DTM_CELL_M),
+        ],
+        { ...python, onProgress: (f) => queueReport('tiling', f) },
+      ),
     );
     await chain;
+    lap('convert_s');
     await report('uploading', 0);
     // Each job writes to its own folder, so tile URLs never change content and can be cached
     // as immutable; a retry of the same job first clears what an earlier attempt left there.
@@ -156,8 +175,14 @@ export async function processLayer(job: LayerJobContext, deps: Deps): Promise<Ou
       queueReport('uploading', sent / total);
     });
     await chain;
+    lap('upload_s');
+    const excludedPoints = Object.values(converted.excluded).reduce((sum, n) => sum + n, 0);
     await repo.ready(layer.id, job.id, {
-      point_count: info.point_count,
+      // Points actually drawn; the classes left out are kept apart.
+      point_count: converted.points,
+      excluded_points: excludedPoints,
+      excluded_classes: Object.keys(converted.excluded).map(Number),
+      dtm_key: converted.dtm ? `${run}${converted.dtm.key}` : null,
       point_format: info.point_format & 0x3f,
       crs_in: info.crs_in,
       bbox: info.bbox,
@@ -175,7 +200,18 @@ export async function processLayer(job: LayerJobContext, deps: Deps): Promise<Ou
       ),
     );
     for (const old of runs) if (old !== run) await storage.deletePrefix(old);
-    log.info({ layerId: layer.id, files: files.length, bytes: total }, 'Layer ready');
+    log.info(
+      {
+        layerId: layer.id,
+        files: files.length,
+        bytes: total,
+        points: converted.points,
+        excluded: converted.excluded,
+        dtm: converted.dtm,
+        timings: { ...timings, ...converted.timings },
+      },
+      'Layer ready',
+    );
     return 'ready';
   } catch (error) {
     // Deleted meanwhile (DELETE also cancels the job, which aborts us): the API removed the row
@@ -219,6 +255,25 @@ const inspectSchema = z.object({
   center: z.object({ lng: z.number().min(-180).max(180), lat: z.number().min(-90).max(90) }),
   height_range: z.tuple([z.number(), z.number()]),
   grid_offset_m: z.number().nullable(),
+});
+
+// What `geotwin_lidar.py convert` reports on success (only the fields the worker uses).
+const convertSchema = z.object({
+  points: z.number().int().nonnegative(),
+  excluded: z.record(z.string(), z.number().int().nonnegative()),
+  dtm: z
+    .object({
+      key: z.string().regex(/^terrain\/[\w.-]+$/),
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+      min: z.number(),
+      max: z.number(),
+      cell_m: z.number(),
+      ground_points: z.number().int(),
+      measured_fraction: z.number(),
+    })
+    .nullable(),
+  timings: z.record(z.string(), z.number()).default({}),
 });
 
 async function listFiles(root: string) {

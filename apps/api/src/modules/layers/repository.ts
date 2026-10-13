@@ -16,18 +16,26 @@ const columns = `l.id, l.organization_id, l.name, l.kind, l.status, l.stage, l.p
     ELSE json_build_object('lat', ST_Y(l.center), 'lng', ST_X(l.center)) END AS center,
   CASE WHEN l.min_height_m IS NULL THEN NULL
     ELSE json_build_object('min', l.min_height_m, 'max', l.max_height_m) END AS height_range_m,
-  l.tileset_root_key, l.attribution, l.created_at, l.updated_at`;
-type LayerRow = Omit<Layer, 'tileset_url'> & { tileset_root_key: string | null };
+  CASE WHEN l.excluded_points IS NULL THEN NULL
+    ELSE json_build_object('points', l.excluded_points::float8,
+      'classes', coalesce(to_json(l.excluded_classes), '[]'::json)) END AS excluded,
+  l.tileset_root_key, l.dtm_key, l.attribution, l.created_at, l.updated_at`;
+type LayerRow = Omit<Layer, 'tileset_url' | 'terrain_url'> & {
+  tileset_root_key: string | null;
+  dtm_key: string | null;
+};
 
 /** Public URL of a stored tiles object: `layers/<id>/tiles/<run>/x` → `/api/layers/<id>/tiles/<run>/x`. */
 export function tilesUrl(id: string, key: string | null) {
   const prefix = `layers/${id}/tiles/`;
   return key?.startsWith(prefix) ? `/api/layers/${id}/tiles/${key.slice(prefix.length)}` : null;
 }
-function toLayer({ tileset_root_key, ...row }: LayerRow): Layer {
+function toLayer({ tileset_root_key, dtm_key, ...row }: LayerRow): Layer {
+  const ready = row.status === 'ready';
   return {
     ...row,
-    tileset_url: row.status === 'ready' ? tilesUrl(row.id, tileset_root_key) : null,
+    tileset_url: ready ? tilesUrl(row.id, tileset_root_key) : null,
+    terrain_url: ready ? tilesUrl(row.id, dtm_key) : null,
   };
 }
 export interface NewLayer {

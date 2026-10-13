@@ -37,6 +37,27 @@ export const workerEnvSchema = storageEnvSchema.extend({
   GEOID_GRID_DIR: z.preprocess(unset, z.string().optional()),
   // Forces one geoid undulation (m) for every layer without its own override. Optional.
   GEOID_OFFSET_M: optionalNumber,
+  // ASPRS classes left out of the tiles: low noise (7), PNOA strip-overlap points (12), high noise
+  // (18). Empty: keep every point.
+  LIDAR_EXCLUDE_CLASSES: z.preprocess(
+    (v) => (v === undefined ? '7,12,18' : v),
+    z
+      .string()
+      .regex(/^(\s*\d{1,3}\s*(,\s*\d{1,3}\s*)*)?$/, 'Lista de códigos ASPRS separados por comas')
+      .transform((v) => [
+        ...new Set(
+          v
+            .split(',')
+            .filter((c) => c.trim())
+            .map(Number),
+        ),
+      ]),
+  ),
+  // Cell of the ground model (DTM) built from class 2 and served as terrain; 0 disables it.
+  DTM_CELL_M: z.preprocess(
+    (v) => (v === '' || v === undefined ? undefined : v),
+    z.coerce.number().min(0).max(50).default(2),
+  ),
   LAYER_JOB_TIMEOUT_SECONDS: z.coerce.number().int().min(60).max(86400).default(1800),
   LAYER_JOB_RETRY_LIMIT: z.coerce.number().int().min(0).max(10).default(2),
 });

@@ -18,6 +18,10 @@ export interface LayerToProcess {
 }
 export interface ReadyLayer {
   point_count: number;
+  excluded_points: number;
+  excluded_classes: number[];
+  /** Storage key of the ground model's metadata (dtm.json), or null when there is no ground. */
+  dtm_key: string | null;
   point_format: number;
   crs_in: string;
   bbox: [number, number, number, number];
@@ -69,7 +73,8 @@ export class LayerRepository {
          point_count=$3, point_format=$4, crs_in=$5,
          bbox=ST_MakeEnvelope($6,$7,$8,$9,4326), center=ST_SetSRID(ST_MakePoint($10,$11),4326),
          min_height_m=$12, max_height_m=$13, geoid_offset_m=$14, geoid_method=$15,
-         tileset_root_key=$16, updated_at=now()
+         tileset_root_key=$16, excluded_points=$17, excluded_classes=$18, dtm_key=$19,
+         updated_at=now()
        WHERE id=$1 AND job_id=$2 AND status='processing' RETURNING id) ${notifyEvent('ready')}`,
       [
         id,
@@ -84,6 +89,9 @@ export class LayerRepository {
         meta.geoid_offset_m,
         meta.geoid_method,
         meta.tileset_root_key,
+        meta.excluded_points,
+        meta.excluded_classes,
+        meta.dtm_key,
       ],
     );
     if (result.rowCount !== 1) throw new LayerGoneError(id);

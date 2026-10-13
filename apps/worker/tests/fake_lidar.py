@@ -63,4 +63,25 @@ else:
     for f in os.environ.get("FAKE_LIDAR_TILING", "0.3,0.9").split(","):
         time.sleep(float(os.environ.get("FAKE_LIDAR_PAUSE", "0")))
         emit("progress", stage="tiling", fraction=float(f))
-    emit("result", tileset="tileset.json", files=["points/r.pnts", "tileset.json"], bytes=92)
+    (out / "terrain").mkdir()
+    (out / "terrain" / "dtm.json").write_text('{"version":1}')
+    (out / "terrain" / "dtm.bin").write_bytes(bytes(8))
+    emit(
+        "result",
+        tileset="tileset.json",
+        files=["points/r.pnts", "terrain/dtm.bin", "terrain/dtm.json", "tileset.json"],
+        bytes=113,
+        points=5000,
+        excluded={"7": 40, "12": 500},
+        dtm={
+            "key": "terrain/dtm.json",
+            "width": 2,
+            "height": 2,
+            "min": 752.1,
+            "max": 763.7,
+            "cell_m": 2.0,
+            "ground_points": 2953,
+            "measured_fraction": 0.81,
+        },
+        timings={"prepare_s": 0.1, "tiling_s": 0.2, "dtm_s": 0.0},
+    )

@@ -9,7 +9,13 @@ import WebSocket from 'ws';
 import { PgBoss } from 'pg-boss';
 import type { FastifyInstance } from 'fastify';
 import { LocalStorage } from '@geotwin/storage';
-import { LAYER_QUEUE, layerSchema, realtimeEventSchema, type RealtimeEvent } from '@geotwin/shared';
+import {
+  dtmMetaSchema,
+  LAYER_QUEUE,
+  layerSchema,
+  realtimeEventSchema,
+  type RealtimeEvent,
+} from '@geotwin/shared';
 import { createPool } from '../../api/src/db/pool.js';
 import { migrate, seed } from '../../api/src/db/migrate.js';
 import { buildApp } from '../../api/src/app.js';
@@ -122,6 +128,8 @@ beforeAll(async () => {
         GEOID_GRID_DIR: hasGrid ? gridDir : undefined,
         GEOID_OFFSET_M: undefined,
         LAYER_JOB_TIMEOUT_SECONDS: 120,
+        LIDAR_EXCLUDE_CLASSES: [7, 12, 18],
+        DTM_CELL_M: 2,
       },
     },
     { timeoutSeconds: 120, retryLimit: 1, concurrency: 1 },
@@ -203,6 +211,24 @@ describe.skipIf(!pythonReady)('LiDAR pipeline: upload → queue → worker → 3
     expect(again.status).toBe(304);
     const list = await (await fetch(`${base}/api/layers`)).json();
     expect(list.map((l: { id: string }) => l.id)).toEqual([layer.id]);
+    // Nothing of the synthetic tile is noise or overlap; its ground (class 2) became a DTM.
+    expect(layer.excluded).toEqual({ points: 0, classes: [] });
+    expect(layer.terrain_url).toMatch(
+      new RegExp(`^/api/layers/${layer.id}/tiles/[0-9a-f-]{36}/terrain/dtm\\.json$`),
+    );
+    const meta = dtmMetaSchema.parse(await (await fetch(base + layer.terrain_url)).json());
+    const heights = Buffer.from(
+      await (await fetch(new URL(meta.data, base + layer.terrain_url))).arrayBuffer(),
+    );
+    expect(heights.length).toBe(meta.width * meta.height * 2);
+    const centre = heights.readUInt16LE(
+      2 * (Math.floor(meta.height / 2) * meta.width + Math.floor(meta.width / 2)),
+    );
+    // Synthetic ground: 700 m ± 1.3 m orthometric, plus the geoid undulation.
+    const n = layer.vertical.geoid_offset_m!;
+    expect(meta.offset + centre * meta.scale).toBeGreaterThan(698.6 + n);
+    expect(meta.offset + centre * meta.scale).toBeLessThan(701.4 + n);
+    expect(meta.ground_points).toBe(2953);
   }, 90000);
 
   it('answers 409 for a file that is already a layer and keeps one copy', async () => {

@@ -81,6 +81,8 @@ function deps(repo: FakeRepo, overrides: Partial<Deps['env']> = {}): Deps {
       GEOID_GRID_DIR: undefined,
       GEOID_OFFSET_M: undefined,
       LAYER_JOB_TIMEOUT_SECONDS: 1800,
+      LIDAR_EXCLUDE_CLASSES: [7, 12, 18],
+      DTM_CELL_M: 2,
       ...overrides,
     },
   };
@@ -120,20 +122,29 @@ describe('Layer job state machine', () => {
       .map((l) => Number(l.split(':')[2]));
     expect(values).toEqual([...values].sort((a, b) => a - b));
     const ready = JSON.parse(repo.log.at(-1)!.slice('ready:'.length));
+    const run = `layers/${LAYER}/tiles/22222222-2222-4222-8222-222222222222/`;
     expect(ready).toMatchObject({
-      point_count: 5540,
+      // Points drawn (the converter's count after leaving out noise and overlap), not the file's.
+      point_count: 5000,
+      excluded_points: 540,
+      excluded_classes: [7, 12],
+      dtm_key: `${run}terrain/dtm.json`,
       point_format: 7, // LAZ bit stripped
       geoid_method: 'egm96_centre',
-      tileset_root_key: `layers/${LAYER}/tiles/22222222-2222-4222-8222-222222222222/tileset.json`,
+      tileset_root_key: `${run}tileset.json`,
     });
     expect(ready.geoid_offset_m).toBeCloseTo(53.6, 1);
     // The constant correction reaches the converter, the temp folder is gone, tiles are stored.
     const args = JSON.parse(await readFile(argsFile, 'utf8'));
     expect(args).toContain('--z-offset');
     expect(args[args.indexOf('--z-offset') + 1]).toBe(String(ready.geoid_offset_m));
+    expect(args[args.indexOf('--exclude-classes') + 1]).toBe('7,12,18');
+    expect(args[args.indexOf('--dtm-cell') + 1]).toBe('2');
     expect(await storage.list(`layers/${LAYER}/tiles/`)).toEqual([
-      `layers/${LAYER}/tiles/22222222-2222-4222-8222-222222222222/points/r.pnts`,
-      `layers/${LAYER}/tiles/22222222-2222-4222-8222-222222222222/tileset.json`,
+      `${run}points/r.pnts`,
+      `${run}terrain/dtm.bin`,
+      `${run}terrain/dtm.json`,
+      `${run}tileset.json`,
     ]);
     expect(existsSync(join(dir, `geotwin-layer-${LAYER}-`))).toBe(false);
   });
@@ -154,7 +165,7 @@ describe('Layer job state machine', () => {
     await processLayer(job(), deps(new FakeRepo('failed')));
     const keys = await storage.list(`layers/${LAYER}/tiles/`);
     expect(keys.some((k) => k.includes('old-run'))).toBe(false);
-    expect(keys).toHaveLength(2);
+    expect(keys).toHaveLength(4); // tileset, one .pnts and the DTM (metadata + heights)
   });
   it('skips a layer that is already ready or no longer exists (idempotent re-delivery)', async () => {
     const ready = new FakeRepo('ready');

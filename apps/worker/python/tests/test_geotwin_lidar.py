@@ -182,6 +182,102 @@ def test_multi_chunk_laz_does_not_hang(tmp_path):
     assert len(leaf_points(out)[0]) == 120_000
 
 
+def read_dtm(out: Path) -> tuple[dict, np.ndarray]:
+    meta = json.loads((out / "terrain" / "dtm.json").read_text())
+    raw = np.frombuffer((out / "terrain" / meta["data"]).read_bytes(), "<u2")
+    grid = raw.reshape(meta["height"], meta["width"]).astype(float)
+    return meta, np.where(grid == meta["nodata"], np.nan, meta["offset"] + grid * meta["scale"])
+
+
+def test_fill_gaps_keeps_measured_cells_and_bridges_holes_smoothly():
+    yy, xx = np.mgrid[0:64, 0:80].astype(float)
+    plane = 700 + 0.05 * xx - 0.03 * yy
+    valid = np.ones(plane.shape, bool)
+    valid[20:45, 30:60] = False  # a "lake" of 25 x 30 cells with no ground returns
+    valid[5, 5] = False
+    filled = tool.fill_gaps(np.where(valid, plane, 0.0), valid)
+    assert np.array_equal(filled[valid], plane[valid])
+    # A tilted plane is rebuilt inside the hole to within 25 cm.
+    assert np.abs(filled[~valid] - plane[~valid]).max() < 0.25
+    assert np.isfinite(filled).all()
+
+
+def test_ground_grid_averages_class_2_per_cell():
+    grid = tool.GroundGrid([100.0, 200.0, 0], [110.0, 210.0, 0], 2.0)
+    assert (grid.nx, grid.ny, grid.x0, grid.y1) == (5, 5, 100.0, 210.0)
+    grid.add(np.array([100.5, 101.5, 109.9]), np.array([209.5, 208.5, 200.1]), np.array([1.0, 3.0, 7.0]))
+    heights, measured = grid.heights()
+    assert heights[0, 0] == 2.0  # mean of the two points in the north-west cell
+    assert heights[4, 4] == 7.0 and measured.sum() == 2
+
+
+def test_convert_drops_overlap_points_and_writes_a_dtm(tmp_path):
+    las = laspy.read(FIXTURES / "synthetic-laguna-duero.las")
+    classes = np.asarray(las.classification).copy()
+    classes[classes == 5] = 12  # pretend the vegetation were PNOA strip-overlap points
+    las.classification = classes
+    source = tmp_path / "overlap.las"
+    las.write(source)
+    out = tmp_path / "tiles"
+    result = tool.convert(
+        source, out, "EPSG:25830", 53.6, False, None, 1, None, exclude_classes={7, 12}, dtm_cell=2.0
+    )
+    assert result["points"] == 5540 - 840
+    assert result["excluded"] == {"12": 840}
+    ecef, _, tiled = leaf_points(out)
+    assert len(ecef) == 4700 and 12 not in set(np.unique(tiled))
+    assert "terrain/dtm.json" in result["files"] and result["dtm"]["ground_points"] == 2953
+    meta, heights = read_dtm(out)
+    assert meta["heights"] == "ellipsoidal" and meta["cell_m"] == 2.0
+    # The synthetic ground is 700 m +- 1.3 m orthometric (the pond is class 9, not ground).
+    inner = heights[np.isfinite(heights)]
+    assert inner.min() > 698.6 + 53.6 and inner.max() < 701.4 + 53.6
+    # Node next to a ground point: the DTM is that point's ellipsoidal height within ~10 cm.
+    ground = classes == 2
+    to_geo = Transformer.from_crs("EPSG:25830", "EPSG:4326", always_xy=True)
+    lon, lat = to_geo.transform(np.asarray(las.x)[ground], np.asarray(las.y)[ground])
+    col = np.round((np.asarray(lon) - meta["west"]) / (meta["east"] - meta["west"]) * (meta["width"] - 1)).astype(int)
+    row = np.round((meta["north"] - np.asarray(lat)) / (meta["north"] - meta["south"]) * (meta["height"] - 1)).astype(int)
+    diff = heights[row, col] - (np.asarray(las.z)[ground] + 53.6)
+    assert np.nanmedian(np.abs(diff)) < 0.1
+    # The source file itself is left untouched (the dropped points went to a temporary copy).
+    assert laspy.read(source).header.point_count == 5540
+    assert not (tmp_path / "tiles-work").exists()
+
+
+def test_convert_without_ground_writes_no_dtm(tmp_path):
+    las = laspy.read(FIXTURES / "synthetic-laguna-duero.las")
+    las.classification = np.ones(len(las.points), np.uint8)  # all "unclassified"
+    source = tmp_path / "flat.las"
+    las.write(source)
+    out = tmp_path / "tiles"
+    result = tool.convert(source, out, "EPSG:25830", 53.6, False, None, 1, None, dtm_cell=2.0)
+    assert result["dtm"] is None and result["excluded"] == {}
+    assert not (out / "terrain").exists()
+
+
+def test_everything_excluded_is_a_permanent_error(tmp_path):
+    las = laspy.read(FIXTURES / "synthetic-laguna-duero.las")
+    las.classification = np.full(len(las.points), 12, np.uint8)
+    source = tmp_path / "all-overlap.las"
+    las.write(source)
+    with pytest.raises(tool.InputError) as error:
+        tool.convert(source, tmp_path / "tiles", "EPSG:25830", 53.6, False, None, 1, None, exclude_classes={12})
+    assert error.value.code == "NO_POINTS_LEFT"
+
+
+@pytest.mark.skipif(not HAS_GRID, reason="needs es_ign_egm08-rednap.tif in GEOID_GRID_DIR")
+def test_dtm_uses_the_official_grid_like_the_points(tmp_path):
+    source = tmp_path / "source.las"
+    shutil.copy(FIXTURES / "synthetic-laguna-duero.las", source)
+    out = tmp_path / "tiles"
+    tool.convert(source, out, "EPSG:25830", None, True, GRID_DIR, 1, None, dtm_cell=2.0)
+    meta, heights = read_dtm(out)
+    inner = heights[np.isfinite(heights)]
+    # Same correction as the points: N = 53.106 m here.
+    assert inner.min() > 698.6 + 53.08 and inner.max() < 701.4 + 53.13
+
+
 def test_progress_never_goes_backwards(capsys, monkeypatch):
     clock = iter(range(0, 100))
     monkeypatch.setattr(tool.time, "monotonic", lambda: float(next(clock)))

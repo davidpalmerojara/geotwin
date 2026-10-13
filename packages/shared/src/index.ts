@@ -157,7 +157,12 @@ export const layerSchema = z.object({
   center: locationSchema.nullable(),
   // Heights as stored in the source file (orthometric for PNOA).
   height_range_m: z.object({ min: z.number(), max: z.number() }).nullable(),
+  // Points left out of the tiles by ASPRS class (PNOA overlap 12, noise 7 and 18); null until
+  // processed.
+  excluded: z.object({ points: z.number().int(), classes: z.array(z.number().int()) }).nullable(),
   tileset_url: z.string().nullable(),
+  // Ground model built from class 2 (dtm.json: metadata, then its heights); null if no ground.
+  terrain_url: z.string().nullable(),
   attribution: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -180,6 +185,34 @@ export const layerLimitsSchema = z.object({
   max_upload_bytes: z.number().int().positive(),
   formats: z.array(z.enum(['las', 'laz'])),
   extensions: z.array(z.string()),
+});
+// Ground model of a layer (`terrain/dtm.json`, written by the worker): heights are ellipsoidal,
+// on a regular longitude/latitude grid (row 0 north, column 0 west), stored in `data` as
+// little-endian uint16 steps: h = offset + value * scale; `nodata` outside the source extent.
+export const dtmMetaSchema = z.object({
+  version: z.literal(1),
+  encoding: z.literal('uint16le'),
+  heights: z.literal('ellipsoidal'),
+  width: z.number().int().min(2).max(8192),
+  height: z.number().int().min(2).max(8192),
+  west: z.number().min(-180).max(180),
+  south: z.number().min(-90).max(90),
+  east: z.number().min(-180).max(180),
+  north: z.number().min(-90).max(90),
+  offset: z.number(),
+  scale: z.number().positive(),
+  nodata: z.number().int(),
+  min: z.number(),
+  max: z.number(),
+  cell_m: z.number().positive(),
+  // Corners of the source extent (lng, lat): the area the grid really covers.
+  footprint: z
+    .array(z.tuple([z.number(), z.number()]))
+    .min(3)
+    .max(16),
+  ground_points: z.number().int().nonnegative(),
+  measured_fraction: z.number().min(0).max(1),
+  data: z.string().regex(/^[\w.-]+$/),
 });
 export const layerTileParams = z.object({ id: uuid, '*': z.string().min(1).max(512) });
 // Queue contract shared by the API (producer) and the worker (consumer).
@@ -231,6 +264,7 @@ export type AssetStatus = z.infer<typeof assetStatus>;
 export type Layer = z.infer<typeof layerSchema>;
 export type LayerProgress = z.infer<typeof layerProgressSchema>;
 export type LayerLimits = z.infer<typeof layerLimitsSchema>;
+export type DtmMeta = z.infer<typeof dtmMetaSchema>;
 export type LayerStage = z.infer<typeof layerStage>;
 export type GeoidMethod = z.infer<typeof geoidMethod>;
 export type LayerJob = z.infer<typeof layerJobSchema>;
