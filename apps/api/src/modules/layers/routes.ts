@@ -93,8 +93,10 @@ export function registerLayerRoutes(
     async (req, reply) => {
       const declared = Number(req.headers['content-length']);
       // Multipart framing adds a few hundred bytes; reject obvious oversizes before reading.
-      if (Number.isFinite(declared) && declared > maxUploadBytes + 64 * 1024)
+      if (Number.isFinite(declared) && declared > maxUploadBytes + 64 * 1024) {
+        reply.header('Connection', 'close');
         throw tooLarge(maxUploadBytes);
+      }
       if (!req.isMultipart())
         throw new AppError(
           415,
@@ -121,10 +123,14 @@ export function registerLayerRoutes(
       const sourceKey = `layers/${id}/source`;
       const inspector = new LasUploadInspector();
       part.file.on('error', (error) => inspector.destroy(error));
+      // The storage driver attaches its own handlers asynchronously; never leave an error unheard.
+      inspector.on('error', () => undefined);
       try {
         await storage.put(sourceKey, part.file.pipe(inspector), 'application/octet-stream');
         if (part.file.truncated) throw tooLarge(maxUploadBytes);
       } catch (error) {
+        // The rest of the body was not read: close the connection instead of reusing it.
+        reply.header('Connection', 'close');
         await storage.delete(sourceKey).catch(() => undefined);
         if (error instanceof LasFormatError)
           throw new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', error.message);
