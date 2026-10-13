@@ -6,6 +6,7 @@ test('dashboard → 3D twin → persisted anomaly → resolved incident', async 
   context,
 }) => {
   const assetId = '20000000-0000-4000-8000-000000000001';
+  const installationId = '10000000-0000-4000-8000-000000000001';
   // Re-runnable: clear incidents only on this dedicated fixture asset.
   const current = await request.get(`/api/alerts?asset_id=${assetId}&status=active`);
   for (const alert of await current.json()) await request.patch(`/api/alerts/${alert.id}/resolve`);
@@ -36,13 +37,13 @@ test('dashboard → 3D twin → persisted anomaly → resolved incident', async 
   await page.locator('.cesium-widget canvas').evaluate((canvas) => {
     canvas.dataset.probe = 'same-viewer';
   });
-  await page
-    .getByLabel('Seleccionar instalación')
-    .selectOption('10000000-0000-4000-8000-000000000001');
+  await page.getByLabel('Seleccionar instalación').selectOption(installationId);
   await expect(page.locator('.cesium-widget canvas')).toHaveAttribute('data-probe', 'same-viewer');
   await expect(page.locator('.map-top')).toContainText('Local');
   await page.getByTestId(`map-asset-${assetId}`).click();
   await expect(page.getByRole('heading', { name: 'Sensores del activo' })).toBeVisible();
+  const link = `/gemelo?instalacion=${installationId}&activo=${assetId}`;
+  await expect(page).toHaveURL((url) => `${url.pathname}${url.search}` === link);
   await page.getByRole('button', { name: 'Simular fallo', exact: true }).click();
   await expect(page.locator('.detail-panel .status-critical')).toContainText('Crítico');
   // Observer has no mutation invalidation: this update must arrive through realtime.
@@ -84,5 +85,15 @@ test('dashboard → 3D twin → persisted anomaly → resolved incident', async 
   await expect(page.getByRole('heading', { name: 'Cada señal, una acción' })).toBeVisible();
   if (process.env.CAPTURE_DEMO)
     await page.screenshot({ path: 'docs/screenshots/mobile.png', fullPage: true });
+  // A shared link opens the same installation and asset; Back returns to the previous page.
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(link);
+  await expect(page.getByRole('heading', { name: 'Sensores del activo' })).toBeVisible();
+  await expect(page.getByLabel('Seleccionar instalación')).toHaveValue(installationId);
+  await page.getByRole('button', { name: 'Alertas', exact: true }).click();
+  await expect(page).toHaveURL(/\/alertas\?/);
+  await page.goBack();
+  await expect(page).toHaveURL((url) => `${url.pathname}${url.search}` === link);
+  await expect(page.getByRole('heading', { name: 'Sensores del activo' })).toBeVisible();
   expect(errors).toEqual([]);
 });

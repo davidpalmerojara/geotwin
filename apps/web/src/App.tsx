@@ -13,10 +13,12 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
+import { useEffect } from 'react';
 import { useUI, type Page } from './stores/ui';
 import { useInstallations, useOrganization, useSummary } from './hooks/data';
 import { count, initials } from './lib/format';
 import { useRealtime } from './hooks/realtime';
+import { useRouteSync } from './hooks/route';
 import { Dashboard } from './features/dashboard/dashboard';
 import { Twin } from './features/digital-twin/twin';
 import { Assets } from './features/assets/assets';
@@ -31,6 +33,7 @@ const nav: [Page, string, typeof Box][] = [
 ];
 export default function App() {
   useRealtime();
+  useRouteSync();
   const page = useUI((s) => s.page),
     setPage = useUI((s) => s.setPage),
     connection = useUI((s) => s.connection),
@@ -39,12 +42,18 @@ export default function App() {
   const installations = useInstallations(),
     summary = useSummary(),
     organization = useOrganization().data;
+  // A shared link may name an installation that no longer exists: show the whole network.
+  const unknownInstallation =
+    !!installationId && !!installations.data?.every((i) => i.id !== installationId);
+  useEffect(() => {
+    if (unknownInstallation) setInstallation('');
+  }, [unknownInstallation, setInstallation]);
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <a
           className="brand"
-          href="#"
+          href="/"
           onClick={(e) => {
             e.preventDefault();
             setPage('overview');
