@@ -22,6 +22,7 @@ Swagger UI: `/api/docs/`. Contrato OpenAPI: `/api/openapi.json`. Las fechas se t
 | `GET /api/docs`                  | —                                                    | Swagger UI (redirección a `/api/docs/`)                |
 | `GET /api/layers`                | —                                                    | Capas LiDAR, de la más reciente a la más antigua       |
 | `POST /api/layers`               | multipart `file` (LAS/LAZ) + opciones en la query    | Capa en cola; 201. 409, 413 o 415 si no se acepta      |
+| `GET /api/layers/limits`         | —                                                    | Formatos aceptados y límite de subida en bytes         |
 | `GET /api/layers/:id`            | UUID                                                 | Estado, progreso y metadatos de la capa                |
 | `POST /api/layers/:id/reprocess` | `{ "geoid_offset_m"?: number \| null }`              | Vuelve a encolar una capa `ready` o `failed`; 202      |
 | `DELETE /api/layers/:id`         | UUID                                                 | Borra la capa, cancela su job y sus objetos; 204       |

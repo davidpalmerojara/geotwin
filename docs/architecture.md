@@ -22,6 +22,7 @@ flowchart LR
   Worker -->|NOTIFY| DB
   DB -->|LISTEN| Hub
   Shared -.-> Worker
+  Cesium -->|3D Tiles de las capas| API
 ```
 
 ## Límites de módulos
@@ -135,6 +136,18 @@ Una trampa: si falta la rejilla, PROJ no falla, sino que usa una transformación
 React crea y destruye Viewer y manejadores para evitar fugas y contextos WebGL acumulados. El visor nunca depende del estado de las consultas: cambiar de instalación no lo desmonta, así que se conservan la capa base, el relieve y los edificios. Assets son entidades reales del motor, actualizadas sin reconstruir el visor. La cámara encuadra una esfera que contiene los activos y las instalaciones visibles, con un margen del 20 % (entre 120 y 450 m) para que la red completa conserve sitio para sus etiquetas y una sola instalación llene la vista; la distancia se calcula con el campo de visión del eje más estrecho, que en un móvil vertical es el horizontal. El picking al mover el ratón se limita a uno por fotograma y el tooltip se mueve por DOM, sin renderizar React. Los colores proceden del mismo estado REST que usa el inspector. La selección geoespacial usa `scene.pick`, y la selección desde lista comparte el mismo ID de interfaz.
 
 PNOA y el globo elipsoidal no invocan ion. La capa Natural Earth local da continuidad básica sin red. Buildings se activa junto con Cesium World Terrain, con token y errores visibles. Si falla la lectura del terreno, no se añade el tileset de edificios sobre el elipsoide. Activos y etiquetas usan CLAMP_TO_TERRAIN; las áreas se clasifican sobre el terreno. Se conserva la elevación original del tileset OSM, sin traslaciones artificiales. Se conservan créditos cartográficos. Integración de recursos basada en la [documentación oficial de Cesium](https://cesium.com/blog/2024/02/13/configuring-vite-or-webpack-for-cesiumjs/); consulta espacial según [ST_DWithin](https://postgis.net/docs/ST_DWithin.html).
+
+### Capas y medición en el visor
+
+El panel **Capas** (`features/layers/layers-panel.tsx`) forma parte del bundle principal y no importa Cesium: habla con la API (`GET /api/layers`, `GET /api/layers/limits`, subida multipart con `XMLHttpRequest` para tener progreso, `DELETE`) y guarda en un store de Zustand solo el estado de presentación (capas ocultas, modo de color, clases, tamaño de punto, calidad, petición de vuelo). La lista de capas vive en la caché de TanStack Query y la mantienen al día los eventos `layer:*` (alta, progreso, lista, error, borrado), sin sondeo.
+
+Dentro del chunk de Cesium, `features/layers/point-cloud-layers.ts` sincroniza ese estado con el visor: crea un `Cesium3DTileset` por capa lista y visible (las ocultas no descargan teselas hasta mostrarse), lo destruye al borrarla o cuando un reproceso cambia la URL, y aplica estilo, sombreado y calidad. Los estilos los construyen funciones puras (`point-style.ts`) que devuelven el JSON de `Cesium3DTileStyle`; las pruebas compilan esas expresiones al GLSL que usa Cesium para nubes de puntos. Un estilo idéntico no se reaplica, porque reestilar recompila el shader.
+
+- **Altura en el shader.** El estilo no tiene la altura del punto, solo su posición ECEF (`${POSITION_ABSOLUTE}`). Con la normal geodésica n en el centro de la capa, un punto a altura h sobre esa normal cumple `dot(P, n) = a·sqrt(1 − e²·sin²φ) + h`; a 500 m del centro el error es la curvatura, d²/2R ≈ 2 cm. La posición llega al shader en float32 (unos 0,5 m de resolución a 6.400 km del centro de la Tierra): suficiente para una rampa de color, no para medir.
+- **Globo básico.** Sin relieve 3D el globo es el elipsoide y la nube flotaría su altura elipsoidal entera (unos 750 m en Laguna de Duero). Se baja con una traslación a lo largo de n hasta que su punto más bajo toca el elipsoide, y la expresión de altura suma ese desplazamiento para seguir leyendo alturas reales. La casilla «Altura real» y el relieve de ion la desactivan.
+- **Tamaño de los puntos.** La atenuación de Cesium usa el error geométrico de la tesela; py3dtiles lo deja a 0 en las hojas y Cesium lo estimaba con el volumen de la caja, casi plana en un terreno llano, de modo que los puntos salían de un píxel. Como `baseResolution` se usa la separación media de la capa, calculada con su huella y su número de puntos (0,45 m en una hoja PNOA cob3).
+
+La herramienta **Medir** (`features/measure`) es otro chunk diferido (7 kB). Toma puntos con `scene.pickPosition` (profundidad de lo dibujado; elipsoide si no hay nada) y calcula en `geodesy.ts`: suma de cuerdas 3D, geodésicas con `EllipsoidGeodesic`, desnivel por altura elipsoidal y área horizontal en el plano tangente del centroide tras llevar los vértices a h = 0. Mientras está abierta, el clic del mapa añade puntos en lugar de seleccionar activos. Las líneas y polígonos de entidades se construyen de forma asíncrona y en `requestRenderMode` Cesium no pide un fotograma al terminar, así que la herramienta pide fotogramas durante un segundo tras cada cambio.
 
 ## Por qué estas decisiones
 

@@ -66,10 +66,36 @@ Lo que cubren las pruebas nuevas:
 - **Python (pytest).** Lectura de cabecera, CRS y clases; CRS por defecto si el fichero no lo trae; LAZ truncado y fichero no LAS con error legible; coordenadas que no encajan con el CRS; desplazamiento de alturas por cabecera; conversión real con RGB, clasificación y alturas elipsoidales comprobadas al centímetro; ruta exacta con la rejilla; LAZ de varios bloques sin bloqueo.
 - **Integración.** Subida → cola → worker → `ready` con progreso por WebSocket, metadatos, cabeceras de caché, `ETag` y 304; duplicado 409; tipo por contenido 415; tamaño 413 con y sin `Content-Length`; LAZ dañado → `failed` con mensaje legible; reproceso con y sin ondulación manual y URL nueva; borrado de fila y objetos con evento; rutas de teselas que intentan salir de la carpeta; OpenAPI del multipart.
 
+## Capas en el visor y medición (rama `feat/lidar-layer`)
+
+Rama que fusiona `fix/review` y `feat/lidar-pipeline` y añade el panel Capas y la herramienta Medir. Entorno local del 13/10/2026: Node 22.22, PostgreSQL 16.13 + PostGIS 3.4.2 nativos, Python 3.13 con los requisitos del worker y la rejilla EGM08-REDNAP, Chromium 141 (build 1194) con SwiftShader, atlas local (sin ortofoto PNOA). Todas las nubes son **sintéticas**.
+
+| Fecha      | Revisión  | Entorno                                                 | Comprobación                                                                                                                                                                                  | Resultado |
+| ---------- | --------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 13/10/2026 | rama      | Local                                                   | Lint, formato, tipos; `npm test` 81/81 (15 ficheros); `npm run test:integration` 37/37 (+1 de S3 sin servidor); `pytest` 13/13; `npm audit --omit=dev` sin vulnerabilidades                   | Correcto  |
+| 13/10/2026 | rama      | Local                                                   | `npm run build`: el panel Capas va en el bundle principal; la herramienta Medir es un chunk aparte de 7 kB que se descarga al abrirla; el chunk de Cesium sigue en 4,17 MB (1,12 MB con gzip) | Correcto  |
+| 13/10/2026 | rama      | Local, `npm run test:e2e` con API, worker y Vite reales | 2/2: el flujo anterior y la subida de la nube sintética por el panel hasta verla en el mapa, con estilos, medición y borrado                                                                  | Correcto  |
+| 13/10/2026 | `70b5cc8` | GitHub Actions                                          | Jobs `checks` (con el nuevo E2E y su worker) y `docker`                                                                                                                                       | Correcto  |
+
+En el navegador, a 1440×900 y 390×844, con la nube sintética de 5.540 puntos:
+
+- La capa pasa de _En cola_ a _Lista_ en unos 4 s; el panel recibe el progreso por WebSocket y la lista de capas no se vuelve a pedir por REST (el E2E lo comprueba).
+- RGB, altura y clasificación se ven como se espera: suelo, dos edificios, una fila de árboles y una charca. La leyenda de altura marca 751,6-763,2 m elipsoidales (altitudes del fichero + N = 53,11 m de la rejilla oficial).
+- Medición del tejado del edificio grande al suelo de al lado: 33,0 m en 3D, 31,8 m en horizontal y −9,01 m de desnivel. Las fórmulas se comprueban aparte contra GeographicLib.
+- Con la nube visible se siguen seleccionando activos desde el mapa y desde la lista, y un clic sobre la nube (sin la herramienta abierta) no selecciona nada ni da errores.
+- Hoja **sintética** de tamaño real (12 M de puntos, LAZ de 86,5 MB, 1 × 1 km): subida por la API en 1 s, lista en 79 s y 187 MB de teselas. En el visor (SwiftShader, sin GPU), la vista general cargó 127 respuestas de teselas (3,2 MB) en unos 11 s; tras acercar tres veces y pasar a calidad alta, 343 respuestas y 8,1 MB en total, con unos 210 MB de memoria JavaScript. Solo se descargan los niveles de detalle que pide la vista ([captura](screenshots/lidar-12m.png)).
+- Sin desbordamiento horizontal en ninguno de los dos tamaños. En el móvil el panel se pliega bajo el mapa, y el mapa crece mientras se mide para que la herramienta no tape lo medido.
+
+Fallos encontrados y corregidos durante esta verificación:
+
+- **Puntos de un píxel.** py3dtiles deja a 0 el error geométrico de las teselas hoja y Cesium lo estimaba con el volumen de una caja casi plana: el suelo se dibujaba con puntos de un píxel que el _eye-dome lighting_ volvía blanquecinos. Ahora la resolución base es la separación media de la capa.
+- **Borrar una capa en proceso bloqueaba la cola.** Al borrarla, el worker mataba solo el proceso principal de Python; los procesos que py3dtiles crea con `fork` seguían vivos con la salida estándar abierta, la ejecución no terminaba nunca y, con un job a la vez, las siguientes subidas se quedaban _En cola_ hasta que pg-boss diera el job por caducado (30 min). Se vio subiendo y borrando una nube sintética de 1,5 M de puntos. El conversor corre ahora en su propio grupo de procesos, que se mata entero; una prueba unitaria con un conversor falso que hace `fork` lo cubre y fallaba antes del arreglo.
+- **Líneas de medición que no aparecían** hasta mover la cámara (geometría asíncrona en `requestRenderMode`) y una petición a `/favicon.ico` que daba 404.
+
 ## Límites del entorno
 
 - No hay despliegue público ni recursos en AWS; [aws.md](aws.md) es un plan.
 - La ortofoto PNOA necesita conexión con `ign.es`; el atlas local funciona sin red. Las pruebas automáticas usan el atlas local.
 - El terreno y los edificios de Cesium ion necesitan un token propio y no se prueban en CI.
 - El chunk de Cesium supera el límite de aviso de Vite; se carga bajo demanda al abrir el gemelo digital.
-- No se ha probado todavía con una hoja PNOA-LiDAR real (los servidores del CNIG no eran accesibles desde este entorno); las cifras de rendimiento son de una nube sintética del mismo tamaño.
+- No se ha probado todavía con una hoja PNOA-LiDAR real (los servidores del CNIG no eran accesibles desde este entorno); las cifras de rendimiento son de una nube sintética del mismo tamaño. El visor se ha probado con nubes sintéticas (5.540 y 12 M de puntos), no con una real.
