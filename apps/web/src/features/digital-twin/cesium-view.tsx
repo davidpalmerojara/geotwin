@@ -31,14 +31,18 @@ import {
   BoundingSphere,
   JulianDate,
   Ellipsoid,
+  SceneTransforms,
+  VerticalOrigin,
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import type { Asset, Installation } from '@geotwin/shared';
 import { Crosshair, Layers, Mountain, Plus, Minus, Ruler } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { loadIonEnvironment } from './ion-environment';
-import { fitInView, frameOf, samePose, type LatLng } from './camera';
+import { fitInView, frameOf, samePose, type LatLng, type ScreenBox } from './camera';
 import { coveredByOverlays, shiftedRight, viewerFov } from './overlays';
+import { placeLabels, type LabelAnchor, type LabelOffset } from './labels';
+import { useLayers } from '../../hooks/data';
 import { coordinates } from '../../lib/format';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
 import { useLidarTerrain } from '../layers/lidar-terrain-provider';
@@ -64,7 +68,18 @@ function pnoaProvider() {
   });
   return provider;
 }
-type DevWindow = Window & { __geotwinViewer?: Viewer };
+type DevWindow = Window & {
+  __geotwinViewer?: Viewer;
+  /** Installation labels as last placed (canvas px), for end-to-end checks. */
+  __geotwinLabels?: { boxes: ScreenBox[]; blocked: ScreenBox[] };
+};
+const INSTALLATION_FONT = '12px sans-serif';
+// Cesium's default label background padding is 7 x 5 px.
+const LABEL_PAD_X = 7,
+  LABEL_HEIGHT = 26;
+// What floats over the map: installation labels keep clear of it.
+const MAP_FURNITURE =
+  '.map-controls, .map-top .map-tag, .map-bottom, .map-hint, [data-map-overlay]';
 /**
  * The last flight the viewer made on its own (framing a place or the selected asset). When the
  * ground under it changes (the LiDAR terrain arrives after the first frame) it is flown again,
@@ -104,8 +119,9 @@ const groundOf =
     terrain ? terrainHeight(terrain, lng, lat) : 0;
 const colors = { healthy: '#34d399', warning: '#fbbf24', critical: '#fb7185' };
 // A ground asset gets a tall marker volume; one on a roof or tower top, a small one on top of it.
-const assetBox = (a: Asset) =>
-  a.mount_height_m > 0 ? new Cartesian3(6, 6, 4) : new Cartesian3(9, 9, 14);
+// Without relief there is no roof to stand on: every asset is drawn on the globe.
+const assetBox = (a: Asset, relief: boolean) =>
+  relief && a.mount_height_m > 0 ? new Cartesian3(6, 6, 4) : new Cartesian3(9, 9, 14);
 // Oblique view that fits every point on desktop and on a portrait phone, in the part of the map
 // that floating panels (the «Capas» panel) leave visible.
 function flyToPoints(
@@ -186,6 +202,11 @@ export default function CesiumView({
     [lidarOn, lidar.terrain],
   );
   const groundRef = useRef(ground);
+  // Mounting heights (a gateway 42 m up on a tower roof) only mean something on real relief:
+  // over the bare ellipsoid they would float tens of metres above the map.
+  const relief = terrain === 'world' || lidarOn;
+  const reliefRef = useRef(relief);
+  const groundLayers = (useLayers().data ?? []).some((l) => l.status === 'ready' && l.terrain_url);
   usePointCloudLayers(ready ? viewer.current : null, ready, terrain === 'world' || lidarOn);
   const cloudsShown = useLayerView(
     (s) => Object.entries(s.render).filter(([id, r]) => r === 'shown' && !s.hidden[id]).length,
@@ -203,6 +224,12 @@ export default function CesiumView({
   useEffect(() => {
     assetsRef.current = assets;
   }, [assets]);
+  const installationsRef = useRef(installations),
+    installationIdRef = useRef(installationId);
+  useEffect(() => {
+    installationsRef.current = installations;
+    installationIdRef.current = installationId;
+  }, [installations, installationId]);
   const framed = useRef(false);
   useEffect(() => {
     callbacks.current = { onSelect, onInstallation };
@@ -302,14 +329,16 @@ export default function CesiumView({
     const ids = new Set<string>();
     for (const a of assets) {
       const id = `asset:${a.id}`;
+      const mount = relief ? a.mount_height_m : 0;
       ids.add(id);
       const color = Color.fromCssColorString(colors[a.status]);
       const existing = v.entities.getById(id);
       if (existing) {
         existing.name = a.name;
         existing.position = new ConstantPositionProperty(
-          Cartesian3.fromDegrees(a.location.lng, a.location.lat, a.mount_height_m),
+          Cartesian3.fromDegrees(a.location.lng, a.location.lat, mount),
         );
+        if (existing.box) existing.box.dimensions = new ConstantProperty(assetBox(a, relief));
         if (existing.point) existing.point.color = new ConstantProperty(color);
         if (existing.box) {
           existing.box.material = new ColorMaterialProperty(color.withAlpha(0.55));
@@ -324,7 +353,7 @@ export default function CesiumView({
           id,
           name: a.name,
           // Height above the terrain: 0 on the ground, the roof for a rooftop gateway.
-          position: Cartesian3.fromDegrees(a.location.lng, a.location.lat, a.mount_height_m),
+          position: Cartesian3.fromDegrees(a.location.lng, a.location.lat, mount),
           point: {
             heightReference: HeightReference.RELATIVE_TO_TERRAIN,
             pixelSize: 13,
@@ -336,7 +365,7 @@ export default function CesiumView({
           // Demo volume standing on the ground or on the mounting point (bottom at the position).
           box: {
             heightReference: HeightReference.RELATIVE_TO_TERRAIN,
-            dimensions: assetBox(a),
+            dimensions: assetBox(a, relief),
             material: color.withAlpha(0.55),
             outline: true,
             outlineColor: color,
@@ -376,6 +405,8 @@ export default function CesiumView({
             fillColor: Color.CYAN,
             showBackground: true,
             backgroundColor: Color.fromCssColorString('#101c30'),
+            // Placed after each render (see placeInstallationLabels): below the area by default.
+            verticalOrigin: VerticalOrigin.CENTER,
             pixelOffset: new Cartesian2(0, 50),
             disableDepthTestDistance: Infinity,
           },
@@ -383,7 +414,97 @@ export default function CesiumView({
     }
     for (const entity of [...v.entities.values]) if (!ids.has(entity.id)) v.entities.remove(entity);
     v.scene.requestRender();
-  }, [assets, installations, selectedId, ready]);
+  }, [assets, installations, selectedId, ready, relief]);
+  // Installation labels: placed after every render so they neither overlap each other nor hide
+  // under the floating controls (on a phone the control column covers the left of the map).
+  useEffect(() => {
+    const v = viewer.current;
+    if (!v || !ready) return;
+    const measure = document.createElement('canvas').getContext('2d');
+    if (measure) measure.font = INSTALLATION_FONT;
+    const widths = new Map<string, number>();
+    const widthOf = (text: string) => {
+      let width = widths.get(text);
+      if (width === undefined) {
+        width = Math.ceil(measure?.measureText(text).width ?? text.length * 7) + 2 * LABEL_PAD_X;
+        widths.set(text, width);
+      }
+      return width;
+    };
+    const place = () => {
+      if (v.isDestroyed()) return;
+      const rect = v.scene.canvas.getBoundingClientRect();
+      const shell = container.current?.parentElement;
+      const blocked = [...(shell?.querySelectorAll(MAP_FURNITURE) ?? [])]
+        .filter(
+          (el) => !el.matches('[data-map-overlay]') || getComputedStyle(el).position === 'absolute',
+        )
+        .map((el) => {
+          const b = el.getBoundingClientRect();
+          return {
+            left: b.left - rect.left,
+            right: b.right - rect.left,
+            top: b.top - rect.top,
+            bottom: b.bottom - rect.top,
+          };
+        });
+      const current = installationIdRef.current;
+      const ordered = [...installationsRef.current].sort(
+        (a, b) => Number(b.id === current) - Number(a.id === current),
+      );
+      const anchors: LabelAnchor[] = [];
+      const placement = new Map<string, LabelOffset>();
+      for (const i of ordered) {
+        const { lng, lat } = i.location;
+        const at = SceneTransforms.worldToWindowCoordinates(
+          v.scene,
+          Cartesian3.fromDegrees(lng, lat, groundRef.current(lng, lat)),
+        );
+        if (at)
+          anchors.push({
+            id: i.id,
+            x: at.x,
+            y: at.y,
+            width: widthOf(i.name),
+            height: LABEL_HEIGHT,
+          });
+        else placement.set(i.id, null);
+      }
+      for (const [id, offset] of placeLabels(anchors, blocked, rect)) placement.set(id, offset);
+      let changed = false;
+      const now = JulianDate.now();
+      for (const [id, offset] of placement) {
+        const label = v.entities.getById(`installation:${id}`)?.label;
+        if (!label) continue;
+        if (label.show?.getValue(now) !== !!offset) {
+          label.show = new ConstantProperty(!!offset);
+          changed = true;
+        }
+        const old = label.pixelOffset?.getValue(now) as Cartesian2 | undefined;
+        if (offset && (!old || old.x !== offset.x || old.y !== offset.y)) {
+          label.pixelOffset = new ConstantProperty(new Cartesian2(offset.x, offset.y));
+          changed = true;
+        }
+      }
+      if (import.meta.env.DEV)
+        (window as DevWindow).__geotwinLabels = {
+          blocked,
+          boxes: anchors.flatMap((a) => {
+            const o = placement.get(a.id);
+            if (!o) return [];
+            const left = a.x + o.x - a.width / 2,
+              top = a.y + o.y - a.height / 2;
+            return [{ left, right: left + a.width, top, bottom: top + a.height }];
+          }),
+        };
+      if (changed) v.scene.requestRender();
+    };
+    const remove = v.scene.postRender.addEventListener(place);
+    v.scene.requestRender();
+    return () => {
+      remove();
+    };
+  }, [ready]);
   // Frame the selected installation (its assets and centre) or the whole network.
   // Keyed on positions only, so status updates and renames never move the camera.
   const frameKey = JSON.stringify(
@@ -407,6 +528,7 @@ export default function CesiumView({
   const autoFlight = useRef<AutoFlight | null>(null);
   useEffect(() => {
     groundRef.current = ground;
+    reliefRef.current = relief;
     // The LiDAR terrain usually arrives after the first flight, which then aimed at the
     // ellipsoid (hundreds of metres under the real ground): fly it again on the real ground,
     // unless the user has moved the camera since.
@@ -418,7 +540,7 @@ export default function CesiumView({
       return;
     }
     flight.redo();
-  }, [ground]);
+  }, [ground, relief]);
   useEffect(() => {
     const v = viewer.current;
     if (!v || !ready || !framePoints.length) return;
@@ -448,7 +570,7 @@ export default function CesiumView({
       const position = Cartesian3.fromDegrees(
         lng,
         lat,
-        groundRef.current(lng, lat) + asset.mount_height_m,
+        groundRef.current(lng, lat) + (reliefRef.current ? asset.mount_height_m : 0),
       );
       v.camera.flyToBoundingSphere(new BoundingSphere(position, 60), {
         duration: 1,
@@ -691,6 +813,14 @@ export default function CesiumView({
         <span />
         <small>Haz clic para inspeccionar</small>
       </div>
+      {!relief && lidar.state !== 'loading' && assets.some((a) => a.mount_height_m > 0) && (
+        <div className="map-hint" role="note" data-testid="relief-hint">
+          Sin relieve, los activos de cubiertas y torres se dibujan a ras del mapa.{' '}
+          {groundLayers && !lidarOption
+            ? 'Activa «Relieve del LiDAR» en Capas para verlos a su altura.'
+            : 'Carga las hojas LiDAR en Capas para verlos a su altura.'}
+        </div>
+      )}
       {mapMessage && (
         <div className="map-message" role="status">
           {mapMessage}

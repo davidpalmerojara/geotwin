@@ -850,6 +850,22 @@ main {
   border-radius: 7px;
   font-size: 11px;
 }
+/* A note on what the map shows (not an error): kept clear of the control column. */
+.map-hint {
+  position: absolute;
+  bottom: 50px;
+  left: 70px;
+  right: 18px;
+  max-width: 470px;
+  padding: 8px 10px;
+  background: #0b1625e8;
+  border: 1px solid #2a4259;
+  border-radius: 7px;
+  color: #b9cde0;
+  font-size: 11px;
+  line-height: 1.4;
+  pointer-events: none;
+}
 .map-asset-strip {
   display: flex;
   gap: 6px;

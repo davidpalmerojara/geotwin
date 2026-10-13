@@ -171,3 +171,67 @@ test('on a phone the measuring panel leaves the map credits (CC-BY) readable', a
     .toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test('on a phone the installation labels keep clear of each other and of the controls', async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/gemelo');
+  await expect(page.getByTestId('cesium-view')).toHaveAttribute('data-ready', 'true', {
+    timeout: 30000,
+  });
+  await settle(page);
+  type Labels = { boxes: Box[]; blocked: Box[] };
+  const labels = () =>
+    page.evaluate(() => {
+      const w = window as Window & { __geotwinLabels?: Labels };
+      const canvas = document.querySelector('.cesium-widget canvas')!.getBoundingClientRect();
+      const c = document.querySelector('.map-controls')!.getBoundingClientRect();
+      return {
+        ...(w.__geotwinLabels ?? { boxes: [], blocked: [] }),
+        // The control column measured here, independently of the viewer's own list.
+        controls: {
+          left: c.left - canvas.left,
+          right: c.right - canvas.left,
+          top: c.top - canvas.top,
+          bottom: c.bottom - canvas.top,
+        },
+      };
+    });
+  await expect.poll(async () => (await labels()).boxes.length).toBeGreaterThanOrEqual(2);
+  const { boxes, blocked, controls } = await labels();
+  const apart = (a: Box, b: Box) =>
+    a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+  for (let i = 0; i < boxes.length; i++) {
+    expect(apart(boxes[i]!, controls), `label ${i} under the controls`).toBe(true);
+    for (const b of blocked) expect(apart(boxes[i]!, b)).toBe(true);
+    for (let j = i + 1; j < boxes.length; j++)
+      expect(apart(boxes[i]!, boxes[j]!), `labels ${i} and ${j} overlap`).toBe(true);
+  }
+
+  // Without LiDAR relief a gateway on a 42 m tower roof is drawn on the globe, not in mid-air,
+  // and a note says how to see it at its height.
+  const layers = (await (await request.get('/api/layers')).json()) as {
+    status: string;
+    terrain_url: string | null;
+  }[];
+  test.skip(
+    layers.some((l) => l.status === 'ready' && l.terrain_url),
+    'a layer with a ground model is loaded: the map has relief',
+  );
+  await expect(page.getByTestId('relief-hint')).toContainText('Carga las hojas LiDAR en Capas');
+  const height = await page.evaluate(() => {
+    type V = {
+      entities: { getById(id: string): { position: { getValue(t: unknown): unknown } } };
+      clock: { currentTime: unknown };
+      scene: { globe: { ellipsoid: { cartesianToCartographic(p: unknown): { height: number } } } };
+    };
+    const v = (window as Window & { __geotwinViewer?: V }).__geotwinViewer!;
+    const gateway = v.entities.getById('asset:20000000-0000-4000-8000-000000000001');
+    return v.scene.globe.ellipsoid.cartesianToCartographic(
+      gateway.position.getValue(v.clock.currentTime),
+    ).height;
+  });
+  expect(Math.abs(height)).toBeLessThan(0.01);
+});
