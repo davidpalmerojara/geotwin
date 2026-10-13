@@ -26,6 +26,7 @@ export function applyRealtimeEvents(client: QueryClient, events: RealtimeEvent[]
         alertsChanged = true; // alert cards show the asset name
         break;
       case 'alert:created':
+      case 'alert:updated':
       case 'alert:resolved':
         alertsChanged = true;
         break;

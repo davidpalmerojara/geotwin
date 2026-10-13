@@ -357,6 +357,21 @@ describe('Real API and PostgreSQL/PostGIS', () => {
     expect(critical.id).toBe(warning.id);
     expect(critical.severity).toBe('critical');
   });
+  it('announces an escalation as alert:updated, not as a new alert', async () => {
+    const events: RealtimeEvent[] = [];
+    const service = new TelemetryService(db, (e) => events.push(...e));
+    const warning = await service.simulate(sensorId, 'warning');
+    expect(events.filter((e) => e.type === 'alert:created')).toHaveLength(1);
+    events.length = 0;
+    await service.simulate(sensorId, 'critical');
+    const alertEvents = events.filter((e) => e.type.startsWith('alert:'));
+    expect(alertEvents).toEqual([
+      {
+        type: 'alert:updated',
+        data: expect.objectContaining({ id: warning.id, severity: 'critical' }),
+      },
+    ]);
+  });
   it('keeps the asset critical until all its incidents are resolved', async () => {
     const a = (
       await app.inject({
