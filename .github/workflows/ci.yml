@@ -1,5 +1,11 @@
 name: Verify GeoTwin Cloud
 on: [push, pull_request]
+# Read-only token; a newer push to the same branch cancels the run in progress.
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   checks:
     runs-on: ubuntu-latest
