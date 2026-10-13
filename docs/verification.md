@@ -134,6 +134,33 @@ Fallos que han aparecido con los datos reales y se han corregido, cada uno con s
 - **Encuadre de una red pequeña.** La red de Laguna mide 1,4 km y la etiqueta de la instalación del extremo quedaba bajo el panel Capas a 1280 px: el margen pasa al 30 % con un mínimo de 200 m.
 - **E2E de encuadre inestable.** Con teselas reales en SwiftShader el primer fotograma de un vuelo tarda segundos y la prueba daba la cámara por quieta antes de empezar a moverse; ahora espera a que el vuelo empiece y termine.
 
+### Comprobación independiente final y correcciones
+
+Una última comprobación independiente de `8d0c008` encontró un fallo importante y varios menores. Todos se han corregido, cada uno con su prueba:
+
+- **Enlace a un activo con la cámara bajo el suelo.** Un enlace `/gemelo?instalacion=…&activo=…` abierto en una página nueva volaba antes de que llegara el MDT: apuntaba al elipsoide y la cámara quedaba a 459,6 m de altura elipsoidal, unos 300 m por debajo del suelo (755 m). El visor recuerda ahora su último vuelo automático y lo repite cuando cambia el suelo, salvo que el usuario haya movido la cámara; también espera a la lista de activos. Con las ocho hojas, el mismo tipo de enlace deja la cámara a 1.233,7 m (pasarela de la torre sur) y 1.210,1 m (sonda de la laguna) a los 2 s, unos 460 m sobre el suelo. Un E2E sube la nube sintética, abre el enlace en una página nueva y exige más de 300 m sobre el máximo del MDT; antes del arreglo la cámara se quedaba en 754 m, a ras del terreno.
+- **Escalones en los bordes del MDT.** La huella de cada hoja es un cuadrado UTM, girado algo más de 1° en la malla de longitud y latitud. Fuera de ella, los huecos se rellenaban a lo largo de la fila y, junto a los bordes norte y sur, la altura salía de muy lejos en esa fila. Ahora se rellenan con la celda con datos más cercana en 2-D, y un punto fuera de toda huella toma la altura del punto más cercano de su contorno. Medido cada 5 m a lo largo de los bordes exteriores, con los MDT reales:
+
+  | Hojas cargadas      | 1 m dentro frente a 1 m fuera (mediana · p95 · máximo) | 1 m dentro frente a 30 m fuera (máximo) |
+  | ------------------- | ------------------------------------------------------ | --------------------------------------- |
+  | 2 (antes / después) | 0,15 · 3,86 · 10,43 m / 0,00 · 0,03 · 0,25 m           | 26,79 m / 0,48 m                        |
+  | 8 (antes / después) | 0,01 · 2,20 · 4,03 m / 0,00 · 0,02 · 0,25 m            | 15,84 m / 0,48 m                        |
+
+  A 30 m ya empieza la transición hacia el plano orientativo, por eso no es cero. Una prueba unitaria con una huella girada 4° lo cubre (con el relleno anterior daba 1,0 m y 8,9 m).
+
+- **Clics sobre árboles, coches o vallas.** La guía de Laguna lo explica y la herramienta Medir tiene, con el relieve del LiDAR, la casilla «Al suelo (MDT)», que lleva cada punto a la altura del modelo del terreno.
+- **Activos de cubierta flotando sin relieve.** Con el escenario de Laguna y sin hojas cargadas, las pasarelas de las cubiertas quedaban a 32-42 m sobre el elipsoide. La altura de montaje se aplica ahora solo con relieve (LiDAR o Cesium ion) y una nota en el visor dice cómo verlas a su altura.
+- **Etiquetas de instalación** debajo de la columna de controles en el móvil y solapadas entre sí: se colocan en cada fotograma por debajo o por encima de su zona, se apartan de los controles, del panel Capas y, si pueden, de los marcadores, y se ocultan si no caben.
+- **Coma decimal** en las lecturas, el gráfico, los umbrales y los mensajes de alerta («Nivel: 2,35 m (umbral crítico 2,1 m)»), como en la herramienta Medir. Cada lectura del inspector lleva la marca «simulado».
+- **La sonda de la laguna** tiene su propio tipo, «Sonda de nivel», en lugar de pasar por un depósito; la migración 008 cambia el tipo de la sonda ya sembrada.
+- **Capturas sin enlazar**: se han quitado tres del escenario anterior de Valladolid y la del panel Capas se ha repetido con las ocho hojas y se enlaza desde la guía.
+
+| Fecha      | Revisión | Entorno                                                 | Comprobación                                                                                                                                                                                                        | Resultado |
+| ---------- | -------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 13/10/2026 | rama     | Local, el mismo entorno                                 | Lint, formato, tipos; `npm test` 117/117 (21 ficheros); `npm run test:integration` 41/41 (+1 de S3 sin servidor); `pytest` 20/20; `npm run build`                                                                   | Correcto  |
+| 13/10/2026 | rama     | Igual, `npm run test:e2e` con API, worker y Vite reales | 9/9: los anteriores más el enlace compartido sobre el relieve y las etiquetas en el móvil                                                                                                                           | Correcto  |
+| 13/10/2026 | rama     | Navegador con las ocho hojas reales, 1440×900 y 390×844 | Enlaces a la pasarela y a la sonda en página nueva: cámara unos 460 m sobre el suelo desde los 2 s; etiquetas sin solaparse ni tapar controles; sin errores en la consola; migración 008 sobre una base ya sembrada | Correcto  |
+
 ## Límites del entorno
 
 - No hay despliegue público ni recursos en AWS; [aws.md](aws.md) es un plan.

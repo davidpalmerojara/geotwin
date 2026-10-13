@@ -32,6 +32,8 @@ scripts/upload-layers.sh data/laguna/*.LAZ                          # Compose: h
 scripts/upload-layers.sh -u http://localhost:3001 data/laguna/*.LAZ # npm run dev
 ```
 
+![Las ocho hojas cargadas en el panel Capas, con el relieve del LiDAR](screenshots/laguna-capas.jpg)
+
 Como los nombres empiezan por `PNOA_`, la API guarda en cada capa la atribución de PNOA-LiDAR y el visor la añade a sus créditos mientras alguna de esas capas esté visible (una sola vez, aunque haya ocho). Para que la corrección de alturas use la rejilla oficial del geoide, instálala antes (ver el README); sin ella se aplica EGM96, unos 0,5 m más alto aquí.
 
 ## Qué hace el pipeline con estas hojas
@@ -85,7 +87,7 @@ El **MDT** se ha comparado con los mismos 200.000 puntos de suelo por hoja: dife
 | Laguna y zona deportiva          | Laguna sin retornos láser (el agua absorbe el láser) de 3,4 ha, piscinas al aire libre, pabellón de 12,3 m, campos | Sonda de nivel en la orilla norte (con métrica de nivel en m), bombeo de recirculación, pasarela en la cubierta del pabellón       |
 | Depósito elevado del cerro       | Estructura cilíndrica de unos 22 m de diámetro y 33 m de altura en el cerro del noreste (suelo a 732 m)            | Depósito (nivel en m) y pasarela a 33 m, bombeo de impulsión, válvula y transformador en la base                                   |
 
-La estructura del cerro tiene la forma de un depósito elevado, pero la demo no afirma qué es: el activo es ficticio y la descripción lo dice. Cada activo guarda su **altura de montaje** sobre el suelo (`mount_height_m`), medida con la nube (clase 6 en la cubierta frente a clase 2 alrededor), y el visor lo dibuja a esa altura sobre el relieve del LiDAR. Las lecturas son simuladas; el nivel de agua avisa si sube por encima del umbral.
+La estructura del cerro tiene la forma de un depósito elevado, pero la demo no afirma qué es: el activo es ficticio y la descripción lo dice. Cada activo guarda su **altura de montaje** sobre el suelo (`mount_height_m`), medida con la nube (clase 6 en la cubierta frente a clase 2 alrededor), y el visor lo dibuja a esa altura sobre el relieve del LiDAR. Sin relieve (sin hojas cargadas, o con «Relieve del LiDAR» apagado) no hay cubierta sobre la que apoyarlo: todos los activos se dibujan a ras del mapa y una nota en el visor dice cómo verlos a su altura. La sonda de la laguna es del tipo **sonda de nivel**. Las lecturas son simuladas; el nivel de agua avisa si sube por encima del umbral.
 
 ## Mediciones sobre la nube real
 
