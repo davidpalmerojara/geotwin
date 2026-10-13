@@ -55,7 +55,7 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   // Its ground (class 2) became the globe's terrain; switching it off goes back to the ellipsoid.
   await expect(map).toHaveAttribute('data-terrain', 'lidar', { timeout: 30000 });
   await expect(page.locator('.map-top')).toContainText('RELIEVE LIDAR');
-  const relief = panel.getByRole('checkbox', { name: /Relieve del LiDAR/ });
+  const relief = panel.getByRole('checkbox', { name: 'Relieve del LiDAR', exact: true });
   await relief.uncheck();
   await expect(map).toHaveAttribute('data-terrain', 'ellipsoid');
   await expect(panel.getByText('Altura real sobre el globo básico')).toBeVisible();
@@ -76,7 +76,7 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   await expect(panel.locator('.height-legend')).toContainText('m');
   await panel.getByRole('button', { name: 'Clasificación', exact: true }).click();
   await expect(map).toHaveAttribute('data-color-mode', 'classification');
-  const ground = panel.getByRole('checkbox', { name: 'Suelo' });
+  const ground = panel.getByRole('checkbox', { name: 'Suelo', exact: true });
   await ground.uncheck();
   await expect(ground).not.toBeChecked();
   await ground.check();

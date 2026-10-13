@@ -332,12 +332,14 @@ export function LayersPanel() {
               <label className="layer-check">
                 <input
                   type="checkbox"
+                  aria-label="Relieve del LiDAR"
+                  aria-describedby="lidar-terrain-help"
                   checked={view.lidarTerrain}
                   onChange={(e) => view.setLidarTerrain(e.target.checked)}
                 />
                 <span>
                   Relieve del LiDAR
-                  <small>
+                  <small id="lidar-terrain-help">
                     El suelo de {count(withGround, 'capa', 'capas')} (clase 2, malla de 2 m) hace de
                     terreno: mapa, activos y nubes quedan a su altura real. Fuera de la cobertura es
                     un plano orientativo. Con el relieve de Cesium ion se usa ese.
@@ -349,12 +351,14 @@ export function LayersPanel() {
               <label className="layer-check">
                 <input
                   type="checkbox"
+                  aria-label="Altura real sobre el globo básico"
+                  aria-describedby="real-height-help"
                   checked={view.realHeight}
                   onChange={(e) => view.setRealHeight(e.target.checked)}
                 />
                 <span>
                   Altura real sobre el globo básico
-                  <small>
+                  <small id="real-height-help">
                     Sin relieve, el globo es el elipsoide (h = 0) y la nube se baja hasta él para
                     verla sobre el mapa. Distancias y desniveles no cambian.
                   </small>

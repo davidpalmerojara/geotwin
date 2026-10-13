@@ -17,8 +17,9 @@ export function distanceM(a: LatLng, b: LatLng) {
 /**
  * Centre and radius (metres) of a circle that contains every point, padded so that
  * markers, labels and installation areas near the edge stay inside the view.
- * By default the padding grows with the frame (20 %, between 120 and 450 m): the whole
- * network keeps room for its labels and one installation (a 210 m area) fills the view.
+ * By default the padding grows with the frame (30 %, between 200 and 450 m): the whole
+ * network keeps room for its labels (about 160 px wide, centred on the marker) and one
+ * installation (a 210 m area) fills the view.
  */
 export function frameOf(points: LatLng[], paddingM?: number, minRadiusM = 300) {
   if (!points.length) return undefined;
@@ -29,7 +30,7 @@ export function frameOf(points: LatLng[], paddingM?: number, minRadiusM = 300) {
     lng: (Math.min(...lngs) + Math.max(...lngs)) / 2,
   };
   const radius = Math.max(...points.map((p) => distanceM(center, p)));
-  const padding = paddingM ?? Math.min(450, Math.max(120, radius * 0.2));
+  const padding = paddingM ?? Math.min(450, Math.max(200, radius * 0.3));
   return { center, radius: Math.max(minRadiusM, radius + padding) };
 }
 /**

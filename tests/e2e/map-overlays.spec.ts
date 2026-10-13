@@ -21,8 +21,27 @@ interface DevViewer {
   };
   scene: {
     canvas: HTMLCanvasElement;
+    // Camera flights in progress.
+    tweens: { length: number };
     cartesianToCanvasCoordinates(position: unknown): { x: number; y: number } | undefined;
   };
+}
+
+/** Camera position, rounded to decimetres. */
+function cameraAt(page: Page) {
+  return page.evaluate(() => {
+    const v = (window as Window & { __geotwinViewer?: DevViewer }).__geotwinViewer;
+    if (!v) return 'no viewer';
+    const p = v.camera.positionWC;
+    return [p.x, p.y, p.z].map((n) => n.toFixed(1)).join(',');
+  });
+}
+/**
+ * Waits for a flight that a click has just requested to start: under a software renderer the
+ * first frame of the flight can take seconds, and a camera that has not moved yet looks settled.
+ */
+async function moved(page: Page, from: string) {
+  await expect.poll(() => cameraAt(page), { timeout: 20000, intervals: [200] }).not.toBe(from);
 }
 
 /** Waits until the camera stops moving (flights last about a second). */
@@ -34,6 +53,8 @@ async function settle(page: Page) {
         const now = await page.evaluate(() => {
           const v = (window as Window & { __geotwinViewer?: DevViewer }).__geotwinViewer;
           if (!v) return 'no viewer';
+          // A flight still running is not settled, even if two slow frames look alike.
+          if (v.scene.tweens.length) return `flying ${Math.random()}`;
           const p = v.camera.positionWC;
           return [p.x, p.y, p.z].map((n) => n.toFixed(1)).join(',');
         });
@@ -110,14 +131,18 @@ for (const width of [1280, 1440])
 
     // «Centrar red» frames the same way.
     await page.getByRole('button', { name: 'Acercar', exact: true }).click();
+    const zoomed = await cameraAt(page);
     await page.getByRole('button', { name: 'Centrar red', exact: true }).click();
+    await moved(page, zoomed);
     await settle(page);
     expect(hidden(await screen(page))).toEqual([]);
 
     // One installation: its marker and label stay clear of the panel too.
     const select = page.getByLabel('Seleccionar instalación');
     const value = await select.locator('option').nth(1).getAttribute('value');
+    const before = await cameraAt(page);
     await select.selectOption(value!);
+    await moved(page, before);
     await settle(page);
     const one = await screen(page);
     const name = await select.locator('option').nth(1).textContent();

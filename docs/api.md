@@ -11,7 +11,7 @@ Swagger UI: `/api/docs/`. Contrato OpenAPI: `/api/openapi.json`. Las fechas se t
 | `GET /api/assets`                | `installation_id?`, `status?`, `search?` (literal)   | Lista de activos                                       |
 | `GET /api/assets/nearby`         | `lat`, `lng`, `radius?`                              | Activos y `distance_m`, ordenados por distancia        |
 | `GET /api/assets/:id`            | UUID                                                 | Detalle del activo                                     |
-| `PATCH /api/assets/:id`          | `{ "name": "Pump 01 · Revisada" }`                   | Activo actualizado; emite `asset:updated`              |
+| `PATCH /api/assets/:id`          | `{ "name": "Bomba de reserva · revisada" }`          | Activo actualizado; emite `asset:updated`              |
 | `GET /api/assets/:id/readings`   | `sensor_id?`, `limit?`                               | Últimas `limit` lecturas, orden temporal ascendente    |
 | `GET /api/sensors`               | `asset_id?`                                          | Sensores, umbrales y última lectura                    |
 | `GET /api/alerts`                | `asset_id?`, `installation_id?`, `status?`, `limit?` | Incidencias activas/resueltas                          |
@@ -26,9 +26,9 @@ Swagger UI: `/api/docs/`. Contrato OpenAPI: `/api/openapi.json`. Las fechas se t
 | `GET /api/layers/:id`            | UUID                                                 | Estado, progreso y metadatos de la capa                |
 | `POST /api/layers/:id/reprocess` | `{ "geoid_offset_m"?: number \| null }`              | Vuelve a encolar una capa `ready` o `failed`; 202      |
 | `DELETE /api/layers/:id`         | UUID                                                 | Borra la capa, cancela su job y sus objetos; 204       |
-| `GET /api/layers/:id/tiles/*`    | Ruta dentro del tileset                              | `tileset.json` y `.pnts` en streaming, con caché       |
+| `GET /api/layers/:id/tiles/*`    | Ruta dentro del tileset                              | `tileset.json`, `.pnts` y el MDT, con caché            |
 
-`lat` [-90,90], `lng` [-180,180], `radius` (0,50000] metros, predeterminado 500. `limit` de lecturas [1,500], predeterminado 120, y de alertas [1,500], predeterminado 100. `name` 1–100 caracteres; mensaje manual 5–500. `search` busca texto literal: `%` y `_` no son comodines. `mode`/`severity`: `warning` o `critical`. Estados de activo: `healthy`, `warning`, `critical`; de alerta: `active`, `resolved`.
+`lat` [-90,90], `lng` [-180,180], `radius` (0,50000] metros, predeterminado 500. `limit` de lecturas [1,500], predeterminado 120, y de alertas [1,500], predeterminado 100. `name` 1–100 caracteres; mensaje manual 5–500. `search` busca texto literal: `%` y `_` no son comodines. `mode`/`severity`: `warning` o `critical`. Estados de activo: `healthy`, `warning`, `critical`; de alerta: `active`, `resolved`. Un activo lleva `mount_height_m`, la altura de su punto de montaje sobre el suelo en metros (0 a ras de suelo; una pasarela en la cubierta de una torre, unos 42 m). Métricas de sensor: `temperature`, `vibration`, `pressure` y `level` (nivel de agua en metros sobre la referencia de la sonda; avisa si sube).
 
 ## Capas LiDAR
 
@@ -44,7 +44,9 @@ Swagger UI: `/api/docs/`. Contrato OpenAPI: `/api/openapi.json`. Las fechas se t
 
 Respuestas de la subida: 201 con la capa en `queued`; 409 `DUPLICATE_LAYER` si el mismo contenido (SHA-256) ya es una capa, con su nombre en el mensaje; 413 `PAYLOAD_TOO_LARGE` por encima de `LAYER_UPLOAD_MAX_BYTES` (150 MiB por defecto); 415 `UNSUPPORTED_MEDIA_TYPE` si no es multipart o el fichero no es LAS/LAZ; 400 si falta `file` o las opciones no son válidas, y 400 `INCOMPLETE_UPLOAD` si el cuerpo multipart se corta antes de terminar (un cliente que cancela la subida se registra como rechazo, no como error del servidor). En 413 y 415 la conexión se cierra, porque el resto del cuerpo no se lee.
 
-Una capa (`layerSchema` en `packages/shared`) incluye `status` (`queued`, `processing`, `ready`, `failed`), `stage` (`queued`, `downloading`, `inspecting`, `tiling`, `uploading`, `done`), `progress` 0-100, `error` legible si falla, `source` (nombre, formato, bytes, SHA-256), `crs_in`, `vertical` (`datum`, `override_m`, `geoid_offset_m` aplicado y `method`), `point_count`, `point_format`, `bbox` `[oeste, sur, este, norte]` en grados, `center`, `height_range_m` (alturas del fichero, ortométricas en PNOA), `tileset_url` (solo si está lista) y `attribution`.
+Una capa (`layerSchema` en `packages/shared`) incluye `status` (`queued`, `processing`, `ready`, `failed`), `stage` (`queued`, `downloading`, `inspecting`, `tiling`, `uploading`, `done`), `progress` 0-100, `error` legible si falla, `source` (nombre, formato, bytes, SHA-256), `crs_in`, `vertical` (`datum`, `override_m`, `geoid_offset_m` aplicado y `method`), `point_count`, `point_format`, `bbox` `[oeste, sur, este, norte]` en grados, `center`, `height_range_m` (alturas del fichero, ortométricas en PNOA), `excluded` (puntos y clases ASPRS que no se dibujan: solape 12 y ruido 7 y 18 por defecto), `tileset_url` y `terrain_url` (solo si está lista; `terrain_url` es null si el fichero no tiene suelo, clase 2) y `attribution`. `point_count` cuenta los puntos dibujados.
+
+`terrain_url` apunta al modelo del terreno de la capa (`terrain/dtm.json`, contrato `dtmMetaSchema`): rejilla regular de longitud y latitud, fila 0 al norte, alturas **elipsoidales** en `data` (`dtm.bin`) como uint16 little-endian, h = `offset` + valor × `scale`, con `nodata` fuera de la huella real de la hoja (`footprint`). El visor lo usa como terreno.
 
 `tileset_url` apunta a `GET /api/layers/:id/tiles/<job>/tileset.json`, listo para `Cesium3DTileset.fromUrl`. Los `.pnts` llevan posición, RGB y la clasificación ASPRS como atributo `classification` de la batch table (para estilos como `${classification} === 6`). Todas las respuestas de teselas llevan `ETag` y `Cache-Control: public, max-age=31536000, immutable`, porque la ruta cambia si la capa se reprocesa; con `If-None-Match` devuelven 304. Rutas con `..`, barras invertidas o segmentos ocultos devuelven 400 o 404.
 

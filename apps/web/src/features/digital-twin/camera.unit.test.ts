@@ -34,6 +34,15 @@ describe('Camera framing', () => {
     const installation = frameOf([...site, pisuerga])!;
     expect(installation.radius).toBe(300);
     expect(installation.radius).toBeLessThan(network.radius / 5);
+    // A network about 1.4 km across (Laguna de Duero) keeps at least 200 m around its edge.
+    const laguna = [
+      { lat: 41.589069, lng: -4.725258 },
+      { lat: 41.586053, lng: -4.722179 },
+      { lat: 41.584019, lng: -4.710608 },
+    ];
+    const small = frameOf(laguna)!;
+    const reach = Math.max(...laguna.map((p) => distanceM(small.center, p)));
+    expect(small.radius - reach).toBeCloseTo(Math.max(200, reach * 0.3), 6);
   });
   it('backs off further on a portrait phone than on a landscape desktop', () => {
     const fov = Math.PI / 3;

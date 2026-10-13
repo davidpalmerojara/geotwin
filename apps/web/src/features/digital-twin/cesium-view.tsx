@@ -74,7 +74,7 @@ const groundOf =
 const colors = { healthy: '#34d399', warning: '#fbbf24', critical: '#fb7185' };
 // A ground asset gets a tall marker volume; one on a roof or tower top, a small one on top of it.
 const assetBox = (a: Asset) =>
-  a.mount_height_m > 0 ? new Cartesian3(7, 7, 5) : new Cartesian3(14, 14, 24);
+  a.mount_height_m > 0 ? new Cartesian3(6, 6, 4) : new Cartesian3(9, 9, 14);
 // Oblique view that fits every point on desktop and on a portrait phone, in the part of the map
 // that floating panels (the «Capas» panel) leave visible.
 function flyToPoints(v: Viewer, points: LatLng[], duration: number, ground: Ground) {
