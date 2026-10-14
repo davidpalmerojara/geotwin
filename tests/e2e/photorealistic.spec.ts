@@ -102,12 +102,17 @@ function flatMesh(half: number) {
 }
 
 const cors = { 'access-control-allow-origin': '*' };
-/** Answers Cesium ion for the Google asset: a local tileset, or an HTTP error. */
-async function fakeIon(page: Page, status = 200) {
+/**
+ * Answers Cesium ion for the Google asset: a local tileset, an HTTP error or, with status 0, no
+ * answer at all (no connection). The status can change between requests.
+ */
+async function fakeIon(page: Page, statusOf: number | (() => number) = 200) {
   const requests: string[] = [];
   await page.route('https://api.cesium.com/**', (route: Route) => {
     const url = route.request().url();
+    const status = typeof statusOf === 'number' ? statusOf : statusOf();
     requests.push(url);
+    if (status === 0) return route.abort('internetdisconnected');
     if (!url.includes(`/v1/assets/${ASSET}/endpoint`) || status !== 200)
       return route.fulfill({ status: status === 200 ? 404 : status, headers: cors, body: '{}' });
     return route.fulfill({
@@ -288,3 +293,24 @@ for (const [status, text] of [
     await expect(toggle(page)).toHaveAttribute('aria-pressed', 'false');
   });
 }
+
+test('Fotorrealista (Google) can be tried again after a failure, without reloading', async ({
+  page,
+}) => {
+  test.setTimeout(150000);
+  let status = 0;
+  const requests = await fakeIon(page, () => status);
+  const endpoint = () => requests.filter((url) => url.includes(`/v1/assets/${ASSET}/endpoint`));
+  await open(page);
+  await toggle(page).click();
+  await expect(map(page)).toHaveAttribute('data-photoreal', 'error', { timeout: 30000 });
+  await expect(page.locator('.map-message')).toContainText('Sin conexión');
+  const asked = endpoint().length;
+  expect(asked).toBeGreaterThan(0);
+  // The connection is back: the next click asks ion again and the layer loads.
+  status = 200;
+  await toggle(page).click();
+  await expect(map(page)).toHaveAttribute('data-photoreal', 'on', { timeout: 60000 });
+  expect(endpoint().length).toBeGreaterThan(asked);
+  await expect(page.locator('.map-message')).toHaveCount(0);
+});

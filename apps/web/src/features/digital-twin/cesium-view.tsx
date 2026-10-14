@@ -17,10 +17,9 @@ import {
   TileMapServiceImageryProvider,
   buildModuleUrl,
   Ion,
-  createGooglePhotorealistic3DTileset,
   createOsmBuildingsAsync,
   createWorldTerrainAsync,
-  type Cesium3DTileset,
+  Cesium3DTileset,
   Cartographic,
   HeightReference,
   ClassificationType,
@@ -37,7 +36,12 @@ import type { Asset, Installation } from '@geotwin/shared';
 import { Building2, Crosshair, Layers, Mountain, Plus, Minus, Ruler } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { loadIonEnvironment } from './ion-environment';
-import { loadPhotorealistic, PhotorealError, TileFailureWatch } from './photorealistic';
+import {
+  GOOGLE_PHOTOREALISTIC_ASSET,
+  loadPhotorealistic,
+  PhotorealError,
+  TileFailureWatch,
+} from './photorealistic';
 import { fitInView, frameOf, samePose, type LatLng, type ScreenBox } from './camera';
 import { coveredByOverlays, shiftedRight, viewerFov } from './overlays';
 import { placeLabels, type LabelAnchor, type LabelOffset } from './labels';
@@ -664,13 +668,18 @@ export default function CesiumView({
     }
     setPhotoreal('loading');
     try {
+      // Ion is asked on every load, so a click after a failure really retries: Cesium's
+      // createGooglePhotorealistic3DTileset keeps the first answer for the page's life, a
+      // failed one included. The options are that helper's own. The viewer has no geocoder,
+      // so no other geocoder is used alongside these tiles.
       const tileset = await loadPhotorealistic(() =>
-        createGooglePhotorealistic3DTileset(
-          // The viewer has no geocoder, so no other geocoder is used alongside these tiles.
-          { onlyUsingWithGoogleGeocoder: true },
+        Cesium3DTileset.fromIonAssetId(GOOGLE_PHOTOREALISTIC_ASSET, {
+          cacheBytes: 1536 * 1024 * 1024,
+          maximumCacheOverflowBytes: 1024 * 1024 * 1024,
+          enableCollision: true,
           // The provider's attribution must be visible on the map, not only behind a link.
-          { showCreditsOnScreen: true },
-        ),
+          showCreditsOnScreen: true,
+        }),
       );
       if (v.isDestroyed()) {
         tileset.destroy();
