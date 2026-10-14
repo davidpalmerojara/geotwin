@@ -778,6 +778,14 @@ main {
   bottom: 40px !important;
   font-size: 8px !important;
 }
+/* The credits wrap in the width that the «Capas» panel leaves free: it floats over the right of
+   the map on wide screens, open or collapsed. The viewer sets an inline right: 0. */
+.twin-stage {
+  --layers-clear: 330px;
+}
+.twin-stage .cesium-viewer-bottom {
+  right: var(--layers-clear) !important;
+}
 .map-top {
   position: absolute;
   left: 18px;
@@ -839,23 +847,31 @@ main {
   color: #abc0d4;
   font-size: 9px;
 }
-.map-message {
+/* Notes and errors over the map: stacked above the viewer credits (--credits-clear, set by the
+   viewer as the credits wrap), left of the «Capas» panel and right of the control column, so they
+   never cover a CC-BY credit or a control. */
+.map-notes {
   position: absolute;
-  bottom: 50px;
-  left: 18px;
-  right: 18px;
+  bottom: calc(var(--credits-clear, 40px) + 8px);
+  left: 70px;
+  right: var(--layers-clear, 18px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+}
+.map-message {
+  align-self: stretch;
   padding: 10px;
   background: #291822df;
   border: 1px solid #ef717155;
   border-radius: 7px;
   font-size: 11px;
+  pointer-events: auto;
 }
-/* A note on what the map shows (not an error): kept clear of the control column. */
+/* A note on what the map shows (not an error). */
 .map-hint {
-  position: absolute;
-  bottom: 50px;
-  left: 70px;
-  right: 18px;
   max-width: 470px;
   padding: 8px 10px;
   background: #0b1625e8;
@@ -864,7 +880,6 @@ main {
   color: #b9cde0;
   font-size: 11px;
   line-height: 1.4;
-  pointer-events: none;
 }
 .map-asset-strip {
   display: flex;
@@ -2227,11 +2242,21 @@ tr:hover td {
   outline-offset: -2px;
 }
 @media (max-width: 1200px) {
+  .twin-stage {
+    --layers-clear: 300px;
+  }
   .layers-panel {
     width: 270px;
   }
 }
 @media (max-width: 600px) {
+  /* The panel flows below the map on phones. */
+  .twin-stage {
+    --layers-clear: 12px;
+  }
+  .map-notes {
+    left: 60px;
+  }
   .layers-panel {
     position: static;
     width: auto;

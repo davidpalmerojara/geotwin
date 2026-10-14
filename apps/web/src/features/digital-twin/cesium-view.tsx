@@ -63,7 +63,7 @@ const INSTALLATION_FONT = '12px sans-serif';
 const LABEL_PAD_X = 7,
   LABEL_HEIGHT = 26;
 // What floats over the map: installation labels keep clear of it.
-const MAP_FURNITURE = '.map-controls, .map-top .map-tag, .map-bottom, .map-hint';
+const MAP_FURNITURE = '.map-controls, .map-top .map-tag, .map-bottom, .map-hint, .map-message';
 /**
  * The last flight the viewer made on its own (framing a place or the selected asset). When the
  * ground under it changes (the LiDAR terrain arrives after the first frame) it is flown again,
@@ -162,6 +162,7 @@ export default function CesiumView({
   onInstallation,
 }: Props) {
   const container = useRef<HTMLDivElement>(null),
+    shell = useRef<HTMLDivElement>(null),
     viewer = useRef<Viewer | null>(null);
   const callbacks = useRef({ onSelect, onInstallation });
   const [error, setError] = useState(''),
@@ -566,6 +567,24 @@ export default function CesiumView({
     selectedRef.current = selectedId;
   }, [selectedId]);
   const autoFlight = useRef<AutoFlight | null>(null);
+  // The notes over the map stay above the viewer credits, which wrap to several lines in a
+  // narrow map: the CC-BY attributions (PNOA, PNOA-LiDAR) must never be covered. The credits'
+  // distance from the bottom of the map goes to CSS as --credits-clear.
+  useEffect(() => {
+    const v = viewer.current,
+      element = shell.current;
+    if (!v || !ready || !element) return;
+    const credits = v.bottomContainer as HTMLElement;
+    const dock = () => {
+      const clear = element.getBoundingClientRect().bottom - credits.getBoundingClientRect().top;
+      element.style.setProperty('--credits-clear', `${Math.max(0, Math.ceil(clear))}px`);
+    };
+    dock();
+    const observer = new ResizeObserver(dock);
+    observer.observe(credits);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ready]);
   useEffect(() => {
     groundRef.current = ground;
     reliefRef.current = relief;
@@ -786,7 +805,7 @@ export default function CesiumView({
       </div>
     );
   return (
-    <div className={`map-shell ${measuring ? 'measuring' : ''}`}>
+    <div ref={shell} className={`map-shell ${measuring ? 'measuring' : ''}`}>
       <div
         ref={container}
         className="cesium-host"
@@ -930,22 +949,25 @@ export default function CesiumView({
         <span />
         <small>Haz clic para inspeccionar</small>
       </div>
-      {!relief &&
-        !photorealOn &&
-        lidar.state !== 'loading' &&
-        assets.some((a) => a.mount_height_m > 0) && (
-          <div className="map-hint" role="note" data-testid="relief-hint">
-            Sin relieve, los activos de cubiertas y torres se dibujan a ras del mapa.{' '}
-            {groundLayers && !lidarOption
-              ? 'Activa «Relieve del LiDAR» en Capas para verlos a su altura.'
-              : 'Carga las hojas LiDAR en Capas para verlos a su altura.'}
+      {/* Notes and errors over the map, stacked just above the viewer credits. */}
+      <div className="map-notes">
+        {!relief &&
+          !photorealOn &&
+          lidar.state !== 'loading' &&
+          assets.some((a) => a.mount_height_m > 0) && (
+            <div className="map-hint" role="note" data-testid="relief-hint">
+              Sin relieve, los activos de cubiertas y torres se dibujan a ras del mapa.{' '}
+              {groundLayers && !lidarOption
+                ? 'Activa «Relieve del LiDAR» en Capas para verlos a su altura.'
+                : 'Carga las hojas LiDAR en Capas para verlos a su altura.'}
+            </div>
+          )}
+        {(mapMessage || (pnoa.state === 'error' && baseImagery === 'pnoa' && !photorealOn)) && (
+          <div className="map-message" role="status" data-testid="map-message">
+            {mapMessage || PNOA_UNAVAILABLE}
           </div>
         )}
-      {(mapMessage || (pnoa.state === 'error' && baseImagery === 'pnoa' && !photorealOn)) && (
-        <div className="map-message" role="status" data-testid="map-message">
-          {mapMessage || PNOA_UNAVAILABLE}
-        </div>
-      )}
+      </div>
       <div className="map-bottom">
         <div className="map-legend">
           <span>
