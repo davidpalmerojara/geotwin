@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './fixtures';
+import type { Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 // WCAG 2.1 A/AA checks with axe on every page, on desktop and on a phone, with an active

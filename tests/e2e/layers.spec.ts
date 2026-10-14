@@ -1,6 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import AxeBuilder from '@axe-core/playwright';
 
 // The SYNTHETIC fixture (not measured data): 5,540 points near Laguna de Duero, EPSG:25830.
 const fixture = 'apps/worker/tests/fixtures/synthetic-laguna-duero.laz';
@@ -31,7 +32,8 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   const map = page.getByTestId('cesium-view');
   await expect(map).toHaveAttribute('data-ready', 'true', { timeout: 30000 });
   await page.getByRole('button', { name: 'Alternar cartografía', exact: true }).click();
-  await expect(page.locator('.map-top')).toContainText('Local');
+  await expect(map).toHaveAttribute('data-base-imagery', 'natural-earth');
+  await expect(page.locator('.map-top')).toContainText('ATLAS NATURAL EARTH');
 
   const panel = page.getByRole('region', { name: 'Capas LiDAR' });
   await expect(panel.getByText(/hasta 150 MiB/)).toBeVisible();
@@ -80,6 +82,55 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   await ground.uncheck();
   await expect(ground).not.toBeChecked();
   await ground.check();
+
+  // «Híbrido (sin suelo)»: ground and water leave the cloud (a show expression, no reload), the
+  // relief comes back on so the photo lies under the cloud, and «Todos» restores the classes.
+  const water = panel.getByRole('checkbox', { name: 'Agua', exact: true });
+  await water.uncheck();
+  await relief.uncheck();
+  await expect(map).toHaveAttribute('data-terrain', 'ellipsoid');
+  const pointModes = panel.getByRole('group', { name: 'Puntos' });
+  await pointModes.getByRole('button', { name: 'Híbrido (sin suelo)', exact: true }).click();
+  await expect(map).toHaveAttribute('data-point-mode', 'hybrid');
+  await expect(relief).toBeChecked();
+  await expect(map).toHaveAttribute('data-terrain', 'lidar');
+  await expect(ground).toBeDisabled();
+  await expect(ground).not.toBeChecked();
+  await expect(water).toBeDisabled();
+  const showExpression = () =>
+    page.evaluate(() => {
+      const v = (window as unknown as { __geotwinViewer: import('cesium').Viewer }).__geotwinViewer;
+      for (let i = 0; i < v.scene.primitives.length; i++) {
+        const p = v.scene.primitives.get(i) as {
+          isCesium3DTileset?: boolean;
+          style?: { show?: { expression?: string } };
+        };
+        if (p.isCesium3DTileset) return p.style?.show?.expression ?? '';
+      }
+      return null;
+    });
+  await expect.poll(showExpression).not.toContain('=== 2');
+  expect(await showExpression()).toContain('=== 6');
+  // On the atlas the hint says the ground has no photo; with the orthophoto it says it has.
+  const hint = panel.getByTestId('hybrid-hint');
+  await expect(hint).toContainText('Sin la ortofoto PNOA');
+  await page.getByRole('button', { name: 'Alternar cartografía', exact: true }).click();
+  await expect(map).toHaveAttribute('data-base-imagery', 'pnoa');
+  await expect(hint).toContainText('El suelo es la ortofoto PNOA');
+  const axe = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'])
+    .include('.layers-panel')
+    .analyze();
+  expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' ')}`)).toEqual(
+    [],
+  );
+  await pointModes.getByRole('button', { name: 'Todos', exact: true }).click();
+  await expect(map).toHaveAttribute('data-point-mode', 'all');
+  await expect(ground).toBeEnabled();
+  await expect(ground).toBeChecked();
+  await expect(water).not.toBeChecked();
+  await water.check();
+  await expect.poll(showExpression).toBe('');
 
   // Measure a distance: one point from the keyboard (the crosshair at the centre), then the map
   // is panned with an arrow key and the second point is picked with the mouse.

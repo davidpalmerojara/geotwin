@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 test('dashboard → 3D twin → persisted anomaly → resolved incident', async ({
   page,
   request,
@@ -25,16 +25,20 @@ test('dashboard → 3D twin → persisted anomaly → resolved incident', async 
     timeout: 30000,
   });
   await expect(page.locator('.cesium-widget canvas')).toBeVisible();
-  // Exercise the real offline layer control; external imagery is not needed for the business flow.
+  // The PNOA orthophoto (mock tiles from the fixture) and the offline atlas behind the toggle.
+  const map = page.getByTestId('cesium-view');
+  await expect(map).toHaveAttribute('data-pnoa', 'on');
+  await expect(page.locator('.map-top')).toContainText('ORTOFOTO PNOA');
   await page.getByRole('button', { name: 'Alternar cartografía', exact: true }).click();
-  await expect(page.locator('.map-top')).toContainText('Local');
+  await expect(map).toHaveAttribute('data-base-imagery', 'natural-earth');
+  await expect(page.locator('.map-top')).toContainText('ATLAS NATURAL EARTH');
   // Tag the WebGL canvas: if the viewer were rebuilt, the new canvas would not carry it.
   await page.locator('.cesium-widget canvas').evaluate((canvas) => {
     canvas.dataset.probe = 'same-viewer';
   });
   await page.getByLabel('Seleccionar instalación').selectOption(installationId);
   await expect(page.locator('.cesium-widget canvas')).toHaveAttribute('data-probe', 'same-viewer');
-  await expect(page.locator('.map-top')).toContainText('Local');
+  await expect(page.locator('.map-top')).toContainText('ATLAS NATURAL EARTH');
   await page.getByTestId(`map-asset-${assetId}`).click();
   await expect(page.getByRole('heading', { name: 'Sensores del activo' })).toBeVisible();
   // Values with a decimal comma, each marked as simulated next to it.

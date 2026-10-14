@@ -1,4 +1,5 @@
-import { test, expect, type Page, type Route } from '@playwright/test';
+import { test, expect } from './fixtures';
+import type { Page, Route } from '@playwright/test';
 
 /*
  * The «Fotorrealista (Google)» layer without Google: Cesium ion's endpoint for the Google
@@ -224,6 +225,11 @@ test('Fotorrealista (Google) replaces the globe and keeps assets and measuring o
   // The provider's attribution is shown on the map, not only behind the credits link.
   await expect(page.locator('.cesium-widget-credits')).toContainText(CREDIT);
   await expect(page.locator('.map-top')).toContainText('FOTORREALISTA');
+  // The mesh hides the base map: its control is disabled (and keeps its value) meanwhile.
+  const base = page.getByRole('button', { name: 'Alternar cartografía', exact: true });
+  await expect(base).toBeDisabled();
+  await expect(base).toHaveAttribute('title', /Oculto con Fotorrealista/);
+  await expect(base).toHaveAttribute('aria-pressed', 'true');
 
   // Assets stand on the mesh: their height is taken from the 3D tiles, not from the terrain.
   const references = await page.evaluate(() => {
@@ -261,6 +267,8 @@ test('Fotorrealista (Google) replaces the globe and keeps assets and measuring o
     true,
   );
   await expect(page.locator('.cesium-widget-credits')).not.toContainText(CREDIT);
+  await expect(base).toBeEnabled();
+  await expect(map(page)).toHaveAttribute('data-base-imagery', 'pnoa');
 });
 
 for (const [status, text] of [
