@@ -204,7 +204,8 @@ export default function CesiumView({
     setBaseImagery = useLayerView((s) => s.setBaseImagery),
     pnoa = useLayerView((s) => s.pnoa);
   usePnoaImagery(ready ? viewer.current : null, ready, imageryLevelFor(quality));
-  const pnoaShown = baseImagery === 'pnoa' && pnoa.state === 'on';
+  // Under the Google mesh the globe, and the PNOA layer on it, are hidden.
+  const pnoaShown = baseImagery === 'pnoa' && pnoa.state === 'on' && !photorealOn;
   useEffect(() => () => setMeasuring(false), [setMeasuring]);
   const tooltip = useRef<HTMLDivElement>(null);
   const token = import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined;
@@ -317,6 +318,7 @@ export default function CesiumView({
       framed.current = false;
       buildingsRef.current = undefined;
       photorealRef.current = undefined;
+      useLayerView.getState().setPhotoreal(false);
       stopPhotorealFrames.current?.();
       if (ionLoading.current === v) ionLoading.current = null;
     };
@@ -644,6 +646,8 @@ export default function CesiumView({
       setBuildings('off');
     }
     setPhotoreal(show ? 'on' : 'off');
+    // The PNOA layer (and its credit) goes with the globe: see usePnoaImagery.
+    useLayerView.getState().setPhotoreal(show);
     v.scene.requestRender();
     // In request-render mode the mesh can stop half loaded until something else draws a frame
     // (a camera flight used to): keep drawing until its tiles are in.
@@ -827,7 +831,7 @@ export default function CesiumView({
         data-pointclouds={cloudsShown}
         data-color-mode={colorMode}
         data-point-mode={pointMode}
-        data-base-imagery={pnoaShown ? 'pnoa' : 'natural-earth'}
+        data-base-imagery={photorealOn ? 'google' : pnoaShown ? 'pnoa' : 'natural-earth'}
         data-pnoa={pnoa.state}
         data-pnoa-source={pnoa.source}
         tabIndex={0}

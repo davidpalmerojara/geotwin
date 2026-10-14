@@ -2,7 +2,8 @@
  * The PNOA orthophoto over the globe (and over the LiDAR relief, which it drapes on by itself).
  * Natural Earth, shipped with Cesium, is the viewer's base layer and always stays underneath; the
  * PNOA layer is added once, on top, from the first source whose probe tile loads, and the
- * «Alternar cartografía» button only shows or hides it, so its tile cache survives toggles.
+ * «Alternar cartografía» button only shows or hides it, so its tile cache survives toggles. While
+ * the Google mesh is the ground the layer (and so its credit) is hidden too.
  * If the source in use starts failing (a refusal, or a run of errors) the next one takes over;
  * when none is left the layer is removed and the viewer says so.
  */
@@ -28,6 +29,10 @@ import {
   probeSource,
   type PnoaSource,
 } from './base-imagery';
+
+/** Whether the PNOA layer should be drawn: wanted, and not under the Google mesh. */
+const shownIn = (s: { baseImagery: string; photoreal: boolean }) =>
+  s.baseImagery === 'pnoa' && !s.photoreal;
 
 function providerOf(source: PnoaSource, maximumLevel: number): ImageryProvider {
   const common = {
@@ -104,15 +109,15 @@ export function usePnoaImagery(viewer: Viewer | null, ready: boolean, maximumLev
         layer = undefined;
         void use(pick.index + 1);
       });
-      layer = new ImageryLayer(provider, { show: useLayerView.getState().baseImagery === 'pnoa' });
+      layer = new ImageryLayer(provider, { show: shownIn(useLayerView.getState()) });
       v.imageryLayers.add(layer);
       setPnoa({ state: 'on', source: source.id });
       v.scene.requestRender();
     };
     void use(0);
     const unsubscribe = useLayerView.subscribe((s, previous) => {
-      if (s.baseImagery === previous.baseImagery || !layer || v.isDestroyed()) return;
-      layer.show = s.baseImagery === 'pnoa';
+      if (shownIn(s) === shownIn(previous) || !layer || v.isDestroyed()) return;
+      layer.show = shownIn(s);
       v.scene.requestRender();
     });
     return () => {
