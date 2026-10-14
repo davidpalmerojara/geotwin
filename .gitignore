@@ -10,6 +10,8 @@ test-results/
 .DS_Store
 # Local object storage (STORAGE_DRIVER=local)
 data/
+# Downloaded PNOA orthophoto tiles (scripts/fetch-ortho.sh): CC-BY data, not part of the code.
+apps/web/public/ortho/
 # Python
 __pycache__/
 .venv/
