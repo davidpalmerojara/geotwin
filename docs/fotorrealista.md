@@ -2,7 +2,7 @@
 
 El visor puede poner debajo de los activos la malla 3D fotorrealista de **Google Photorealistic 3D Tiles**, servida a través de **Cesium ion** (asset 2275207). Es una opción para enseñar el entorno con aspecto real; no sustituye a la nube PNOA-LiDAR, que sigue siendo la base medida del gemelo.
 
-**No se ha podido probar con Google de verdad.** El entorno en el que se ha desarrollado no tiene salida a `cesium.com` ni a los servidores de Google. Lo que sí está probado es la lógica alrededor: una prueba E2E sustituye la respuesta de Cesium ion por una malla plana local y comprueba el interruptor, el globo oculto, los activos apoyados en la malla, la medición, el crédito en pantalla los mensajes de error (401 y 429) y que, tras un fallo sin conexión, otro clic vuelve a preguntar a ion sin recargar la página, y las pruebas unitarias cubren la carga y la clasificación de errores con dobles. Los pasos de la [prueba manual](#prueba-manual) sirven para confirmarlo con una cuenta real.
+**No se ha podido probar con Google de verdad.** El entorno en el que se ha desarrollado no tiene salida a `cesium.com` ni a los servidores de Google. Lo que sí está probado es la lógica alrededor: una prueba E2E sustituye la respuesta de Cesium ion por una malla plana local y comprueba el interruptor, el globo oculto, los activos apoyados en la malla, la medición, el crédito en pantalla, los mensajes de error (401 y 429) y que, tras un fallo sin conexión, otro clic vuelve a preguntar a ion sin recargar la página; las pruebas unitarias cubren la carga y la clasificación de errores con dobles. Los pasos de la [prueba manual](#prueba-manual) sirven para confirmarlo con una cuenta real.
 
 ## Qué hace
 
