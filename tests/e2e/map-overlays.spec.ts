@@ -236,3 +236,129 @@ test('on a phone the installation labels keep clear of each other and of the con
   });
   expect(Math.abs(height)).toBeLessThan(0.01);
 });
+
+// The CC-BY credits (PNOA-LiDAR, PNOA orthophoto) must stay readable with the «Capas» panel open,
+// with an error message (no orthophoto) and with the relief note, on desktop and on a phone.
+const LIDAR_CREDIT = 'Obra derivada de LiDAR-PNOA-cob3 2022-2025 CC-BY 4.0 scne.es';
+const OVERLAYS = [
+  '.layers-panel',
+  '.map-message',
+  '.map-hint',
+  '.map-controls',
+  '.map-bottom',
+  '.map-tag',
+  '.measure-panel',
+];
+
+/**
+ * Opens the twin and returns every credit character that something covers. Without LiDAR layers
+ * in the database the PNOA-LiDAR credit is added as a plain line next to the viewer's own credits,
+ * so the longest credits the map shows are always on screen.
+ */
+async function coveredCredits(page: Page, pnoa: 'on' | 'error') {
+  await page.goto('/gemelo');
+  const map = page.getByTestId('cesium-view');
+  await expect(map).toHaveAttribute('data-ready', 'true', { timeout: 30000 });
+  await expect(map).toHaveAttribute('data-pnoa', pnoa, { timeout: 30000 });
+  await page.locator('.map-shell').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.evaluate((credit) => {
+    const bottom = document.querySelector('.cesium-viewer-bottom')!;
+    if (bottom.textContent?.includes('LiDAR-PNOA')) return;
+    const line = document.createElement('span');
+    line.textContent = ` • ${credit}`;
+    bottom.append(line);
+  }, LIDAR_CREDIT);
+  const credits = page.locator('.cesium-viewer-bottom');
+  await expect(credits).toContainText('LiDAR-PNOA-cob3');
+  if (pnoa === 'on') await expect(credits).toContainText('Ortofoto PNOA');
+  // The notes over the map move up as the credits wrap: let one layout pass settle.
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null))));
+  return page.evaluate((selectors) => {
+    const boxes = selectors.flatMap((s) =>
+      [...document.querySelectorAll(s)]
+        .map((el) => ({ s, r: el.getBoundingClientRect() }))
+        .filter(({ r }) => r.width > 0 && r.height > 0),
+    );
+    const bottom = document.querySelector('.cesium-viewer-bottom')!;
+    const shell = document.querySelector('.map-shell')!.getBoundingClientRect();
+    const walker = document.createTreeWalker(bottom, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    const covered: string[] = [];
+    let shown = 0;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent ?? '';
+      for (let i = 0; i < text.length; i++) {
+        if (!text[i]!.trim()) continue;
+        range.setStart(node, i);
+        range.setEnd(node, i + 1);
+        const r = range.getBoundingClientRect();
+        if (!r.width) continue;
+        shown++;
+        const x = r.left + r.width / 2,
+          y = r.top + r.height / 2;
+        // Inside the map, on top (elementFromPoint) and clear of every overlay box: notes that
+        // let clicks through (pointer-events: none) are invisible to elementFromPoint.
+        const top = document.elementFromPoint(x, y);
+        const by =
+          x < shell.left || x > shell.right || y < shell.top || y > shell.bottom
+            ? 'outside the map'
+            : !top || !bottom.contains(top)
+              ? String(top?.className || top?.tagName)
+              : boxes.find(
+                  ({ r: b }) =>
+                    r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top,
+                )?.s;
+        if (by) covered.push(`${text[i]} (${by})`);
+      }
+    }
+    return { shown, covered };
+  }, OVERLAYS);
+}
+
+for (const [width, height] of [
+  [1280, 800],
+  [1440, 900],
+])
+  test(`the map credits stay clear of the open Capas panel at ${width} x ${height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    const { shown, covered } = await coveredCredits(page, 'on');
+    await expect(page.locator('.layers-head')).toHaveAttribute('aria-expanded', 'true');
+    expect(shown).toBeGreaterThan(100);
+    expect(covered).toEqual([]);
+  });
+
+test('on a phone the relief note leaves the map credits readable', async ({ page, request }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { shown, covered } = await coveredCredits(page, 'on');
+  expect(shown).toBeGreaterThan(100);
+  expect(covered).toEqual([]);
+  const layers = (await (await request.get('/api/layers')).json()) as { terrain_url: unknown }[];
+  // Without a ground model the note is on screen (with one, the map has relief and no note).
+  if (!layers.some((l) => l.terrain_url))
+    await expect(page.getByTestId('relief-hint')).toBeVisible();
+});
+
+test.describe('without the orthophoto', () => {
+  test.use({ pnoaMode: 'all-fail' });
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ])
+    test(`the error message leaves the map credits readable at ${width} x ${height}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      const { shown, covered } = await coveredCredits(page, 'error');
+      await expect(page.getByTestId('map-message')).toContainText('ortofoto PNOA');
+      expect(shown).toBeGreaterThan(40);
+      expect(covered).toEqual([]);
+      // The message itself is not under the «Capas» panel.
+      const [message, panel] = await Promise.all([
+        page.getByTestId('map-message').boundingBox(),
+        page.locator('.layers-panel').boundingBox(),
+      ]);
+      if (width > 600) expect(message!.x + message!.width).toBeLessThanOrEqual(panel!.x);
+    });
+});
