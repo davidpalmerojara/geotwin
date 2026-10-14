@@ -96,7 +96,7 @@ La nube aérea tiene unos 40 cm entre puntos: de cerca, el suelo se ve como manc
 - **Sombras y coches** de la foto quedan pegados al suelo; en Híbrido, la vegetación baja que el LiDAR clasifica como 1 (sin clasificar) o 3 sigue como puntos sueltos sobre la foto.
 - Fuera de las ocho hojas la foto se drapea sobre el plano orientativo.
 
-**Captura con ortofoto real pendiente.** En el entorno donde se desarrolló no se llega a los servidores del IGN ni de IDEE y el zip aún no estaba en la release, así que no hay capturas ni vídeo con la foto real: las de esta página usan el atlas Natural Earth. El drapeado, el crédito, el modo Híbrido y los cambios de fuente están probados con teselas de prueba (un damero magenta).
+**Captura con ortofoto real pendiente.** En el entorno donde se desarrolló no se llega a los servidores del IGN ni de IDEE y el zip aún no estaba en la release, así que no hay capturas ni vídeo con la foto real: las de esta página usan el atlas Natural Earth. También son anteriores al último cambio de la etiqueta del mapa: aún ponen «MODO BÁSICO · Local · RELIEVE LIDAR», donde hoy se lee el mapa base (por ejemplo «ATLAS NATURAL EARTH»). El drapeado, el crédito, el modo Híbrido y los cambios de fuente están probados con teselas de prueba (un damero magenta).
 
 ## Comprobación del datum vertical con los datos reales
 
