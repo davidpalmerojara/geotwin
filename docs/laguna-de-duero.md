@@ -81,7 +81,7 @@ Las dos capturas se hicieron con un renderizador por software, que en una vista 
 
 ## Ortofoto PNOA bajo la nube
 
-La nube aérea tiene unos 40 cm entre puntos: de cerca, el suelo se ve como manchas de color. La ortofoto PNOA (25 cm por píxel) drapeada sobre el relieve del LiDAR da un suelo nítido, y el modo **Híbrido (sin suelo)** del panel Capas quita los puntos de suelo (clase 2) y de agua (9) para que se vea solo la foto, con los edificios, la vegetación y el resto como puntos encima.
+La nube aérea tiene unos 40 cm entre puntos: de cerca, el suelo se ve como manchas de color. La ortofoto PNOA (25 cm por píxel) drapeada sobre el relieve del LiDAR da un suelo nítido, y el modo **Híbrido (sin suelo)** del panel Capas quita los puntos de suelo (clase 2) y de agua (9) para que se vea solo la foto, con los edificios, la vegetación y el resto como puntos encima. Con la capa **Fotorrealista (Google)** encendida, el suelo es la malla de Google: la ortofoto y su crédito se ocultan mientras tanto, y la nota de Híbrido lo dice.
 
 **De dónde sale la foto.** El visor prueba, en este orden, una copia descargada en `apps/web/public/ortho/`, el TMS de IDEE y el WMTS del IGN, y usa la primera que devuelve una imagen (detalle en el [README](../README.md#cesium-sin-token)). Si ninguna responde, sigue con el atlas Natural Earth y lo avisa. Para tener la foto sin depender de esos servidores:
 
@@ -147,7 +147,7 @@ Un clic cae sobre lo primero que se ve en ese píxel: la copa de un árbol, un c
 
 ## Límites
 
-- Fuera de las ocho hojas el terreno es un **plano orientativo** a la altura mediana del MDT, que se funde con el borde de los datos en 400 m y vuelve al elipsoide a 30-60 km. Donde falta la hoja 355-4604 se ve ese plano.
+- Fuera de las ocho hojas el terreno es un **plano orientativo** a la altura mediana del MDT, que se funde con el borde de los datos en 400 m y vuelve al elipsoide a 30-60 km. Donde falta la hoja 355-4604 se ve ese plano; cerca de la esquina, las dos hojas vecinas se mezclan con él sin escalón.
 - La laguna no tiene superficie de agua: en la nube es un hueco y en el MDT una superficie interpolada desde la orilla.
 - Densidad de LiDAR aéreo: las fachadas tienen pocos puntos y los patios estrechos ninguno (ver [Cómo se dibuja la nube](#cómo-se-dibuja-la-nube)). La capa opcional [Fotorrealista (Google)](fotorrealista.md) da el aspecto real del entorno, pero no es un dato medido de este proyecto.
 - La ortofoto PNOA no se pudo cargar en el entorno de desarrollo (red bloqueada y sin la copia descargada); las capturas usan el atlas Natural Earth bajo la nube. Captura con ortofoto real pendiente.

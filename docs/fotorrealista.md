@@ -2,14 +2,15 @@
 
 El visor puede poner debajo de los activos la malla 3D fotorrealista de **Google Photorealistic 3D Tiles**, servida a través de **Cesium ion** (asset 2275207). Es una opción para enseñar el entorno con aspecto real; no sustituye a la nube PNOA-LiDAR, que sigue siendo la base medida del gemelo.
 
-**No se ha podido probar con Google de verdad.** El entorno en el que se ha desarrollado no tiene salida a `cesium.com` ni a los servidores de Google. Lo que sí está probado es la lógica alrededor: una prueba E2E sustituye la respuesta de Cesium ion por una malla plana local y comprueba el interruptor, el globo oculto, los activos apoyados en la malla, la medición, el crédito en pantalla, los mensajes de error (401 y 429) y que, tras un fallo sin conexión, otro clic vuelve a preguntar a ion sin recargar la página; las pruebas unitarias cubren la carga y la clasificación de errores con dobles. Los pasos de la [prueba manual](#prueba-manual) sirven para confirmarlo con una cuenta real.
+**No se ha podido probar con Google de verdad.** El entorno en el que se ha desarrollado no tiene salida a `cesium.com` ni a los servidores de Google. Lo que sí está probado es la lógica alrededor: una prueba E2E sustituye la respuesta de Cesium ion por una malla plana local y comprueba el interruptor, el globo oculto (y con él la ortofoto PNOA y su crédito), los activos apoyados en la malla, la medición, el crédito en pantalla, los mensajes de error (401, 429, la tesela raíz que responde 500 y la capa que no recibe ninguna tesela en 30 s) y que, tras un fallo, otro clic vuelve a preguntar a ion sin recargar la página; las pruebas unitarias cubren la carga y la clasificación de errores con dobles. Los pasos de la [prueba manual](#prueba-manual) sirven para confirmarlo con una cuenta real.
 
 ## Qué hace
 
 - El botón **Fotorrealista (Google)** (icono de edificio, en la columna de controles del mapa) **solo aparece si la web se ha construido con `VITE_CESIUM_ION_TOKEN`**. Sin token no se ofrece.
-- Al activarlo se carga el tileset con `createGooglePhotorealistic3DTileset` de CesiumJS, que, sin clave propia de Google, lo pide a Cesium ion. Se carga **una sola vez**: apagarlo y encenderlo después solo lo oculta y lo muestra, para no volver a pedir la tesela raíz (cuenta para la cuota).
+- Al activarlo se carga el tileset con `Cesium3DTileset.fromIonAssetId(2275207, …)`: se pide a Cesium ion, sin clave propia de Google, con las mismas opciones que usa `createGooglePhotorealistic3DTileset` de CesiumJS (caché de teselas, colisión de la cámara y créditos en pantalla). No se usa ese atajo porque guarda la primera respuesta de ion durante toda la vida de la página, también si falló: un segundo clic tras un corte de red no volvería a preguntar. Con `fromIonAssetId` cada intento pregunta a ion de nuevo.
+- Se carga **una sola vez** mientras funciona: apagarlo y encenderlo después solo lo oculta y lo muestra, para no volver a pedir la tesela raíz (cuenta para la cuota). Si falla, el tileset se descarta y el siguiente clic lo carga de nuevo desde ion (otra sesión de la cuota).
 - Con la capa activa:
-  - Se **oculta el globo**: las teselas de Google ya incluyen el suelo. Con él se ocultan el relieve del LiDAR y la cartografía de fondo (ortofoto PNOA o atlas); el botón **Alternar cartografía** queda desactivado («Oculto con Fotorrealista») y conserva su valor. El modo **Híbrido (sin suelo)** se puede usar: la malla hace de suelo. Si estaban cargados los edificios OSM de ion, también se ocultan (serían los mismos edificios dos veces).
+  - Se **oculta el globo**: las teselas de Google ya incluyen el suelo. Con él se ocultan el relieve del LiDAR y la cartografía de fondo (ortofoto PNOA o atlas); la capa de la ortofoto PNOA se apaga expresamente, así que su crédito tampoco aparece mientras no se ve. El botón **Alternar cartografía** queda desactivado («Oculto con Fotorrealista») y conserva su valor. El modo **Híbrido (sin suelo)** se puede usar: la malla hace de suelo, y la nota del panel Capas lo dice («el suelo es la malla 3D de Google»). Si estaban cargados los edificios OSM de ion, también se ocultan (serían los mismos edificios dos veces).
   - Los **activos** se apoyan en la malla, en su posición (`HeightReference.RELATIVE_TO_3D_TILE`): la pasarela de una cubierta queda sobre la cubierta de la malla, sin sumar su altura de montaje, porque la malla ya tiene el edificio. Las áreas de las instalaciones se dibujan sobre la malla y sus etiquetas se pegan a ella.
   - Las **nubes PNOA** se siguen pudiendo mostrar encima, a su altura real, desde el panel Capas. Donde la nube y la malla coinciden, se tapan una a otra según cuál quede delante en cada píxel.
   - **Medir** funciona igual: el clic toma la profundidad de lo dibujado, ahora la malla. «Al suelo (MDT)» sigue usando el modelo del terreno del LiDAR si hay hojas cargadas.
@@ -21,15 +22,24 @@ El visor puede poner debajo de los activos la malla 3D fotorrealista de **Google
 
 Si algo falla, la capa no se activa (o se desactiva sola) y el visor sigue con la vista LiDAR. El mensaje aparece sobre el mapa:
 
-| Situación                                                | Cómo se detecta                                                               | Mensaje (resumido)                                   |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------- |
-| El token no tiene el asset 2275207 o no autoriza esa URL | HTTP 401, 403 o 404 de Cesium ion                                             | «El token de Cesium ion no da acceso…»               |
-| Cuota mensual agotada                                    | HTTP 429, o un mensaje con «quota»                                            | «La cuenta de Cesium ion ha agotado su cuota…»       |
-| Sin conexión                                             | El navegador está desconectado o la petición no recibe respuesta              | «Sin conexión con Cesium ion o con Google…»          |
-| Otro fallo                                               | Cualquier otra respuesta                                                      | «No se pudo cargar la capa fotorrealista de Google…» |
-| Fallan teselas con la capa ya activa                     | Una tesela rechazada (401, 403, 429) o 8 fallos seguidos sin ninguna correcta | El de la tabla según el caso; la capa se apaga sola  |
+| Situación                                                | Cómo se detecta                                                         | Mensaje (resumido)                                   |
+| -------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- |
+| El token no tiene el asset 2275207 o no autoriza esa URL | HTTP 401, 403 o 404 de Cesium ion                                       | «El token de Cesium ion no da acceso…»               |
+| Cuota mensual agotada                                    | HTTP 429, o «quota» en el mensaje o en el cuerpo de la respuesta de ion | «La cuenta de Cesium ion ha agotado su cuota…»       |
+| Sin conexión                                             | El navegador está desconectado o la petición no recibe respuesta        | «Sin conexión con Cesium ion o con Google…»          |
+| Otro fallo                                               | Cualquier otra respuesta                                                | «No se pudo cargar la capa fotorrealista de Google…» |
+| Fallan teselas con la capa ya activa                     | Ver la lista de abajo                                                   | El de la tabla según el caso; la capa se apaga sola  |
+| No llega ninguna tesela                                  | 30 s con la capa activa sin una sola tesela cargada                     | «…no ha cargado ninguna tesela en 30 s…»             |
 
-El código exacto que devuelve Cesium ion al agotar la cuota no se ha podido comprobar; se trata como cuota cualquier 429 o mensaje que la mencione, y el resto cae en «Otro fallo» sin romper el visor.
+Con la capa ya activa, se apaga sola (vuelven el globo y la vista LiDAR, con el mensaje) en cuanto:
+
+- una tesela es rechazada (401, 403, 404 o 429);
+- falla el contenido de arriba del todo: el de la raíz o, si la raíz solo agrupa (como en el tileset de Google), el de un hijo directo de la raíz. Sin él no se puede dibujar nada, aunque sea un solo 500;
+- fallan 3 teselas seguidas sin que haya llegado ninguna;
+- pasan 30 s sin ninguna tesela cargada;
+- con teselas ya cargadas, fallan 8 seguidas sin ninguna correcta (una tesela perdida no apaga la capa).
+
+El código exacto que devuelve Cesium ion al agotar la cuota no se ha podido comprobar. Se trata como cuota cualquier 429 y cualquier respuesta cuyo mensaje o cuerpo la mencione («quota», «cuota», «limit exceeded»): Cesium guarda el cuerpo de una petición fallida en `RequestErrorEvent.response`, que es donde viene la explicación del servidor si la da. Esto vale para la petición del tileset a ion; de una tesela que falla, Cesium solo pasa la URL y el texto del error (con el código HTTP), así que ahí se detecta el 429 pero no un cuerpo que hable de cuota. El resto cae en «Otro fallo» sin romper el visor.
 
 ## Condiciones de uso
 
@@ -48,7 +58,7 @@ Hace falta una cuenta propia de Cesium ion. Unos 10 minutos.
 4. Abre **Gemelo digital** con las hojas de Laguna de Duero cargadas. Comprueba que la etiqueta superior dice «ION LISTO» y que en la columna de controles hay un botón con un edificio cuyo título es «Fotorrealista (Google)».
 5. Púlsalo. En unos segundos deberías ver la malla de Google; la etiqueta superior cambia a «FOTORREALISTA (GOOGLE)» y el botón queda marcado. Comprueba:
    - abajo, en el mapa, el logotipo o el texto de Google y sus proveedores de datos, sin abrir ningún desplegable;
-   - que no se ve el mapa de fondo ni el relieve del LiDAR (solo la malla);
+   - que no se ve el mapa de fondo ni el relieve del LiDAR (solo la malla), y que en los créditos ya no está «Ortofoto PNOA»;
    - que los marcadores de Torrelago están sobre las cubiertas de las torres y los de la laguna en la orilla;
    - que con **Medir**, dos clics en el suelo dan una distancia razonable y uno en una cubierta y otro al pie de su torre dan unos 42 m de desnivel;
    - que en Capas se pueden ocultar y mostrar las nubes PNOA encima de la malla.
