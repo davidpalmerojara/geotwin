@@ -42,7 +42,16 @@ import {
   PhotorealError,
   TileFailureWatch,
 } from './photorealistic';
-import { fitInView, frameOf, samePose, type LatLng, type ScreenBox } from './camera';
+import {
+  fitInView,
+  flyOnOwn,
+  frameOf,
+  samePose,
+  type AutoFlight,
+  type LatLng,
+  type Pose,
+  type ScreenBox,
+} from './camera';
 import { coveredByOverlays, shiftedRight, viewerFov } from './overlays';
 import { placeLabels, type LabelAnchor, type LabelOffset } from './labels';
 import { useLayers } from '../../hooks/data';
@@ -68,37 +77,12 @@ const LABEL_PAD_X = 7,
   LABEL_HEIGHT = 26;
 // What floats over the map: installation labels keep clear of it.
 const MAP_FURNITURE = '.map-controls, .map-top .map-tag, .map-bottom, .map-hint, .map-message';
-/**
- * The last flight the viewer made on its own (framing a place or the selected asset). When the
- * ground under it changes (the LiDAR terrain arrives after the first frame) it is flown again,
- * but only while the camera is still where that flight left it: a user's moves are never undone.
- */
-interface AutoFlight {
-  state: 'flying' | 'landed';
-  redo: () => void;
-  /** Where the flight left the camera: position on the ground and orientation. */
-  pose?: [number, number, number, number];
-}
 // Position (lng, lat in radians) and orientation, but not height: Cesium may lift a camera that
 // ends up below newly loaded terrain, and that is not a move by the user.
-const poseOf = (v: Viewer): [number, number, number, number] => {
+const poseOf = (v: Viewer): Pose => {
   const c = v.camera.positionCartographic;
   return [c.longitude, c.latitude, v.camera.heading, v.camera.pitch];
 };
-/** Starts a flight of the viewer's own and remembers it in `last`, so it can be flown again. */
-function flyOnOwn(
-  last: { current: AutoFlight | null },
-  v: Viewer,
-  fly: (complete: () => void) => void,
-) {
-  const flight: AutoFlight = { state: 'flying', redo: () => flyOnOwn(last, v, fly) };
-  last.current = flight;
-  fly(() => {
-    if (last.current !== flight || v.isDestroyed()) return;
-    flight.state = 'landed';
-    flight.pose = poseOf(v);
-  });
-}
 /** Ellipsoidal ground height (m) used to aim the camera: the LiDAR terrain, or 0 on the globe. */
 type Ground = (lng: number, lat: number) => number;
 const groundOf =
@@ -118,6 +102,7 @@ function flyToPoints(
   duration: number,
   ground: Ground,
   complete?: () => void,
+  cancel?: () => void,
 ) {
   const frame = frameOf(points);
   if (!frame || v.isDestroyed()) return;
@@ -143,6 +128,7 @@ function flyToPoints(
       offset: new HeadingPitchRange(heading, CesiumMath.toRadians(-55), view.distance),
       duration,
       complete,
+      cancel,
     },
   );
   v.scene.requestRender();
@@ -611,8 +597,8 @@ export default function CesiumView({
     if (selectedRef.current && framed.current) return;
     // The first framing is instant; later ones (another place, the real ground) fly for 1 s.
     let duration = framed.current ? 1 : 0;
-    flyOnOwn(autoFlight, v, (complete) => {
-      flyToPoints(v, framePoints, duration, groundRef.current, complete);
+    flyOnOwn(autoFlight, v, poseOf, (complete, cancel) => {
+      flyToPoints(v, framePoints, duration, groundRef.current, complete, cancel);
       duration = 1;
     });
     framed.current = true;
@@ -626,7 +612,7 @@ export default function CesiumView({
     // bounding sphere in a later render; with requestRenderMode that flight could stay
     // pending until an unrelated update and then start from a stale view.
     if (!v.entities.getById(`asset:${selectedId}`)?.position?.getValue(JulianDate.now())) return;
-    flyOnOwn(autoFlight, v, (complete) => {
+    flyOnOwn(autoFlight, v, poseOf, (complete, cancel) => {
       const asset = assetsRef.current.find((a) => a.id === selectedId);
       if (!asset) return;
       const { lng, lat } = asset.location;
@@ -639,6 +625,7 @@ export default function CesiumView({
         duration: 1,
         offset: new HeadingPitchRange(0, CesiumMath.toRadians(-45), 650),
         complete,
+        cancel,
       });
       v.scene.requestRender();
     });

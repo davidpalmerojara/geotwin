@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  flyOnOwn,
+  type AutoFlight,
+  type Pose,
   aimShift,
   coveredRight,
   distanceM,
@@ -142,5 +145,47 @@ describe('Framing beside a floating panel', () => {
     expect(samePose(landed, [-0.0824 + 1e-6, 0.7258, 0, -0.785])).toBe(false);
     expect(samePose(landed, [-0.0824, 0.7258, 0.1, -0.785])).toBe(false);
     expect(samePose(landed, [-0.0824, 0.7258, 0, -0.6])).toBe(false);
+  });
+});
+
+describe('Flights the viewer makes on its own', () => {
+  // A stand-in viewer: the flights it was asked for, with their callbacks.
+  const setup = () => {
+    const flights: { complete: () => void; cancel: () => void }[] = [];
+    const viewer = { pose: [0.1, 0.7, 0, -1] as Pose, isDestroyed: () => false };
+    const last: { current: AutoFlight | null } = { current: null };
+    const start = () =>
+      flyOnOwn(
+        last,
+        viewer,
+        (v) => [...v.pose] as Pose,
+        (complete, cancel) => flights.push({ complete, cancel }),
+      );
+    return { flights, viewer, last, start };
+  };
+  it('remembers where a flight lands, to fly it again on new ground', () => {
+    const { flights, last, start } = setup();
+    start();
+    expect(last.current?.state).toBe('flying');
+    flights[0]!.complete();
+    expect(last.current).toMatchObject({ state: 'landed', pose: [0.1, 0.7, 0, -1] });
+    last.current!.redo();
+    expect(flights).toHaveLength(2);
+  });
+  it('forgets a flight that another flight interrupts (Cesium calls only cancel)', () => {
+    const { flights, last, start } = setup();
+    start();
+    flights[0]!.cancel(); // the user's «Ir» on a layer took over
+    expect(last.current).toBeNull();
+  });
+  it('keeps the newer flight when the older one is cancelled by it', () => {
+    const { flights, last, start } = setup();
+    start();
+    start(); // flown again on the real ground: Cesium cancels the first one
+    const newer = last.current;
+    flights[0]!.cancel();
+    flights[0]!.complete();
+    expect(last.current).toBe(newer);
+    expect(newer?.state).toBe('flying');
   });
 });

@@ -121,3 +121,42 @@ export function samePose(a: readonly number[], b: readonly number[]) {
     a.every((x, i) => (i < 2 ? Math.abs(x - b[i]!) < 1e-7 : turn(x - b[i]!) < 1e-3))
   );
 }
+/** Camera position on the ground (lng, lat in radians) and orientation (heading, pitch). */
+export type Pose = [number, number, number, number];
+/**
+ * The last flight the viewer made on its own (framing a place or the selected asset). When the
+ * ground under it changes (the LiDAR terrain arrives after the first frame) it is flown again,
+ * but only while the camera is still where that flight left it: a user's moves are never undone.
+ */
+export interface AutoFlight {
+  state: 'flying' | 'landed';
+  redo: () => void;
+  /** Where the flight left the camera. */
+  pose?: Pose;
+}
+/**
+ * Starts a flight of the viewer's own and remembers it in `last`, so it can be flown again.
+ * `fly` gets the callbacks for the camera flight: `complete` when it lands, `cancel` when
+ * another flight (the user's «Ir» on a layer, for instance) interrupts it. Cesium calls only
+ * `cancel` then, and the interrupted flight is forgotten: a later change of ground must not
+ * fly it again over what the user asked for.
+ */
+export function flyOnOwn<V extends { isDestroyed(): boolean }>(
+  last: { current: AutoFlight | null },
+  v: V,
+  poseOf: (v: V) => Pose,
+  fly: (complete: () => void, cancel: () => void) => void,
+) {
+  const flight: AutoFlight = { state: 'flying', redo: () => flyOnOwn(last, v, poseOf, fly) };
+  last.current = flight;
+  fly(
+    () => {
+      if (last.current !== flight || v.isDestroyed()) return;
+      flight.state = 'landed';
+      flight.pose = poseOf(v);
+    },
+    () => {
+      if (last.current === flight) last.current = null;
+    },
+  );
+}
