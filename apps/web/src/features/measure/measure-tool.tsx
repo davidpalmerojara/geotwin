@@ -100,21 +100,28 @@ export default function MeasureTool({
   }, [viewer, add]);
 
   // Dock the panel just above the viewer credits, which wrap to several lines on a phone: the
-  // CC-BY attributions (PNOA, PNOA-LiDAR) must stay readable while measuring.
+  // CC-BY attributions (PNOA, PNOA-LiDAR) must stay readable while measuring. The notes over the
+  // map (an error, the relief note) dock at the same place: the panel's height goes to CSS as
+  // --measure-clear so they stack above it instead of under it.
   useEffect(() => {
     const credits = viewer.bottomContainer as HTMLElement;
+    const shell = panel.current?.offsetParent as HTMLElement | null | undefined;
     const dock = () => {
-      const element = panel.current,
-        shell = element?.offsetParent;
+      const element = panel.current;
       if (!element || !shell) return;
       const gap = shell.getBoundingClientRect().bottom - credits.getBoundingClientRect().top;
       element.style.bottom = `${Math.max(0, Math.ceil(gap)) + 8}px`;
+      shell.style.setProperty('--measure-clear', `${Math.ceil(element.offsetHeight) + 8}px`);
     };
     dock();
     const observer = new ResizeObserver(dock);
     observer.observe(credits);
-    if (panel.current?.offsetParent) observer.observe(panel.current.offsetParent);
-    return () => observer.disconnect();
+    if (shell) observer.observe(shell);
+    if (panel.current) observer.observe(panel.current);
+    return () => {
+      observer.disconnect();
+      shell?.style.removeProperty('--measure-clear');
+    };
   }, [viewer]);
 
   // Keyboard: Esc closes, Backspace / Delete / Ctrl+Z undo (not while typing in a text field).

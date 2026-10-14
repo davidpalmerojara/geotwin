@@ -856,7 +856,8 @@ main {
    never cover a CC-BY credit or a control. */
 .map-notes {
   position: absolute;
-  bottom: calc(var(--credits-clear, 40px) + 8px);
+  /* --measure-clear: the height of the measuring panel, docked at the same place, while open. */
+  bottom: calc(var(--credits-clear, 40px) + 8px + var(--measure-clear, 0px));
   left: 70px;
   right: var(--layers-clear, 18px);
   display: flex;

@@ -361,4 +361,43 @@ test.describe('without the orthophoto', () => {
       ]);
       if (width > 600) expect(message!.x + message!.width).toBeLessThanOrEqual(panel!.x);
     });
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ])
+    test(`the measuring panel stacks below the error message at ${width} x ${height}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await page.goto('/gemelo');
+      const map = page.getByTestId('cesium-view');
+      await expect(map).toHaveAttribute('data-ready', 'true', { timeout: 30000 });
+      await expect(map).toHaveAttribute('data-pnoa', 'error', { timeout: 30000 });
+      await page.getByRole('button', { name: 'Medir', exact: true }).click();
+      const tool = page.getByRole('region', { name: 'Medir' });
+      await expect(tool).toBeVisible();
+      const message = page.getByTestId('map-message');
+      await expect(message).toContainText('ortofoto PNOA');
+      // Once both have docked: the message is whole, above the panel, and the panel above the
+      // credits.
+      const credits = page.locator('.cesium-viewer-bottom');
+      await expect
+        .poll(async () => {
+          const [m, t, c] = [
+            await message.boundingBox(),
+            await tool.boundingBox(),
+            await credits.boundingBox(),
+          ];
+          return !!m && !!t && !!c && m.y + m.height <= t.y && t.y + t.height <= c.y;
+        })
+        .toBe(true);
+      // Nothing else covers the message: the point at the middle of each line is the message.
+      const free = await message.evaluate((element) => {
+        const r = element.getBoundingClientRect();
+        return [0.25, 0.5, 0.75].every((f) =>
+          element.contains(document.elementFromPoint(r.left + r.width * f, r.top + r.height / 2)),
+        );
+      });
+      expect(free).toBe(true);
+    });
 });
