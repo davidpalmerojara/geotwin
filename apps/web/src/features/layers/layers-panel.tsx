@@ -160,6 +160,8 @@ export function LayersPanel() {
   const range = single.length === 1 ? ellipsoidalRange(single[0]!) : undefined;
   const hybrid = view.pointMode === 'hybrid';
   const groundIsPhoto = view.baseImagery === 'pnoa' && view.pnoa.state !== 'error';
+  // With «Fotorrealista (Google)» on, the ground under the points is Google's mesh.
+  const groundIsGoogle = view.photoreal;
   const limitText = limits ? `hasta ${mebibytes(limits.max_upload_bytes, 0)}` : '';
 
   return (
@@ -308,9 +310,11 @@ export function LayersPanel() {
               </div>
               {hybrid && (
                 <small className="layer-hint" data-testid="hybrid-hint">
-                  {groundIsPhoto
-                    ? 'El suelo es la ortofoto PNOA sobre el relieve del LiDAR; edificios y vegetación siguen siendo puntos.'
-                    : 'Sin la ortofoto PNOA, bajo los puntos se ve el atlas Natural Earth, con mucho menos detalle.'}
+                  {groundIsGoogle
+                    ? 'Con «Fotorrealista (Google)» el suelo es la malla 3D de Google (no la ortofoto PNOA); edificios y vegetación siguen siendo puntos.'
+                    : groundIsPhoto
+                      ? 'El suelo es la ortofoto PNOA sobre el relieve del LiDAR; edificios y vegetación siguen siendo puntos.'
+                      : 'Sin la ortofoto PNOA, bajo los puntos se ve el atlas Natural Earth, con mucho menos detalle.'}
                 </small>
               )}
             </div>
@@ -321,7 +325,9 @@ export function LayersPanel() {
                   key={group.key}
                   title={
                     hybrid && HYBRID_HIDDEN.includes(group.key)
-                      ? 'En modo híbrido el suelo es la ortofoto'
+                      ? groundIsGoogle
+                        ? 'En modo híbrido el suelo es la malla de Google'
+                        : 'En modo híbrido el suelo es la ortofoto'
                       : undefined
                   }
                 >

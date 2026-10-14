@@ -2,6 +2,7 @@ import { test, expect } from './fixtures';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
+import { fakeIon } from './fake-ion';
 
 // The SYNTHETIC fixture (not measured data): 5,540 points near Laguna de Duero, EPSG:25830.
 const fixture = 'apps/worker/tests/fixtures/synthetic-laguna-duero.laz';
@@ -117,6 +118,21 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   await page.getByRole('button', { name: 'Alternar cartografía', exact: true }).click();
   await expect(map).toHaveAttribute('data-base-imagery', 'pnoa');
   await expect(hint).toContainText('El suelo es la ortofoto PNOA');
+  // Over the Google mesh (ion answered locally, see fake-ion.ts) the ground is that mesh.
+  const google = page.getByRole('button', { name: 'Fotorrealista (Google)', exact: true });
+  if (await google.count()) {
+    await fakeIon(page);
+    await google.click();
+    await expect(map).toHaveAttribute('data-photoreal', 'on', { timeout: 60000 });
+    await expect(hint).toContainText('el suelo es la malla 3D de Google');
+    await expect(panel.locator('label', { has: ground })).toHaveAttribute(
+      'title',
+      'En modo híbrido el suelo es la malla de Google',
+    );
+    await google.click();
+    await expect(map).toHaveAttribute('data-photoreal', 'off');
+    await expect(hint).toContainText('El suelo es la ortofoto PNOA');
+  }
   const axe = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'])
     .include('.layers-panel')
