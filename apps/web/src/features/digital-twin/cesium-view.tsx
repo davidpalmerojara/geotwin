@@ -57,6 +57,7 @@ import { placeLabels, type LabelAnchor, type LabelOffset } from './labels';
 import { useLayers } from '../../hooks/data';
 import { coordinates } from '../../lib/format';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
+import { renderUntil } from '../measure/render-until';
 import { useLidarTerrain } from '../layers/lidar-terrain-provider';
 import { terrainHeight, type LidarTerrain } from '../layers/lidar-terrain';
 import { usePnoaImagery } from '../layers/pnoa-imagery';
@@ -163,6 +164,7 @@ export default function CesiumView({
   // Google Photorealistic 3D Tiles through Cesium ion (only offered with a token).
   const [photoreal, setPhotoreal] = useState<'off' | 'loading' | 'on' | 'error'>('off');
   const photorealRef = useRef<Cesium3DTileset | undefined>(undefined);
+  const stopPhotorealFrames = useRef<(() => void) | undefined>(undefined);
   const photorealOn = photoreal === 'on';
   const ionLoading = useRef<Viewer | null>(null);
   const measuring = useMeasure((s) => s.active),
@@ -315,6 +317,7 @@ export default function CesiumView({
       framed.current = false;
       buildingsRef.current = undefined;
       photorealRef.current = undefined;
+      stopPhotorealFrames.current?.();
       if (ionLoading.current === v) ionLoading.current = null;
     };
   }, [token]);
@@ -642,6 +645,17 @@ export default function CesiumView({
     }
     setPhotoreal(show ? 'on' : 'off');
     v.scene.requestRender();
+    // In request-render mode the mesh can stop half loaded until something else draws a frame
+    // (a camera flight used to): keep drawing until its tiles are in.
+    stopPhotorealFrames.current?.();
+    stopPhotorealFrames.current =
+      show && tileset
+        ? renderUntil(
+            () => !v.isDestroyed() && v.scene.requestRender(),
+            () => v.isDestroyed() || !tileset.show || tileset.tilesLoaded,
+            { maxMs: 30000 },
+          )
+        : undefined;
   };
   const togglePhotoreal = async () => {
     const v = viewer.current;

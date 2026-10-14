@@ -227,8 +227,9 @@ test('Fotorrealista (Google) replaces the globe and keeps assets and measuring o
   expect(await page.evaluate(() => (window as DevWindow).__geotwinViewer!.scene.globe.show)).toBe(
     false,
   );
-  // The provider's attribution is shown on the map, not only behind the credits link.
-  await expect(page.locator('.cesium-widget-credits')).toContainText(CREDIT);
+  // The provider's attribution is shown on the map, not only behind the credits link, once the
+  // mesh has loaded (several seconds under a software renderer).
+  await expect(page.locator('.cesium-widget-credits')).toContainText(CREDIT, { timeout: 30000 });
   await expect(page.locator('.map-top')).toContainText('FOTORREALISTA');
   // The mesh hides the base map: its control is disabled (and keeps its value) meanwhile.
   const base = page.getByRole('button', { name: 'Alternar cartografía', exact: true });
