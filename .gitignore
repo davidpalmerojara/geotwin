@@ -12,6 +12,9 @@ test-results/
 data/
 # Downloaded PNOA orthophoto tiles (scripts/fetch-ortho.sh): CC-BY data, not part of the code.
 apps/web/public/ortho/
+# What scripts/descargar_pnoa_laguna.py leaves in the folder it runs from.
+pnoa-laguna/
+pnoa-laguna-z13-19.zip
 # Python
 __pycache__/
 .venv/
