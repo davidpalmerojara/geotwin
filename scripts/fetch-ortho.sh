@@ -32,18 +32,22 @@ if [ -z "$zip" ]; then
   if command -v gh >/dev/null && gh release download "$TAG" -R "$REPO" -p "$ASSET" -D "$work" 2>/dev/null; then
     :
   else
+    # ${auth[@]+...}: an empty array under set -u aborts bash 3.2 (the macOS default).
     auth=()
     [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
-    id=$(curl -fsSL "${auth[@]}" "https://api.github.com/repos/$REPO/releases/tags/$TAG" |
-      ASSET="$ASSET" python3 -I -c 'import json, os, sys
+    need_auth=""
+    [ -n "${GITHUB_TOKEN:-}" ] || need_auth=" (repositorio privado: inicia sesión con gh o define GITHUB_TOKEN)"
+    release=$(curl -fsSL ${auth[@]+"${auth[@]}"} "https://api.github.com/repos/$REPO/releases/tags/$TAG") ||
+      fail "no se pudo leer la release $TAG de $REPO$need_auth"
+    id=$(printf '%s' "$release" | ASSET="$ASSET" python3 -I -c 'import json, os, sys
 for a in json.load(sys.stdin).get("assets", []):
     if a["name"] == os.environ["ASSET"]:
-        print(a["id"])') || fail "no se pudo leer la release $TAG de $REPO"
+        print(a["id"])') || fail "respuesta inesperada de GitHub para la release $TAG"
     [ -n "$id" ] || {
       echo "fetch-ortho: la release $TAG aún no tiene $ASSET; el visor usará los servidores PNOA."
       exit 0
     }
-    curl -fsSL "${auth[@]}" -H "Accept: application/octet-stream" \
+    curl -fsSL ${auth[@]+"${auth[@]}"} -H "Accept: application/octet-stream" \
       "https://api.github.com/repos/$REPO/releases/assets/$id" -o "$zip" ||
       fail "no se pudo descargar $ASSET"
   fi
