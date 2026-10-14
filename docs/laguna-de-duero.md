@@ -64,7 +64,7 @@ Medido en este entorno (4 CPU, `TILER_JOBS=3`, almacenamiento local, rejilla ofi
 
 ## Cómo se dibuja la nube
 
-Es LiDAR **aéreo**: unos 8 puntos/m² con el solape y 5-6 sin él, tomados desde un avión, con el color de una ortofoto cenital. Las cubiertas, el suelo abierto y las copas quedan bien; las fachadas reciben pocos puntos y los patios estrechos y las calles entre bloques altos, ninguno. Alrededor de Torrelago (600 × 600 m), el **19,5 %** de las celdas de 1 m no tiene ningún punto dibujado, y solo un 5 % de esas celdas vacías (el 1 % del total) tenía puntos de solape: el hueco es del vuelo, no de quitar el solape. Por eso de cerca la nube no puede parecerse a un escaneo terrestre, y las capturas y el vídeo se hacen a media altura o en cenital. En los huecos se ve el mapa de fondo sobre el relieve (aquí, el atlas local de baja resolución; con la ortofoto PNOA, la imagen real).
+Es LiDAR **aéreo**: unos 8 puntos/m² con el solape y 5-6 sin él, tomados desde un avión, con el color de una ortofoto cenital. Las cubiertas, el suelo abierto y las copas quedan bien; las fachadas reciben pocos puntos y los patios estrechos y las calles entre bloques altos, ninguno. Alrededor de Torrelago (600 × 600 m), el **19,5 %** de las celdas de 1 m no tiene ningún punto dibujado, y solo un 5 % de esas celdas vacías (el 1 % del total) tenía puntos de solape: el hueco es del vuelo, no de quitar el solape. Por eso de cerca la nube no puede parecerse a un escaneo terrestre, y las capturas y el vídeo se hacen a media altura o en cenital. En los huecos se ve el mapa de fondo sobre el relieve (en las capturas de esta página, el atlas Natural Earth de baja resolución; con la ortofoto PNOA, la foto real: ver [Ortofoto PNOA bajo la nube](#ortofoto-pnoa-bajo-la-nube)).
 
 El visor la dibuja así (detalle técnico en [architecture.md](architecture.md#capas-y-medición-en-el-visor)):
 
@@ -78,6 +78,25 @@ Antes y después, con la misma cámara y calidad Alta (izquierda, puntos cuadrad
 ![Torrelago antes y después del cambio de dibujo de la nube](screenshots/laguna-antes-despues.jpg)
 
 Las dos capturas se hicieron con un renderizador por software, que en una vista oblicua no termina de cargar todas las teselas en los 5 minutos de espera. Con el mismo tiempo, la de la derecha cargó más (la glorieta del centro sale en ella y no en la de la izquierda), en parte porque ya no se lee la GPU en cada fotograma (ver [architecture.md](architecture.md#capas-y-medición-en-el-visor)); la diferencia de aspecto en lo que sí está cargado (bloques en primer plano, torres) es la del cambio de dibujo.
+
+## Ortofoto PNOA bajo la nube
+
+La nube aérea tiene unos 40 cm entre puntos: de cerca, el suelo se ve como manchas de color. La ortofoto PNOA (25 cm por píxel) drapeada sobre el relieve del LiDAR da un suelo nítido, y el modo **Híbrido (sin suelo)** del panel Capas quita los puntos de suelo (clase 2) y de agua (9) para que se vea solo la foto, con los edificios, la vegetación y el resto como puntos encima.
+
+**De dónde sale la foto.** El visor prueba, en este orden, una copia descargada en `apps/web/public/ortho/`, el TMS de IDEE y el WMTS del IGN, y usa la primera que devuelve una imagen (detalle en el [README](../README.md#cesium-sin-token)). Si ninguna responde, sigue con el atlas Natural Earth y lo avisa. Para tener la foto sin depender de esos servidores:
+
+1. Con Python 3 (sin instalar nada más), ejecuta `python3 scripts/descargar_pnoa_laguna.py` (en Windows, `py scripts\descargar_pnoa_laguna.py`). Baja unas 4.850 teselas JPEG sin modificar (z13 a z19, las ocho hojas con 150 m de margen), primero del TMS de IDEE y, si falla, del WMTS del IGN, con reintentos; si se corta, se vuelve a ejecutar y sigue. Al final deja `pnoa-laguna-z13-19.zip` con `LEEME.txt` (atribución y fecha de descarga).
+2. Sube el zip a la release `data-laguna` (o guárdalo donde quieras).
+3. `scripts/fetch-ortho.sh` (o `scripts/fetch-ortho.sh ruta/al/zip`) lo descarga, comprueba que solo trae teselas `z/x/y.jpg` con contenido JPEG y `LEEME.txt`, y lo deja en `apps/web/public/ortho/` (ignorado por Git). La etiqueta del mapa pasa a **ORTOFOTO PNOA (DESCARGADA)**.
+
+**Lo que hay que saber de la foto:**
+
+- **No es una ortofoto verdadera.** Se corrige con un modelo del terreno, no de los edificios: las torres de Torrelago (unos 42 m) salen inclinadas, con la cubierta desplazada hacia fuera del centro de la foto original. En modo Híbrido se ve esa cubierta «fantasma» en el suelo junto a los puntos de la torre, y las fachadas visibles en la foto aparecen tumbadas sobre el suelo. No se corrige.
+- **Fechas distintas.** El mosaico de «máxima actualidad» en Valladolid es, con mucha probabilidad, de 2023 (25 cm), y el LiDAR es de 2025: una obra o un edificio nuevo puede estar en uno y no en el otro. La fecha exacta se puede consultar en el servicio del IGN (ver los pasos de verificación).
+- **Sombras y coches** de la foto quedan pegados al suelo; en Híbrido, la vegetación baja que el LiDAR clasifica como 1 (sin clasificar) o 3 sigue como puntos sueltos sobre la foto.
+- Fuera de las ocho hojas la foto se drapea sobre el plano orientativo.
+
+**Captura con ortofoto real pendiente.** En el entorno donde se desarrolló no se llega a los servidores del IGN ni de IDEE y el zip aún no estaba en la release, así que no hay capturas ni vídeo con la foto real: las de esta página usan el atlas Natural Earth. El drapeado, el crédito, el modo Híbrido y los cambios de fuente están probados con teselas de prueba (un damero magenta).
 
 ## Comprobación del datum vertical con los datos reales
 
@@ -131,7 +150,7 @@ Un clic cae sobre lo primero que se ve en ese píxel: la copa de un árbol, un c
 - Fuera de las ocho hojas el terreno es un **plano orientativo** a la altura mediana del MDT, que se funde con el borde de los datos en 400 m y vuelve al elipsoide a 30-60 km. Donde falta la hoja 355-4604 se ve ese plano.
 - La laguna no tiene superficie de agua: en la nube es un hueco y en el MDT una superficie interpolada desde la orilla.
 - Densidad de LiDAR aéreo: las fachadas tienen pocos puntos y los patios estrechos ninguno (ver [Cómo se dibuja la nube](#cómo-se-dibuja-la-nube)). La capa opcional [Fotorrealista (Google)](fotorrealista.md) da el aspecto real del entorno, pero no es un dato medido de este proyecto.
-- Sin ion, la ortofoto PNOA del IGN no se pudo cargar en este entorno (red bloqueada); las capturas usan el mapa local de baja resolución bajo la nube.
+- La ortofoto PNOA no se pudo cargar en el entorno de desarrollo (red bloqueada y sin la copia descargada); las capturas usan el atlas Natural Earth bajo la nube. Captura con ortofoto real pendiente.
 - En las capturas, hechas con un renderizador por software (SwiftShader), las teselas lejanas aún no habían cargado su máximo detalle; con una GPU cargan en segundos.
 - Una hoja de 2 × 2 km o más densa multiplica tiempos y disco de forma aproximadamente lineal; la subida pasa por la API (150 MiB por defecto).
 

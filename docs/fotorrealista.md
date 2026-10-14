@@ -9,12 +9,12 @@ El visor puede poner debajo de los activos la malla 3D fotorrealista de **Google
 - El botón **Fotorrealista (Google)** (icono de edificio, en la columna de controles del mapa) **solo aparece si la web se ha construido con `VITE_CESIUM_ION_TOKEN`**. Sin token no se ofrece.
 - Al activarlo se carga el tileset con `createGooglePhotorealistic3DTileset` de CesiumJS, que, sin clave propia de Google, lo pide a Cesium ion. Se carga **una sola vez**: apagarlo y encenderlo después solo lo oculta y lo muestra, para no volver a pedir la tesela raíz (cuenta para la cuota).
 - Con la capa activa:
-  - Se **oculta el globo**: las teselas de Google ya incluyen el suelo. Con él se ocultan el relieve del LiDAR y la cartografía de fondo. Si estaban cargados los edificios OSM de ion, también se ocultan (serían los mismos edificios dos veces).
+  - Se **oculta el globo**: las teselas de Google ya incluyen el suelo. Con él se ocultan el relieve del LiDAR y la cartografía de fondo (ortofoto PNOA o atlas); el botón **Alternar cartografía** queda desactivado («Oculto con Fotorrealista») y conserva su valor. El modo **Híbrido (sin suelo)** se puede usar: la malla hace de suelo. Si estaban cargados los edificios OSM de ion, también se ocultan (serían los mismos edificios dos veces).
   - Los **activos** se apoyan en la malla, en su posición (`HeightReference.RELATIVE_TO_3D_TILE`): la pasarela de una cubierta queda sobre la cubierta de la malla, sin sumar su altura de montaje, porque la malla ya tiene el edificio. Las áreas de las instalaciones se dibujan sobre la malla y sus etiquetas se pegan a ella.
   - Las **nubes PNOA** se siguen pudiendo mostrar encima, a su altura real, desde el panel Capas. Donde la nube y la malla coinciden, se tapan una a otra según cuál quede delante en cada píxel.
   - **Medir** funciona igual: el clic toma la profundidad de lo dibujado, ahora la malla. «Al suelo (MDT)» sigue usando el modelo del terreno del LiDAR si hay hojas cargadas.
   - La **atribución** de Google y de sus proveedores de datos se muestra en el propio mapa (`showCreditsOnScreen`), como exigen sus condiciones, junto a la de PNOA-LiDAR si hay nubes visibles.
-- Al apagarla vuelven el globo, el relieve del LiDAR y la cartografía de fondo.
+- Al apagarla vuelven el globo, el relieve del LiDAR y la cartografía de fondo que estuviera elegida.
 - El visor no tiene geocodificador, así que no se usa ningún otro geocodificador con estas teselas (las condiciones de Google lo exigen).
 
 ## Errores
