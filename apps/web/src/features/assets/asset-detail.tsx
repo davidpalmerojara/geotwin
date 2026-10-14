@@ -23,7 +23,14 @@ import {
 import { api } from '../../lib/api';
 import { time, date } from '../../lib/utils';
 import { useAlerts, useHealth, useInstallations, useSync } from '../../hooks/data';
-import { assetTypeLabel, coordinates, decimal, metricLabel, number } from '../../lib/format';
+import {
+  assetTypeLabel,
+  axisTick,
+  coordinates,
+  decimal,
+  metricLabel,
+  number,
+} from '../../lib/format';
 import { Status, Loading, ErrorState, Empty } from '../../components/common';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../components/ui/dialog';
@@ -267,6 +274,7 @@ function AssetInspector({ id }: { id: string }) {
                   tickLine={false}
                 />
                 <YAxis
+                  tickFormatter={axisTick}
                   tick={{ fill: '#8293a8', fontSize: 10 }}
                   width={25}
                   domain={[0, 'auto']}

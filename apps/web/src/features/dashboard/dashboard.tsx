@@ -16,7 +16,7 @@ import {
   useInstallations,
   useOrganization,
 } from '../../hooks/data';
-import { assetTypeLabel, coordinates, count, number } from '../../lib/format';
+import { assetTypeLabel, axisTick, coordinates, count, number } from '../../lib/format';
 import { Loading, ErrorState, SectionHeading, Status, Empty } from '../../components/common';
 import { useUI } from '../../stores/ui';
 import { Button } from '../../components/ui/button';
@@ -134,6 +134,7 @@ export function Dashboard() {
                   />
                   <YAxis
                     yAxisId="temp"
+                    tickFormatter={axisTick}
                     tick={{ fill: '#8293a8', fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
@@ -141,6 +142,7 @@ export function Dashboard() {
                   />
                   <YAxis
                     yAxisId="vib"
+                    tickFormatter={axisTick}
                     orientation="right"
                     tick={{ fill: '#8293a8', fontSize: 11 }}
                     axisLine={false}

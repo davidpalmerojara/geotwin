@@ -43,6 +43,12 @@ test('dashboard → 3D twin → persisted anomaly → resolved incident', async 
   await expect(page.getByRole('heading', { name: 'Sensores del activo' })).toBeVisible();
   // Values with a decimal comma, each marked as simulated next to it.
   await expect(page.locator('.sensor-card > strong').first()).toHaveText(/^\d+,\d°C\s*simulado$/);
+  // The history chart's axis too: no decimal point.
+  const ticks = page.locator(
+    '.detail-chart .recharts-yAxis-tick-labels .recharts-cartesian-axis-tick-value',
+  );
+  await expect(ticks.first()).toBeVisible();
+  expect((await ticks.allTextContents()).filter((t) => /\d\.\d/.test(t))).toEqual([]);
   const link = `/gemelo?instalacion=${installationId}&activo=${assetId}`;
   await expect(page).toHaveURL((url) => `${url.pathname}${url.search}` === link);
   await page.getByRole('button', { name: 'Simular fallo', exact: true }).click();

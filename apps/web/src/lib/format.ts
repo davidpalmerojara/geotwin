@@ -37,6 +37,8 @@ export function initials(name: string) {
 export function decimal(value: number, digits = 2) {
   return value.toLocaleString('es-ES', { maximumFractionDigits: digits });
 }
+/** Chart axis tick (Recharts passes it untyped) with a decimal comma: 0,35 · 1,05 · 15. */
+export const axisTick = (value: unknown) => decimal(Number(value));
 /** Spanish number with a fixed number of decimals: 1234,5 · 18.245,6 · 5540. */
 export function number(value: number, digits = 0) {
   return value.toLocaleString('es-ES', {

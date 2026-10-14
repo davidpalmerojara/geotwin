@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assetTypeLabel, coordinates, count, decimal, initials, number } from './format';
+import { assetTypeLabel, axisTick, coordinates, count, decimal, initials, number } from './format';
 describe('Spanish formatting', () => {
   it('uses the singular for exactly one', () => {
     expect(count(1, 'sensor activo', 'sensores activos')).toBe('1 sensor activo');
@@ -22,6 +22,12 @@ describe('Spanish formatting', () => {
     expect(decimal(1.7)).toBe('1,7');
     expect(decimal(85)).toBe('85');
     expect(decimal(0.125)).toBe('0,13');
+  });
+  it('writes chart axis ticks with a decimal comma too', () => {
+    expect(axisTick(1.05)).toBe('1,05');
+    expect(axisTick(0.35)).toBe('0,35');
+    expect(axisTick('0.7')).toBe('0,7');
+    expect(axisTick(15)).toBe('15');
   });
   it('names the level probe as such, not as a reservoir', () => {
     expect(assetTypeLabel.level_probe).toBe('Sonda de nivel');
