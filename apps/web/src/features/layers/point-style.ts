@@ -42,6 +42,25 @@ export const ALL_CLASS_GROUPS: Record<ClassGroup, boolean> = {
 };
 const EXPLICIT_CODES = CLASS_GROUPS.flatMap((g) => g.codes);
 
+/**
+ * How much of the cloud is drawn. «Híbrido (sin suelo)» hides the ground and water returns, so
+ * the ground is the orthophoto draped on the LiDAR relief while buildings, vegetation and the
+ * rest stay as points.
+ */
+export type PointMode = 'all' | 'hybrid';
+export const HYBRID_HIDDEN: ClassGroup[] = ['ground', 'water'];
+
+/** The class groups actually drawn: the user's choice, minus ground and water in hybrid mode. */
+export function effectiveClasses(
+  classes: Record<ClassGroup, boolean>,
+  mode: PointMode,
+): Record<ClassGroup, boolean> {
+  if (mode !== 'hybrid') return classes;
+  const result = { ...classes };
+  for (const group of HYBRID_HIDDEN) result[group] = false;
+  return result;
+}
+
 // Height ramp, low to high (blue → green → yellow → red), sampled from a spectral scheme.
 export const HEIGHT_RAMP = [
   '#2c7bb6',
@@ -58,13 +77,20 @@ export const HEIGHT_RAMP = [
 /**
  * Quality presets: `sse` is the tilesets' maximumScreenSpaceError (lower means finer tiles, more
  * of them) and `cacheMB` the tile cache of each layer (a PNOA sheet holds about 100 MB of tiles,
- * so «Alta» can keep a whole sheet loaded while the camera moves around it).
+ * so «Alta» can keep a whole sheet loaded while the camera moves around it). `imageryLevel` is
+ * the deepest PNOA orthophoto level drawn.
  */
-export const QUALITY: Record<Quality, { sse: number; cacheMB: number }> = {
-  low: { sse: 16, cacheMB: 64 },
-  medium: { sse: 12, cacheMB: 128 },
-  high: { sse: 3, cacheMB: 256 },
+export const QUALITY: Record<Quality, { sse: number; cacheMB: number; imageryLevel: number }> = {
+  low: { sse: 16, cacheMB: 64, imageryLevel: 18 },
+  medium: { sse: 12, cacheMB: 128, imageryLevel: 19 },
+  high: { sse: 3, cacheMB: 256, imageryLevel: 19 },
 };
+
+/**
+ * Deepest orthophoto level for a quality preset (z19 is the native 25 cm; z18, 45 cm, needs a
+ * quarter of the tiles). Read once, when the photo layer is created.
+ */
+export const imageryLevelFor = (quality: Quality) => QUALITY[quality].imageryLevel;
 
 /**
  * Defaults for a device: phones and small or low-memory devices start at «Baja» with 3 px

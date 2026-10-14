@@ -10,6 +10,8 @@ import {
   HEIGHT_RAMP,
   pointSpacing,
   displayDefaults,
+  effectiveClasses,
+  imageryLevelFor,
   QUALITY,
   rampBounds,
   ROUND_POINTS_GLSL,
@@ -81,6 +83,36 @@ describe('Point-cloud style builders', () => {
     expect(glsl.color).toContain('metadata.classification == 6.0');
     expect(glsl.show).toContain('metadata.classification == 2.0');
     expect(glsl.show).not.toContain('== 9.0');
+  });
+  it('hybrid mode hides ground and water in the shader and leaves the user choice alone', () => {
+    const chosen = { ...ALL_CLASS_GROUPS, other: false };
+    const hybrid = effectiveClasses(chosen, 'hybrid');
+    expect(hybrid).toEqual({ ...chosen, ground: false, water: false });
+    // The user's own choice is untouched, so switching back restores it.
+    expect(chosen.ground).toBe(true);
+    expect(effectiveClasses(chosen, 'all')).toBe(chosen);
+    const all = shader(buildPointCloudStyle({ mode: 'rgb', classes: chosen }));
+    expect(all.show).toContain('metadata.classification == 2.0');
+    expect(all.show).toContain('metadata.classification == 9.0');
+    const glsl = shader(buildPointCloudStyle({ mode: 'rgb', classes: hybrid }));
+    expect(glsl.show).toContain('metadata.classification == 6.0');
+    expect(glsl.show).not.toContain('== 2.0');
+    expect(glsl.show).not.toContain('== 9.0');
+    // With «Otros» on as well, ground and water are only ever excluded.
+    const withOthers = shader(
+      buildPointCloudStyle({
+        mode: 'rgb',
+        classes: effectiveClasses({ ...ALL_CLASS_GROUPS }, 'hybrid'),
+      }),
+    );
+    expect(withOthers.show).not.toContain('== 2.0');
+    expect(withOthers.show).not.toContain('== 9.0');
+    expect(withOthers.show).toContain('!= 2.0');
+  });
+  it('phones (quality «Baja») stop the orthophoto one level short of its native 25 cm', () => {
+    expect(imageryLevelFor('low')).toBe(18);
+    expect(imageryLevelFor('medium')).toBe(19);
+    expect(imageryLevelFor('high')).toBe(19);
   });
   it('the height expression gives the ellipsoidal height from ECEF', () => {
     const { expression, normal, offset } = heightExpression(centre.lat, centre.lng);

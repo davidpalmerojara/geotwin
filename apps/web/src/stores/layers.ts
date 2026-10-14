@@ -4,8 +4,10 @@ import {
   displayDefaults,
   type ClassGroup,
   type ColorMode,
+  type PointMode,
   type Quality,
 } from '../features/layers/point-style';
+import type { BaseImagery, PnoaSourceId, PnoaState } from '../features/layers/base-imagery';
 
 // What the 3D viewer reports back for each layer it draws.
 export type RenderState = 'loading' | 'shown' | 'error';
@@ -26,6 +28,12 @@ interface LayerViewState {
   realHeight: boolean;
   // Use the layers' ground models (DTM) as the globe's terrain when there is no ion terrain.
   lidarTerrain: boolean;
+  // What lies under the clouds: the PNOA orthophoto (when it loads) or the Natural Earth atlas.
+  baseImagery: BaseImagery;
+  // «Todos» or «Híbrido (sin suelo)»: ground and water hidden, so the ground is the orthophoto.
+  pointMode: PointMode;
+  // Reported by the viewer: is the orthophoto loading, shown, or unavailable, and from where.
+  pnoa: { state: PnoaState; source?: PnoaSourceId };
   // A fly-to request; `n` makes repeated requests for the same layer distinct.
   flyTo: { id: string; n: number } | null;
   render: Record<string, RenderState>;
@@ -37,6 +45,9 @@ interface LayerViewState {
   setEdl: (value: boolean) => void;
   setRealHeight: (value: boolean) => void;
   setLidarTerrain: (value: boolean) => void;
+  setBaseImagery: (value: BaseImagery) => void;
+  setPointMode: (mode: PointMode) => void;
+  setPnoa: (pnoa: { state: PnoaState; source?: PnoaSourceId }) => void;
   requestFlyTo: (id: string) => void;
   setRender: (id: string, state: RenderState | null) => void;
 }
@@ -52,6 +63,8 @@ function deviceDefaults() {
   });
 }
 const initial = deviceDefaults();
+const initialBase: BaseImagery =
+  import.meta.env.VITE_BASE_IMAGERY === 'natural-earth' ? 'natural-earth' : 'pnoa';
 export const useLayerView = create<LayerViewState>((set) => ({
   hidden: {},
   colorMode: 'rgb',
@@ -61,6 +74,9 @@ export const useLayerView = create<LayerViewState>((set) => ({
   edl: false,
   realHeight: false,
   lidarTerrain: true,
+  baseImagery: initialBase,
+  pointMode: 'all',
+  pnoa: { state: 'off' },
   flyTo: null,
   render: {},
   toggle: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),
@@ -71,6 +87,12 @@ export const useLayerView = create<LayerViewState>((set) => ({
   setEdl: (edl) => set({ edl }),
   setRealHeight: (realHeight) => set({ realHeight }),
   setLidarTerrain: (lidarTerrain) => set({ lidarTerrain }),
+  setBaseImagery: (baseImagery) => set({ baseImagery }),
+  // Without the relief the photo lies on the ellipsoid, far below the cloud: hybrid turns it on
+  // (and leaves it on when switched off again).
+  setPointMode: (pointMode) =>
+    set(pointMode === 'hybrid' ? { pointMode, lidarTerrain: true } : { pointMode }),
+  setPnoa: (pnoa) => set({ pnoa }),
   requestFlyTo: (id) => set((s) => ({ flyTo: { id, n: (s.flyTo?.n ?? 0) + 1 } })),
   setRender: (id, state) =>
     set((s) => {

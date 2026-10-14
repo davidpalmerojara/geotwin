@@ -24,6 +24,7 @@ import { aimShift } from '../digital-twin/camera';
 import { coveredByOverlays, shiftedRight, viewerFov } from '../digital-twin/overlays';
 import {
   buildPointCloudStyle,
+  effectiveClasses,
   ellipsoidalRange,
   globeShift,
   heightExpression,
@@ -56,6 +57,7 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
   const hidden = useLayerView((s) => s.hidden),
     colorMode = useLayerView((s) => s.colorMode),
     classes = useLayerView((s) => s.classes),
+    pointMode = useLayerView((s) => s.pointMode),
     pointSize = useLayerView((s) => s.pointSize),
     quality = useLayerView((s) => s.quality),
     edl = useLayerView((s) => s.edl),
@@ -139,12 +141,24 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
           viewer,
           layer,
           entry,
-          { colorMode, classes, pointSize, quality, realHeight, edl },
+          { colorMode, classes, pointMode, pointSize, quality, realHeight, edl },
           onTerrain,
         );
     }
     viewer.scene.requestRender();
-  }, [viewer, ready, layers, colorMode, classes, pointSize, quality, realHeight, edl, onTerrain]);
+  }, [
+    viewer,
+    ready,
+    layers,
+    colorMode,
+    classes,
+    pointMode,
+    pointSize,
+    quality,
+    realHeight,
+    edl,
+    onTerrain,
+  ]);
 
   // Fly to a layer: its loaded bounding volume, or the footprint the worker measured.
   useEffect(() => {
@@ -188,7 +202,7 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
 
 type Display = Pick<
   ReturnType<typeof useLayerView.getState>,
-  'colorMode' | 'classes' | 'pointSize' | 'quality' | 'realHeight' | 'edl'
+  'colorMode' | 'classes' | 'pointMode' | 'pointSize' | 'quality' | 'realHeight' | 'edl'
 >;
 const MIB = 1024 * 1024;
 /** Metres the layer is lowered: on the bare globe it rests on the ellipsoid unless told not to. */
@@ -214,7 +228,8 @@ function apply(viewer: Viewer, layer: Layer, entry: Loaded, view: Display, onTer
   }
   const style = buildPointCloudStyle({
     mode: view.colorMode,
-    classes: view.classes,
+    // Hybrid hides ground and water through the show expression: no tile is reloaded.
+    classes: effectiveClasses(view.classes, view.pointMode),
     center,
     range,
     shift,

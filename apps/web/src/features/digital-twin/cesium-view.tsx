@@ -14,10 +14,6 @@ import {
   ConstantPositionProperty,
   DistanceDisplayCondition,
   ImageryLayer,
-  WebMapTileServiceImageryProvider,
-  WebMercatorTilingScheme,
-  Rectangle,
-  Credit,
   TileMapServiceImageryProvider,
   buildModuleUrl,
   Ion,
@@ -50,27 +46,13 @@ import { coordinates } from '../../lib/format';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
 import { useLidarTerrain } from '../layers/lidar-terrain-provider';
 import { terrainHeight, type LidarTerrain } from '../layers/lidar-terrain';
+import { usePnoaImagery } from '../layers/pnoa-imagery';
+import { baseImageryLabel, PNOA_UNAVAILABLE } from '../layers/base-imagery';
+import { imageryLevelFor } from '../layers/point-style';
 import { useLayerView } from '../../stores/layers';
 import { useMeasure } from '../../stores/measure';
 // The measuring tool is only downloaded when it is first opened.
 const MeasureTool = lazy(() => import('../measure/measure-tool'));
-function pnoaProvider() {
-  const provider = new WebMapTileServiceImageryProvider({
-    url: 'https://www.ign.es/wmts/pnoa-ma',
-    layer: 'OI.OrthoimageCoverage',
-    style: 'default',
-    format: 'image/jpeg',
-    tileMatrixSetID: 'GoogleMapsCompatible',
-    tilingScheme: new WebMercatorTilingScheme(),
-    rectangle: Rectangle.fromDegrees(-10, 35, 5, 45),
-    maximumLevel: 19,
-    credit: new Credit(
-      '<a href="https://www.ign.es/" target="_blank">PNOA © IGN-CNIG · CC-BY 4.0</a>',
-      true,
-    ),
-  });
-  return provider;
-}
 type DevWindow = Window & {
   __geotwinViewer?: Viewer;
   /** Installation labels as last placed (canvas px), for end-to-end checks. */
@@ -184,7 +166,6 @@ export default function CesiumView({
   const callbacks = useRef({ onSelect, onInstallation });
   const [error, setError] = useState(''),
     [ready, setReady] = useState(false),
-    [base, setBase] = useState('PNOA'),
     [buildings, setBuildings] = useState<'off' | 'loading' | 'on' | 'error'>('off');
   const [mapMessage, setMapMessage] = useState('');
   const [terrain, setTerrain] = useState<'ellipsoid' | 'world'>('ellipsoid');
@@ -222,14 +203,21 @@ export default function CesiumView({
   const cloudsShown = useLayerView(
     (s) => Object.entries(s.render).filter(([id, r]) => r === 'shown' && !s.hidden[id]).length,
   );
-  const colorMode = useLayerView((s) => s.colorMode);
+  const colorMode = useLayerView((s) => s.colorMode),
+    pointMode = useLayerView((s) => s.pointMode),
+    quality = useLayerView((s) => s.quality);
+  // The PNOA orthophoto on top of Natural Earth; phones (quality «Baja») stop at a coarser level.
+  const baseImagery = useLayerView((s) => s.baseImagery),
+    setBaseImagery = useLayerView((s) => s.setBaseImagery),
+    pnoa = useLayerView((s) => s.pnoa);
+  usePnoaImagery(ready ? viewer.current : null, ready, imageryLevelFor(quality));
+  const pnoaShown = baseImagery === 'pnoa' && pnoa.state === 'on';
   useEffect(() => () => setMeasuring(false), [setMeasuring]);
   const tooltip = useRef<HTMLDivElement>(null);
   const token = import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined;
   const buildingsRef = useRef<Awaited<ReturnType<typeof createOsmBuildingsAsync>> | undefined>(
     undefined,
   );
-  const baseGeneration = useRef(0);
   const selectedRef = useRef(selectedId);
   const assetsRef = useRef(assets);
   useEffect(() => {
@@ -263,7 +251,11 @@ export default function CesiumView({
         fullscreenButton: false,
         selectionIndicator: false,
         infoBox: false,
-        baseLayer: new ImageryLayer(pnoaProvider()),
+        // Natural Earth ships with Cesium and needs no network: it is always underneath, so the
+        // globe is never blank; the PNOA orthophoto goes on top (usePnoaImagery).
+        baseLayer: ImageryLayer.fromProviderAsync(
+          TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII')),
+        ),
         requestRenderMode: true,
         maximumRenderTimeChange: Infinity,
       });
@@ -628,28 +620,6 @@ export default function CesiumView({
       v.scene.requestRender();
     });
   }, [selectedId, ready, selectedLoaded]);
-  const toggleBase = async () => {
-    const v = viewer.current;
-    if (!v) return;
-    const generation = ++baseGeneration.current;
-    try {
-      const next = base === 'PNOA' ? 'Local' : 'PNOA';
-      const provider =
-        next === 'Local'
-          ? await TileMapServiceImageryProvider.fromUrl(
-              buildModuleUrl('Assets/Textures/NaturalEarthII'),
-            )
-          : pnoaProvider();
-      if (v.isDestroyed() || generation !== baseGeneration.current) return;
-      v.imageryLayers.removeAll();
-      v.imageryLayers.addImageryProvider(provider);
-      v.scene.requestRender();
-      setBase(next);
-      setMapMessage('');
-    } catch {
-      setMapMessage('No se pudo cambiar la cartografía.');
-    }
-  };
   /** Shows or hides the Google mesh; the globe (and the LiDAR relief on it) does the opposite. */
   const showPhotoreal = (v: Viewer, show: boolean) => {
     const tileset = photorealRef.current;
@@ -827,6 +797,10 @@ export default function CesiumView({
         data-buildings={buildings}
         data-pointclouds={cloudsShown}
         data-color-mode={colorMode}
+        data-point-mode={pointMode}
+        data-base-imagery={pnoaShown ? 'pnoa' : 'natural-earth'}
+        data-pnoa={pnoa.state}
+        data-pnoa-source={pnoa.source}
         tabIndex={0}
         role="application"
         aria-label="Mapa 3D. Flechas para desplazarse; + y - para acercar o alejar."
@@ -839,7 +813,8 @@ export default function CesiumView({
           {placeCenter && <b>{coordinates(placeCenter.lat, placeCenter.lng, 4)}</b>}
         </span>
         <span className="map-tag">
-          {token ? 'ION LISTO' : 'MODO BÁSICO'} · {base} ·{' '}
+          {token ? 'ION LISTO' : 'MODO BÁSICO'} ·{' '}
+          {!photorealOn && `${baseImageryLabel(baseImagery, pnoa.state, pnoa.source)} · `}
           {photorealOn
             ? 'FOTORREALISTA (GOOGLE)'
             : terrain === 'world'
@@ -888,9 +863,17 @@ export default function CesiumView({
         <Button
           variant="outline"
           size="icon"
-          title="Alternar ortofoto PNOA / mapa local sin conexión"
+          title={
+            photorealOn
+              ? 'Oculto con Fotorrealista: la malla de Google tapa el mapa base'
+              : baseImagery === 'pnoa'
+                ? 'Cambiar al atlas Natural Earth (sin conexión, poco detalle)'
+                : 'Cambiar a la ortofoto PNOA'
+          }
           aria-label="Alternar cartografía"
-          onClick={() => void toggleBase()}
+          aria-pressed={baseImagery === 'pnoa'}
+          disabled={photorealOn}
+          onClick={() => setBaseImagery(baseImagery === 'pnoa' ? 'natural-earth' : 'pnoa')}
         >
           <Layers size={17} />
         </Button>
@@ -958,9 +941,9 @@ export default function CesiumView({
               : 'Carga las hojas LiDAR en Capas para verlos a su altura.'}
           </div>
         )}
-      {mapMessage && (
-        <div className="map-message" role="status">
-          {mapMessage}
+      {(mapMessage || (pnoa.state === 'error' && baseImagery === 'pnoa' && !photorealOn)) && (
+        <div className="map-message" role="status" data-testid="map-message">
+          {mapMessage || PNOA_UNAVAILABLE}
         </div>
       )}
       <div className="map-bottom">

@@ -23,7 +23,9 @@ import {
   CLASS_GROUPS,
   ellipsoidalRange,
   HEIGHT_RAMP,
+  HYBRID_HIDDEN,
   type ColorMode,
+  type PointMode,
   type Quality,
 } from './point-style';
 import { mebibytes, quietMinutes, validateFile } from './upload';
@@ -46,6 +48,10 @@ const modes: [ColorMode, string][] = [
   ['rgb', 'RGB'],
   ['height', 'Altura'],
   ['classification', 'Clasificación'],
+];
+const pointModes: [PointMode, string][] = [
+  ['all', 'Todos'],
+  ['hybrid', 'Híbrido (sin suelo)'],
 ];
 const qualities: [Quality, string][] = [
   ['low', 'Baja'],
@@ -152,6 +158,8 @@ export function LayersPanel() {
   const single = ready.filter((l) => !view.hidden[l.id]);
   const withGround = ready.filter((l) => l.terrain_url).length;
   const range = single.length === 1 ? ellipsoidalRange(single[0]!) : undefined;
+  const hybrid = view.pointMode === 'hybrid';
+  const groundIsPhoto = view.baseImagery === 'pnoa' && view.pnoa.state !== 'error';
   const limitText = limits ? `hasta ${mebibytes(limits.max_upload_bytes, 0)}` : '';
 
   return (
@@ -284,13 +292,45 @@ export function LayersPanel() {
                 </span>
               </div>
             )}
+            <div className="point-mode">
+              <span id="point-mode-label">Puntos</span>
+              <div className="segmented" role="group" aria-labelledby="point-mode-label">
+                {pointModes.map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={view.pointMode === mode}
+                    onClick={() => view.setPointMode(mode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {hybrid && (
+                <small className="layer-hint" data-testid="hybrid-hint">
+                  {groundIsPhoto
+                    ? 'El suelo es la ortofoto PNOA sobre el relieve del LiDAR; edificios y vegetación siguen siendo puntos.'
+                    : 'Sin la ortofoto PNOA, bajo los puntos se ve el atlas Natural Earth, con mucho menos detalle.'}
+                </small>
+              )}
+            </div>
             <fieldset className="class-filter">
               <legend>Clases ASPRS visibles</legend>
               {CLASS_GROUPS.map((group) => (
-                <label key={group.key}>
+                <label
+                  key={group.key}
+                  title={
+                    hybrid && HYBRID_HIDDEN.includes(group.key)
+                      ? 'En modo híbrido el suelo es la ortofoto'
+                      : undefined
+                  }
+                >
                   <input
                     type="checkbox"
-                    checked={view.classes[group.key]}
+                    checked={
+                      view.classes[group.key] && !(hybrid && HYBRID_HIDDEN.includes(group.key))
+                    }
+                    disabled={hybrid && HYBRID_HIDDEN.includes(group.key)}
                     onChange={() => view.toggleClass(group.key)}
                   />
                   {view.colorMode === 'classification' && (

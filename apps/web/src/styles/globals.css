@@ -2033,6 +2033,25 @@ tr:hover td {
 .height-legend small {
   color: #6f8fab;
 }
+.point-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.point-mode > span {
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #6f8fab;
+}
+.layer-hint {
+  font-size: 9px;
+  line-height: 1.5;
+  color: #8ba5be;
+}
+.class-filter label:has(input:disabled) {
+  opacity: 0.55;
+}
 .class-filter {
   border: 0;
   margin: 0;
