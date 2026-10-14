@@ -125,7 +125,10 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
     await google.click();
     await expect(map).toHaveAttribute('data-photoreal', 'on', { timeout: 60000 });
     await expect(hint).toContainText('el suelo es la malla 3D de Google');
-    await expect(panel.locator('label', { has: ground })).toHaveAttribute(
+    const groundLabel = panel
+      .locator('.class-filter label')
+      .filter({ has: page.getByRole('checkbox', { name: 'Suelo', exact: true }) });
+    await expect(groundLabel).toHaveAttribute(
       'title',
       'En modo híbrido el suelo es la malla de Google',
     );
