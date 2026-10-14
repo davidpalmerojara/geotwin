@@ -900,7 +900,9 @@ export default function CesiumView({
             photorealOn
               ? 'Oculto con Fotorrealista: la malla de Google tapa el mapa base'
               : baseImagery === 'pnoa'
-                ? 'Cambiar al atlas Natural Earth (sin conexión, poco detalle)'
+                ? pnoa.state === 'error'
+                  ? 'Ocultar el aviso y quedarse con el atlas'
+                  : 'Cambiar al atlas Natural Earth (sin conexión, poco detalle)'
                 : 'Cambiar a la ortofoto PNOA'
           }
           aria-label="Alternar cartografía"

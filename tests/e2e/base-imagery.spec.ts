@@ -156,8 +156,10 @@ test.describe('every source refused or unreachable', () => {
       'ATLAS NATURAL EARTH (PNOA NO DISPONIBLE)',
     );
     await expect(page.locator('.cesium-widget-credits')).not.toContainText('scne.es');
-    // Choosing the atlas on purpose removes the warning.
-    await page.getByRole('button', { name: 'Alternar cartografía', exact: true }).click();
+    // Choosing the atlas on purpose removes the warning: the button says so.
+    const base = page.getByRole('button', { name: 'Alternar cartografía', exact: true });
+    await expect(base).toHaveAttribute('title', 'Ocultar el aviso y quedarse con el atlas');
+    await base.click();
     await expect(page.getByTestId('map-message')).toBeHidden();
   });
 });
