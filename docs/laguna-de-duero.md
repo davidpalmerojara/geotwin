@@ -137,4 +137,4 @@ Un clic cae sobre lo primero que se ve en ese píxel: la copa de un árbol, un c
 
 ## Vídeo
 
-[Demo de 44 s](video/laguna-demo.mp4) ([WebM](video/laguna-demo.webm)): el gemelo sobre Laguna de Duero, cambio de modo de color (RGB, altura, clasificación), medición de una torre y una anomalía simulada en la sonda de la laguna. Grabado con un renderizador por software, por eso va a pocos fotogramas por segundo.
+[Demo de 40 s](video/laguna-demo.mp4) ([WebM](video/laguna-demo.webm)): vista general de Laguna de Duero, descenso a Torrelago, cambio de modo de color (altura, clasificación, RGB), medición de una torre (41,7 m de desnivel entre la cubierta y el pie) y una anomalía simulada en la sonda de la laguna, con los puntos redondos y sin contornos. Se grabó fotograma a fotograma en calidad Media: con el renderizador por software cada fotograma tardaba uno o dos minutos, así que la cámara se coloca en cada posición, se espera a las teselas y se captura. Se quitó del montaje un fotograma en el que la cámara aparecía, durante un instante, mucho más lejos.
