@@ -813,13 +813,17 @@ main {
   color: #6e8da8;
   font-weight: 400;
 }
+/* The control column stops above the credits: on a short map (a phone, with the ion buttons) the
+   last buttons go to a second column instead of covering the CC-BY credits. */
 .map-controls {
   position: absolute;
   left: 18px;
   top: 80px;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(auto-fill, 36px);
   gap: 6px;
+  max-height: calc(100% - 88px - var(--credits-clear, 40px));
 }
 .map-controls button {
   background: #0d192ae8;
