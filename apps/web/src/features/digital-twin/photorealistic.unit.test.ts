@@ -6,6 +6,7 @@ import {
   PhotorealError,
   statusOf,
   TileFailureWatch,
+  topContentFailed,
 } from './photorealistic';
 
 const online = () => true;
@@ -35,6 +36,19 @@ describe('Google Photorealistic 3D Tiles loader', () => {
       }, online),
     ).rejects.toMatchObject({ problem: 'quota' });
     expect(classifyPhotorealError(new Error('Monthly quota exceeded'))).toBe('quota');
+  });
+
+  it('reads a quota in the body of the answer, whatever its status', () => {
+    // RequestErrorEvent keeps what the server answered: parsed JSON, text or bytes.
+    const json = { code: 'QuotaExceeded', message: 'Monthly Google tiles quota exhausted' };
+    expect(classifyPhotorealError(new RequestErrorEvent(403, json))).toBe('quota');
+    expect(classifyPhotorealError(new RequestErrorEvent(400, JSON.stringify(json)))).toBe('quota');
+    const bytes = new TextEncoder().encode('{"message":"quota exceeded"}').buffer;
+    expect(classifyPhotorealError(new RequestErrorEvent(500, bytes))).toBe('quota');
+    // A refusal that does not mention a quota is still a matter of access.
+    expect(
+      classifyPhotorealError(new RequestErrorEvent(403, { message: 'Invalid access token' })),
+    ).toBe('access');
   });
 
   it('reports being offline, from the browser or from a request with no response', async () => {
@@ -75,8 +89,40 @@ describe('Tile failures after the layer is shown', () => {
     expect(watch.failed({ message: 'Request has failed. Status Code: 403' })).toBe('access');
   });
 
+  it('stops at once when the content at the top of the tileset fails', () => {
+    const watch = new TileFailureWatch(8, online);
+    // The root content answered 500 once: nothing below it can load.
+    expect(watch.failed({ message: 'Request has failed. Status Code: 500' }, true)).toBe('unknown');
+    expect(topContentFailed({ contentFailed: true, children: [] })).toBe(true);
+    // Google's root only groups a child that holds the whole world.
+    expect(topContentFailed({ children: [{ contentFailed: true }] })).toBe(true);
+    expect(topContentFailed({ children: [{ children: [{ contentFailed: true }] }] })).toBe(false);
+    expect(topContentFailed(undefined)).toBe(false);
+  });
+
+  it('stops after a short run of failures when no tile has ever loaded', () => {
+    const watch = new TileFailureWatch(8, online, 3);
+    expect(watch.started).toBe(false);
+    expect(watch.failed({ message: 'Request has failed. Status Code: 500' })).toBeUndefined();
+    expect(watch.failed({ message: 'Request has failed. Status Code: 500' })).toBeUndefined();
+    expect(watch.failed({ message: 'Request has failed. Status Code: 500' })).toBe('unknown');
+  });
+
+  it('gives up when the start timeout runs out with nothing loaded', () => {
+    expect(new TileFailureWatch(8, online).timedOut()).toBe('timeout');
+    expect(new TileFailureWatch(8, () => false).timedOut()).toBe('offline');
+    const loaded = new TileFailureWatch(8, online);
+    loaded.loaded();
+    expect(loaded.started).toBe(true);
+    expect(loaded.timedOut()).toBeUndefined();
+    expect(() => {
+      throw new PhotorealError('timeout');
+    }).toThrow(/ninguna tesela en 30 s/);
+  });
+
   it('tolerates a few lost tiles, and a loaded tile resets the count', () => {
     const watch = new TileFailureWatch(3, online);
+    watch.loaded();
     expect(watch.failed({ message: 'Request has failed. Status Code: 500' })).toBeUndefined();
     expect(watch.failed({ message: 'Request has failed. Status Code: 500' })).toBeUndefined();
     watch.loaded();
@@ -87,6 +133,7 @@ describe('Tile failures after the layer is shown', () => {
 
   it('reports the connection when the browser goes offline', () => {
     const watch = new TileFailureWatch(2, () => false);
+    watch.loaded();
     expect(watch.failed({ message: 'Request has failed.' })).toBeUndefined();
     expect(watch.failed({ message: 'Request has failed.' })).toBe('offline');
   });
