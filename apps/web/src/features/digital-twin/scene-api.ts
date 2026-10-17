@@ -13,6 +13,7 @@ import {
   SceneTransforms,
   type Viewer,
 } from 'cesium';
+import { flightSeconds } from '../../lib/motion';
 import type { GeoPoint, SceneApi } from '../../stores/viewer';
 
 const geo = (c: Cartographic): GeoPoint => ({
@@ -135,7 +136,7 @@ export function createSceneApi(
             camera.pitch,
             Cartesian3.distance(camera.positionWC, hit),
           ),
-          duration: 0.8,
+          duration: flightSeconds(0.8),
         });
       else
         camera.setView({

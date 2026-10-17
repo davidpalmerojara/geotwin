@@ -2173,75 +2173,458 @@ td.num {
     display: none;
   }
 }
-@media (max-width: 639px) {
-  /* Phone (a fuller layout comes later): plates across the top, sheets over the scene. */
-  :root {
-    --m: 8px;
-  }
-  .hud-tl {
-    right: var(--m);
-  }
-  .place-plate {
-    width: 100%;
-    height: auto;
-    flex-wrap: wrap;
-  }
-  .place-context {
-    flex: 1;
-    min-height: 36px;
-  }
-  .annunciator {
-    flex-basis: 100%;
-    border-left: 0;
-    border-top: 1px solid var(--rule);
-    min-height: 32px;
-  }
-  .demo-tag,
-  .workspace,
-  .place-context > .f2 {
-    display: none;
-  }
-  .hud-tr {
-    top: auto;
-    bottom: calc(var(--hud-bottom, 80px) + 4px);
-    right: var(--m);
-  }
-  .heading-plate .tape {
-    display: none;
-  }
-  .key-plate,
-  .scale-plate,
-  .readout-plate {
-    display: none;
-  }
-  .floating-panel,
-  .section-sheet,
-  .asset-card,
-  .asset-card[data-mode] {
-    left: var(--m) !important;
-    right: var(--m) !important;
-    width: auto !important;
-  }
-  .asset-card,
-  .asset-card[data-mode] {
-    top: auto !important;
-    bottom: var(--hud-bottom, 80px);
-    max-height: 50% !important;
-  }
-  .card-guide {
-    display: none;
-  }
-  .hud-br {
-    flex-basis: 100%;
-  }
-  .credits-plate {
-    font-size: 10.5px;
-  }
-  .credits-line [data-testid='map-base'],
-  .credits-line .honesty {
-    white-space: normal;
-  }
-  .notes-stack {
-    max-width: 100%;
+/* ---------- the scene's assets as a list (keyboard and screen readers) ---------- */
+.scene-list {
+  position: absolute;
+  left: var(--m);
+  top: var(--hud-top, 104px);
+  z-index: 4;
+  width: 320px;
+  max-width: calc(100% - 2 * var(--m));
+  max-height: calc(100% - var(--hud-top, 104px) - var(--hud-bottom, 72px));
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--ink-1);
+  box-shadow: var(--shadow);
+}
+/* Out of sight (but read and reachable) until the focus enters it. */
+.scene-list:not(:focus-within) {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.scene-list-head {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 6px 6px;
+  color: var(--fg-1);
+  font-weight: 600;
+}
+.scene-list ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.scene-list button {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 8px;
+  width: 100%;
+  padding: 5px 6px;
+  border-radius: 2px;
+  text-align: left;
+}
+.scene-list button:hover,
+.scene-list button[aria-current='true'] {
+  background: var(--ink-2);
+}
+.scene-list .f1 {
+  grid-column: 1;
+  font-size: 12px;
+}
+.scene-list .status {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+.scene-list-name {
+  font-weight: 500;
+}
+.scene-list-empty {
+  padding: 4px 6px;
+  color: var(--fg-1);
+}
+
+/* ---------- phone: a floating top plate, a floating tool bar and bottom sheets ---------- */
+.hud-phone {
+  --m: 10px;
+  --bar-h: 58px;
+  /* Where the bottom things rest: the top of the open sheet, or of the tool bar. */
+  --sheet-top: calc(100% - var(--m) - var(--bar-h));
+}
+.phone-top {
+  position: absolute;
+  left: var(--m);
+  right: var(--m);
+  top: var(--m);
+  display: flex;
+  flex-direction: column;
+  gap: var(--g);
+  pointer-events: none;
+}
+.phone-top > * {
+  pointer-events: auto;
+}
+.phone-top > .plate,
+.phone-row > .plate {
+  position: relative;
+}
+.phone-plate {
+  white-space: normal;
+}
+.phone-plate-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 4px 4px 4px 12px;
+}
+.phone-plate-row > svg {
+  flex: none;
+}
+.phone-title {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.15;
+}
+.phone-title .select-plain {
+  max-width: 100%;
+}
+.phone-title .select-plain select {
+  max-width: 100%;
+  padding: 0 18px 0 0;
+  font: 600 16px/1.2 var(--sans);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.phone-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 2px;
+  color: var(--fg-1);
+  font-size: 12.5px;
+}
+.phone-sub .demo-tag {
+  font-size: 10px;
+  line-height: 13px;
+}
+.phone-sub .connection {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.link-plain {
+  color: var(--fg-1);
+  text-decoration: underline;
+  text-decoration-color: var(--rule-2);
+  text-underline-offset: 2px;
+}
+.plate-btn {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--rule-2);
+  border-radius: 2px;
+  background: var(--ink-1);
+  color: var(--fg-0);
+  font-weight: 600;
+  font-size: 14px;
+  flex: none;
+}
+.plate-btn:hover {
+  background: var(--ink-2);
+}
+.menu.menu-right {
+  left: auto;
+  right: 0;
+}
+.menu.menu-right button,
+.menu.menu-right a {
+  height: 44px;
+  font-size: 14px;
+}
+.phone-annun {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border-top: 1px solid var(--rule);
+  text-align: left;
+  white-space: nowrap;
+}
+.phone-annun.annun-critical {
+  background: var(--alarm-bg);
+  border-top-color: var(--alarm);
+}
+.phone-annun.annun-critical b {
+  color: var(--alarm);
+}
+.phone-annun.annun-warning b {
+  color: var(--warn);
+}
+.phone-annun b {
+  font-weight: 600;
+}
+.phone-annun .annun-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.annun-go {
+  margin-left: auto;
+  color: var(--fg-1);
+}
+.phone-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--g);
+  pointer-events: none;
+}
+.phone-row > * {
+  pointer-events: auto;
+}
+.phone-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 0 0 10px;
+}
+.phone-heading-deg {
+  font-weight: 600;
+}
+.phone-heading .needle {
+  width: 44px;
+  height: 42px;
+  border-right: 0;
+  border-left: 1px solid var(--rule);
+}
+.hud-phone .scale-plate {
+  min-height: 44px;
+}
+.hud-phone .scale-note {
+  display: none;
+}
+.phone-tools {
+  left: var(--m);
+  right: var(--m);
+  bottom: var(--m);
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  height: var(--bar-h);
+}
+.phone-key {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 44px;
+  color: var(--fg-1);
+  font-size: 13px;
+  font-weight: 500;
+}
+.tool-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+.phone-key.on {
+  color: var(--fg-0);
+  font-weight: 600;
+}
+.phone-key.on::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 18%;
+  right: 18%;
+  height: 3px;
+  background: var(--fg-0);
+}
+.phone-key[aria-disabled='true'] {
+  color: var(--fg-2);
+}
+.phone-bottom {
+  position: absolute;
+  left: var(--m);
+  right: var(--m);
+  bottom: calc(100% - var(--sheet-top) + var(--g));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--g);
+  pointer-events: none;
+}
+.phone-bottom > *,
+.phone-bottom .notes-stack > * {
+  pointer-events: auto;
+}
+.phone-bottom .plate {
+  position: relative;
+}
+.phone-bottom .notes-stack {
+  max-width: none;
+  align-items: stretch;
+}
+.hud-phone .credits-plate {
+  padding: 3px 8px 4px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-align: left;
+}
+.hud-phone .credits-line [data-testid='map-base'],
+.hud-phone .credits-line .honesty {
+  white-space: normal;
+}
+.hud-phone .credits-slot,
+.hud-phone .scene-credits,
+.hud-phone .scene-credits .cesium-widget-credits {
+  font-size: 10.5px;
+}
+.hud-phone .note {
+  font-size: 11.5px;
+}
+.hud-phone .scene-list {
+  top: 140px;
+  left: var(--m);
+  right: var(--m);
+  width: auto;
+  max-height: 50%;
+}
+.hud-phone .hud-error {
+  top: 140px;
+}
+/* A modal sheet (90 %) covers the scene: the plates behind it step aside, the credits stay. */
+.hud-phone[data-modal] .phone-top,
+.hud-phone[data-modal] .notes-stack,
+.hud-phone[data-modal] .edge-chips {
+  visibility: hidden;
+}
+
+/* bottom sheets */
+.bottom-sheet {
+  position: absolute;
+  left: var(--m);
+  right: var(--m);
+  bottom: calc(var(--m) + var(--bar-h) + var(--g));
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--rule-2);
+  border-radius: 8px 8px 3px 3px;
+  background: var(--ink-1);
+  box-shadow: var(--shadow);
+  transition: top 0.18s ease-out;
+}
+.bottom-sheet[data-snap='drag'] {
+  transition: none;
+}
+/* At 90 % the sheet is modal and runs over the tool bar. */
+.bottom-sheet[role='dialog'] {
+  bottom: var(--m);
+  z-index: 6;
+}
+.sheet-drag {
+  flex: none;
+  touch-action: none;
+}
+.sheet-grab {
+  display: grid;
+  place-items: center;
+  height: 22px;
+  margin: 0 auto;
+  width: 96px;
+  cursor: grab;
+}
+.sheet-grab i {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rule-2);
+}
+.sheet-grab:focus-visible i {
+  background: var(--sig);
+}
+.sheet-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-2) transparent;
+}
+.bottom-sheet .panel-head {
+  min-height: 34px;
+  border-top: 0;
+}
+.bottom-sheet .panel-head .close {
+  height: 36px;
+  padding: 0 8px;
+  font-size: 14px;
+}
+.asset-sheet .card-top {
+  padding-top: 0;
+  border-bottom: 0;
+}
+.asset-sheet .card-top .close {
+  height: 36px;
+  font-size: 14px;
+}
+.asset-sheet .card-top .close kbd,
+.bottom-sheet .close kbd {
+  display: none;
+}
+.asset-sheet .meters {
+  margin: 0 12px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+}
+.asset-sheet .meter-time {
+  display: none;
+}
+.kv-phone {
+  margin: 8px 12px 0;
+  font-size: 12.5px;
+}
+.sig-text {
+  color: var(--sig);
+}
+.card-acts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 6px;
+  margin: 10px 12px 12px;
+}
+.card-acts .btn {
+  height: 44px;
+  padding: 0 4px;
+  font-size: 13.5px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.15;
+}
+.asset-sheet .card-sec:first-of-type {
+  border-top: 1px solid var(--rule);
+}
+.section-phone .sheet-body .page {
+  padding-bottom: 20px;
+}
+.bottom-sheet .floating-panel,
+.bottom-sheet .panel-body {
+  overflow: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bottom-sheet {
+    transition: none;
   }
 }

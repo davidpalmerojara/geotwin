@@ -29,6 +29,8 @@ import { measuredGround } from '../layers/lidar-terrain';
 import { useUI } from '../../stores/ui';
 import { useTool } from '../../stores/tool';
 import { useScene } from '../../stores/viewer';
+import { usePhone } from '../../hooks/media';
+import { BottomSheet, useSnap } from '../hud/bottom-sheet';
 
 /** The asset card: closed when nothing is selected. */
 export function AssetCard() {
@@ -53,12 +55,14 @@ function usePlacement(
   card: React.RefObject<HTMLElement | null>,
   guide: React.RefObject<SVGLineElement | null>,
   asset: Asset | undefined,
+  phone: boolean,
 ) {
   const sceneApi = useScene((s) => s.api),
     relief = useScene((s) => s.relief);
   useLayoutEffect(() => {
     const element = card.current;
-    if (!element) return;
+    // On a phone the card is a bottom sheet: nothing to place.
+    if (!element || phone) return;
     let frame = 0;
     const update = () => {
       frame = 0;
@@ -129,7 +133,7 @@ function usePlacement(
       window.removeEventListener('resize', schedule);
       cancelAnimationFrame(frame);
     };
-  }, [card, guide, sceneApi, asset, relief]);
+  }, [card, guide, sceneApi, asset, relief, phone]);
 }
 
 function AssetCardBody({ id }: { id: string }) {
@@ -150,7 +154,11 @@ function AssetCardBody({ id }: { id: string }) {
     [name, setName] = useState('');
   const card = useRef<HTMLElement>(null),
     guide = useRef<SVGLineElement>(null);
-  usePlacement(card, guide, asset.data);
+  const phone = usePhone();
+  const [snap, setSnap] = useSnap(45);
+  const historyRef = useRef<HTMLElement>(null),
+    labRef = useRef<HTMLElement>(null);
+  usePlacement(card, guide, asset.data, phone);
   const selected = sensors.data?.find((s) => s.id === sensorId) ?? sensors.data?.[0];
   const readings = useQuery({
     queryKey: ['geo', 'readings', id, selected?.id],
@@ -179,308 +187,340 @@ function AssetCardBody({ id }: { id: string }) {
   const ground = a && lidar ? measuredGround(lidar, a.location.lng, a.location.lat) : null;
   const geoid = a ? geoidAt(layers ?? [], a.location.lng, a.location.lat) : null;
   const history = readings.data ?? [];
-  return (
+  const lastReading = sensors.data
+    ?.map((s) => s.latest_at)
+    .filter((t): t is string => !!t)
+    .sort()
+    .at(-1);
+  // Histórico and Laboratorio raise the phone sheet to 90 % and scroll to their section.
+  const reveal = (section: React.RefObject<HTMLElement | null>) => {
+    setSnap(90);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        section.current?.scrollIntoView({ block: 'start' });
+        section.current?.querySelector<HTMLElement>('h3')?.focus({ preventScroll: true });
+      }),
+    );
+  };
+  const content = a && (
     <>
-      <svg className="card-guide" aria-hidden="true">
-        <line ref={guide} style={{ display: 'none' }} />
-      </svg>
-      <aside
-        ref={card}
-        className="panel asset-card"
-        aria-labelledby={a ? 'asset-card-title' : undefined}
-        aria-label={a ? undefined : 'Ficha del activo'}
-        data-map-overlay
-        data-testid="asset-card"
-        data-mode="dock"
-      >
-        {asset.isPending ? (
-          <Loading />
-        ) : asset.isError ? (
-          <ErrorState error={asset.error} retry={() => void asset.refetch()} />
-        ) : (
-          a && (
+      <header className="card-top">
+        <div className="row">
+          <StatusWord status={a.status} />
+          <span className="f2" aria-hidden="true">
+            ·
+          </span>
+          <span className="f1">{assetTypeLabel[a.type]}</span>
+          <span className="spacer" />
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Editar activo"
+            title="Cambiar el nombre"
+            onClick={() => {
+              setName(a.name);
+              setEditing(true);
+            }}
+          >
+            <SquarePen size={14} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="close"
+            aria-label="Cerrar la ficha"
+            onClick={() => select(null)}
+          >
+            <span className="close-text">Cerrar</span>
+            <Kbd>Esc</Kbd>
+            <X size={14} className="close-icon" aria-hidden="true" />
+          </button>
+        </div>
+        <h2 id="asset-card-title" ref={heading} tabIndex={-1}>
+          {a.name}
+        </h2>
+        <p className="sub">
+          {installation ? `${installation.name} · ` : ''}
+          {phone && lastReading ? (
             <>
-              <header className="card-top">
-                <div className="row">
-                  <StatusWord status={a.status} />
-                  <span className="f2" aria-hidden="true">
-                    ·
-                  </span>
-                  <span className="f1">{assetTypeLabel[a.type]}</span>
-                  <span className="spacer" />
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label="Editar activo"
-                    title="Cambiar el nombre"
-                    onClick={() => {
-                      setName(a.name);
-                      setEditing(true);
-                    }}
-                  >
-                    <SquarePen size={14} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="close"
-                    aria-label="Cerrar la ficha"
-                    onClick={() => select(null)}
-                  >
-                    <span className="close-text">Cerrar</span>
-                    <Kbd>Esc</Kbd>
-                    <X size={14} className="close-icon" aria-hidden="true" />
-                  </button>
-                </div>
-                <h2 id="asset-card-title" ref={heading} tabIndex={-1}>
-                  {a.name}
-                </h2>
-                <p className="sub">
-                  {installation ? `${installation.name} · ` : ''}instalación ficticia
-                </p>
-                <dl className="kv">
-                  <dt>Posición</dt>
-                  <dd className="num">{formatLatLon(a.location.lat, a.location.lng)}</dd>
-                  <dt>UTM 30N</dt>
-                  <dd className="num">{formatUtm(a.location.lng, a.location.lat)}</dd>
-                  <dt>Suelo (MDT)</dt>
-                  <dd className="num">
-                    {ground !== null && geoid !== null
-                      ? formatMetres(ground - geoid)
-                      : '— (fuera de las hojas LiDAR o sin relieve)'}
-                    {' · '}
-                    {a.mount_height_m > 0
-                      ? `a ${number(a.mount_height_m, 1)} m sobre el suelo`
-                      : 'montaje a ras de suelo'}
-                  </dd>
-                </dl>
-              </header>
-              <section className="meters" aria-label="Lecturas">
-                {sensors.isPending ? (
-                  <Loading />
-                ) : sensors.isError ? (
-                  <ErrorState error={sensors.error} />
-                ) : sensors.data.length ? (
-                  sensors.data.map((s) => (
-                    <div className={`meter meter-${levelOf(s)}`} key={s.id} data-testid="meter">
-                      <div className="meter-name">
-                        {metricLabel(s.metric_type)}
-                        <Sim />
-                      </div>
-                      <div className="meter-value num">
-                        {s.latest_value === null
-                          ? '—'
-                          : number(s.latest_value, Math.abs(s.latest_value) < 10 ? 2 : 1)}
-                        <small>{s.unit}</small>
-                      </div>
-                      <div className="meter-th num">
-                        Advertencia ≥ {decimal(s.warning_threshold)} {s.unit}
-                        <br />
-                        Crítico ≥ {decimal(s.critical_threshold)} {s.unit}
-                      </div>
-                      <div className="meter-time">
-                        {s.latest_at ? `lectura de las ${time(s.latest_at)}` : 'sin lectura'}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <Empty text="No hay sensores asignados." />
-                )}
-              </section>
-              <section className="card-sec">
-                <h3>
-                  Histórico
-                  {sensors.data && sensors.data.length > 1 && (
-                    <span className="segmented" role="group" aria-label="Sensor del histórico">
-                      {sensors.data.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          aria-pressed={s.id === selected?.id}
-                          onClick={() => {
-                            setSensorId(s.id);
-                            simulate.reset();
-                          }}
-                        >
-                          {metricLabel(s.metric_type)}
-                        </button>
-                      ))}
-                    </span>
-                  )}
-                </h3>
-                <div className="card-chart">
-                  {readings.isPending ? (
-                    <Loading />
-                  ) : readings.isError ? (
-                    <ErrorState error={readings.error} />
-                  ) : history.length ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={history} margin={{ top: 8, right: 18, bottom: 0, left: 0 }}>
-                        <CartesianGrid stroke="#363531" vertical={false} />
-                        <XAxis
-                          dataKey="recorded_at"
-                          tickFormatter={(v) => time(String(v)).slice(0, 5)}
-                          minTickGap={60}
-                          tick={{ fill: '#BAB6AC', fontSize: 11, fontFamily: 'IBM Plex Mono' }}
-                          axisLine={false}
-                          tickLine={false}
-                        />
-                        <YAxis
-                          tickFormatter={axisTick}
-                          tick={{ fill: '#BAB6AC', fontSize: 11, fontFamily: 'IBM Plex Mono' }}
-                          width={34}
-                          domain={[0, 'auto']}
-                          axisLine={false}
-                          tickLine={false}
-                        />
-                        <Tooltip
-                          labelFormatter={(v) => time(String(v))}
-                          formatter={(v) => [
-                            `${number(Number(v), 2)} ${selected?.unit ?? ''}`,
-                            'Lectura simulada',
-                          ]}
-                          contentStyle={{
-                            background: '#0E0E0D',
-                            border: '1px solid #706D64',
-                            borderRadius: 2,
-                            color: '#EEECE6',
-                          }}
-                        />
-                        {selected && (
-                          <>
-                            <ReferenceLine
-                              y={selected.warning_threshold}
-                              stroke="#FF9F1A"
-                              strokeDasharray="4 3"
-                            />
-                            <ReferenceLine
-                              y={selected.critical_threshold}
-                              stroke="#FF5A4C"
-                              strokeDasharray="4 3"
-                            />
-                          </>
-                        )}
-                        <Line
-                          isAnimationActive={false}
-                          type="monotone"
-                          dataKey="value"
-                          stroke="#EEECE6"
-                          strokeWidth={1.5}
-                          dot={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <Empty text="Sin histórico disponible." />
-                  )}
-                </div>
-                {history.length > 0 && (
-                  <p className="card-note num">
-                    {history.length} lecturas · de {time(history[0]!.recorded_at)} a{' '}
-                    {time(history.at(-1)!.recorded_at)} ·{' '}
-                    <span className="threshold-key warn">— advertencia</span>{' '}
-                    <span className="threshold-key alarm">— crítico</span>
-                  </p>
-                )}
-              </section>
-              <section className="card-sec">
-                <h3>
-                  Incidencias activas <span className="r num">{alerts.data?.length ?? '—'}</span>
-                </h3>
-                {alerts.isError ? (
-                  <ErrorState error={alerts.error} />
-                ) : alerts.data?.length ? (
-                  alerts.data.map((al) => (
-                    <div className={`incident incident-${al.severity}`} key={al.id}>
-                      <button
-                        type="button"
-                        className="incident-open"
-                        onClick={() => setIncident(al)}
-                      >
-                        <Glyph status={al.severity} />
-                        <span>
-                          <strong>
-                            {al.severity === 'critical' ? 'Alerta crítica' : 'Advertencia'}
-                          </strong>
-                          <span className="incident-msg">{al.message}</span>
-                          <span className="incident-meta">
-                            desde las {time(al.triggered_at)} ·{' '}
-                            {al.source === 'telemetry' ? 'telemetría simulada' : 'registro manual'}
-                          </span>
-                        </span>
-                        <ChevronRight size={14} aria-hidden="true" />
-                      </button>
-                      <div className="row">
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          onClick={() => setPage('alerts')}
-                        >
-                          Ver en Alertas
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="quiet">Sin incidencias activas.</p>
-                )}
-              </section>
-              <section className="card-sec">
-                <h3>
-                  Cercanos <span className="r">ST_DWithin · PostGIS</span>
-                </h3>
-                <div className="row">
-                  <button type="button" className="btn" onClick={() => setTool('radius')}>
-                    Activos a menos de… <Kbd>5</Kbd>
-                  </button>
-                </div>
-              </section>
-              {health.data?.demo_mode && (
-                <section className="card-sec">
-                  <h3>
-                    Laboratorio de anomalías <span className="r">solo simulación</span>
-                  </h3>
-                  <p className="card-note">
-                    Inyecta una lectura en{' '}
-                    {selected ? metricLabel(selected.metric_type).toLowerCase() : 'el sensor'} y
-                    mantiene el fallo hasta resolver su incidencia. Datos simulados.
-                  </p>
-                  <div className="row">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!selected || simulate.isPending}
-                      onClick={() => simulate.mutate('warning')}
-                    >
-                      Advertencia
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={!selected || simulate.isPending}
-                      onClick={() => simulate.mutate('critical')}
-                    >
-                      Simular fallo
-                    </Button>
-                  </div>
-                  {simulate.isError && (
-                    <p role="alert" className="form-error">
-                      {simulate.error.message}
-                    </p>
-                  )}
-                  {simulate.isSuccess && (
-                    <p role="status" className="card-note">
-                      Anomalía guardada y emitida a la red.
-                    </p>
-                  )}
-                </section>
-              )}
-              <footer className="card-foot">
-                Actualizado a las {time(a.updated_at)} · PostgreSQL / PostGIS
-              </footer>
+              lectura <span className="num">{time(lastReading)}</span>
             </>
-          )
+          ) : (
+            'instalación ficticia'
+          )}
+        </p>
+        {phone ? null : (
+          <dl className="kv">
+            <dt>Posición</dt>
+            <dd className="num">{formatLatLon(a.location.lat, a.location.lng)}</dd>
+            <dt>UTM 30N</dt>
+            <dd className="num">{formatUtm(a.location.lng, a.location.lat)}</dd>
+            <dt>Suelo (MDT)</dt>
+            <dd className="num">
+              {ground !== null && geoid !== null
+                ? formatMetres(ground - geoid)
+                : '— (fuera de las hojas LiDAR o sin relieve)'}
+              {' · '}
+              {a.mount_height_m > 0
+                ? `a ${number(a.mount_height_m, 1)} m sobre el suelo`
+                : 'montaje a ras de suelo'}
+            </dd>
+          </dl>
         )}
-      </aside>
+      </header>
+      <section className="meters" aria-label="Lecturas">
+        {sensors.isPending ? (
+          <Loading />
+        ) : sensors.isError ? (
+          <ErrorState error={sensors.error} />
+        ) : sensors.data.length ? (
+          sensors.data.map((s) => (
+            <div className={`meter meter-${levelOf(s)}`} key={s.id} data-testid="meter">
+              <div className="meter-name">
+                {metricLabel(s.metric_type)}
+                <Sim />
+              </div>
+              <div className="meter-value num">
+                {s.latest_value === null
+                  ? '—'
+                  : number(s.latest_value, Math.abs(s.latest_value) < 10 ? 2 : 1)}
+                <small>{s.unit}</small>
+              </div>
+              <div className="meter-th num">
+                Advertencia ≥ {decimal(s.warning_threshold)} {s.unit}
+                <br />
+                Crítico ≥ {decimal(s.critical_threshold)} {s.unit}
+              </div>
+              <div className="meter-time">
+                {s.latest_at ? `lectura de las ${time(s.latest_at)}` : 'sin lectura'}
+              </div>
+            </div>
+          ))
+        ) : (
+          <Empty text="No hay sensores asignados." />
+        )}
+      </section>
+      {phone && (
+        <>
+          <dl className="kv kv-phone">
+            <dt>Montaje</dt>
+            <dd className="num sig-text">
+              {a.mount_height_m > 0
+                ? `${number(a.mount_height_m, 1)} m sobre el suelo`
+                : 'a ras de suelo'}
+            </dd>
+            <dt>Suelo (MDT)</dt>
+            <dd className="num">
+              {ground !== null && geoid !== null ? `${formatMetres(ground - geoid)} · ` : '— · '}
+              {formatLatLon(a.location.lat, a.location.lng)}
+            </dd>
+          </dl>
+          <div className="card-acts">
+            <button type="button" className="btn" onClick={() => reveal(historyRef)}>
+              Histórico
+            </button>
+            <button type="button" className="btn" onClick={() => setTool('radius')}>
+              Cercanos y radio
+            </button>
+            {health.data?.demo_mode && (
+              <button type="button" className="btn" onClick={() => reveal(labRef)}>
+                Laboratorio
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      <section className="card-sec" ref={historyRef} aria-labelledby="card-history">
+        <h3 id="card-history" tabIndex={-1}>
+          Histórico
+          {sensors.data && sensors.data.length > 1 && (
+            <span className="segmented" role="group" aria-label="Sensor del histórico">
+              {sensors.data.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  aria-pressed={s.id === selected?.id}
+                  onClick={() => {
+                    setSensorId(s.id);
+                    simulate.reset();
+                  }}
+                >
+                  {metricLabel(s.metric_type)}
+                </button>
+              ))}
+            </span>
+          )}
+        </h3>
+        <div className="card-chart">
+          {readings.isPending ? (
+            <Loading />
+          ) : readings.isError ? (
+            <ErrorState error={readings.error} />
+          ) : history.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={history} margin={{ top: 8, right: 18, bottom: 0, left: 0 }}>
+                <CartesianGrid stroke="#363531" vertical={false} />
+                <XAxis
+                  dataKey="recorded_at"
+                  tickFormatter={(v) => time(String(v)).slice(0, 5)}
+                  minTickGap={60}
+                  tick={{ fill: '#BAB6AC', fontSize: 11, fontFamily: 'IBM Plex Mono' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tickFormatter={axisTick}
+                  tick={{ fill: '#BAB6AC', fontSize: 11, fontFamily: 'IBM Plex Mono' }}
+                  width={34}
+                  domain={[0, 'auto']}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  labelFormatter={(v) => time(String(v))}
+                  formatter={(v) => [
+                    `${number(Number(v), 2)} ${selected?.unit ?? ''}`,
+                    'Lectura simulada',
+                  ]}
+                  contentStyle={{
+                    background: '#0E0E0D',
+                    border: '1px solid #706D64',
+                    borderRadius: 2,
+                    color: '#EEECE6',
+                  }}
+                />
+                {selected && (
+                  <>
+                    <ReferenceLine
+                      y={selected.warning_threshold}
+                      stroke="#FF9F1A"
+                      strokeDasharray="4 3"
+                    />
+                    <ReferenceLine
+                      y={selected.critical_threshold}
+                      stroke="#FF5A4C"
+                      strokeDasharray="4 3"
+                    />
+                  </>
+                )}
+                <Line
+                  isAnimationActive={false}
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#EEECE6"
+                  strokeWidth={1.5}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <Empty text="Sin histórico disponible." />
+          )}
+        </div>
+        {history.length > 0 && (
+          <p className="card-note num">
+            {history.length} lecturas · de {time(history[0]!.recorded_at)} a{' '}
+            {time(history.at(-1)!.recorded_at)} ·{' '}
+            <span className="threshold-key warn">— advertencia</span>{' '}
+            <span className="threshold-key alarm">— crítico</span>
+          </p>
+        )}
+      </section>
+      <section className="card-sec" aria-labelledby="card-incidents">
+        <h3 id="card-incidents">
+          Incidencias activas <span className="r num">{alerts.data?.length ?? '—'}</span>
+        </h3>
+        {alerts.isError ? (
+          <ErrorState error={alerts.error} />
+        ) : alerts.data?.length ? (
+          alerts.data.map((al) => (
+            <div className={`incident incident-${al.severity}`} key={al.id}>
+              <button type="button" className="incident-open" onClick={() => setIncident(al)}>
+                <Glyph status={al.severity} />
+                <span>
+                  <strong>{al.severity === 'critical' ? 'Alerta crítica' : 'Advertencia'}</strong>
+                  <span className="incident-msg">{al.message}</span>
+                  <span className="incident-meta">
+                    desde las {time(al.triggered_at)} ·{' '}
+                    {al.source === 'telemetry' ? 'telemetría simulada' : 'registro manual'}
+                  </span>
+                </span>
+                <ChevronRight size={14} aria-hidden="true" />
+              </button>
+              <div className="row">
+                <button type="button" className="btn btn-ghost" onClick={() => setPage('alerts')}>
+                  Ver en Alertas
+                </button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="quiet">Sin incidencias activas.</p>
+        )}
+      </section>
+      <section className="card-sec" aria-labelledby="card-nearby">
+        <h3 id="card-nearby">
+          {phone ? 'Cercanos y radio' : 'Cercanos'} <span className="r">ST_DWithin · PostGIS</span>
+        </h3>
+        <div className="row">
+          <button type="button" className="btn" onClick={() => setTool('radius')}>
+            Activos a menos de… {!phone && <Kbd>5</Kbd>}
+          </button>
+        </div>
+      </section>
+      {health.data?.demo_mode && (
+        <section className="card-sec" ref={labRef} aria-labelledby="card-lab">
+          <h3 id="card-lab" tabIndex={-1}>
+            Laboratorio de anomalías <span className="r">solo simulación</span>
+          </h3>
+          <p className="card-note">
+            Inyecta una lectura en{' '}
+            {selected ? metricLabel(selected.metric_type).toLowerCase() : 'el sensor'} y mantiene el
+            fallo hasta resolver su incidencia. Datos simulados.
+          </p>
+          <div className="row">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!selected || simulate.isPending}
+              onClick={() => simulate.mutate('warning')}
+            >
+              Advertencia
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={!selected || simulate.isPending}
+              onClick={() => simulate.mutate('critical')}
+            >
+              Simular fallo
+            </Button>
+          </div>
+          {simulate.isError && (
+            <p role="alert" className="form-error">
+              {simulate.error.message}
+            </p>
+          )}
+          {simulate.isSuccess && (
+            <p role="status" className="card-note">
+              Anomalía guardada y emitida a la red.
+            </p>
+          )}
+        </section>
+      )}
+      <footer className="card-foot">
+        Actualizado a las {time(a.updated_at)} · PostgreSQL / PostGIS
+      </footer>
+    </>
+  );
+  const state = asset.isPending ? (
+    <Loading />
+  ) : asset.isError ? (
+    <ErrorState error={asset.error} retry={() => void asset.refetch()} />
+  ) : (
+    content
+  );
+  const dialogs = (
+    <>
       <AlertDialog alert={incident} onClose={() => setIncident(null)} />
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent>
@@ -514,6 +554,43 @@ function AssetCardBody({ id }: { id: string }) {
           </form>
         </DialogContent>
       </Dialog>
+    </>
+  );
+  if (phone)
+    return (
+      <>
+        <BottomSheet
+          label="Ficha del activo"
+          labelledBy={a ? 'asset-card-title' : undefined}
+          snaps={[25, 45, 90]}
+          snap={snap}
+          onSnap={setSnap}
+          onClose={() => select(null)}
+          className="asset-sheet"
+          testId="asset-card"
+        >
+          {state}
+        </BottomSheet>
+        {dialogs}
+      </>
+    );
+  return (
+    <>
+      <svg className="card-guide" aria-hidden="true">
+        <line ref={guide} style={{ display: 'none' }} />
+      </svg>
+      <aside
+        ref={card}
+        className="panel asset-card"
+        aria-labelledby={a ? 'asset-card-title' : undefined}
+        aria-label={a ? undefined : 'Ficha del activo'}
+        data-map-overlay
+        data-testid="asset-card"
+        data-mode="dock"
+      >
+        {state}
+      </aside>
+      {dialogs}
     </>
   );
 }

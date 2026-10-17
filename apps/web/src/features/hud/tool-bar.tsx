@@ -73,3 +73,80 @@ export function ToolBar() {
     </nav>
   );
 }
+
+/** The A phone mockup's tool icons (20 px line drawings). */
+const ICONS: Record<Tool | 'layers', React.ReactNode> = {
+  orbit: (
+    <>
+      <circle cx="10" cy="10" r="6" />
+      <path d="M10 1v5M10 14v5M1 10h5M14 10h5" />
+    </>
+  ),
+  measure: <path d="M3 15 15 3M3 15l2.2 2.2M15 3l2.2 2.2M6 12l1.4 1.4M9 9l1.4 1.4M12 6l1.4 1.4" />,
+  profile: <path d="M2 16h16M2 16V9l4-4 4 6 3-3 5 3v5" />,
+  cut: (
+    <>
+      <path d="M5 2v16M15 2v16" />
+      <path d="M5 6h10M5 10h10M5 14h10" strokeWidth="1" strokeDasharray="2 2" />
+    </>
+  ),
+  radius: <circle cx="10" cy="10" r="7" strokeDasharray="3 2" />,
+  layers: <path d="M10 3 18 7 10 11 2 7Z M2 11l8 4 8-4M2 15l8 4 8-4" />,
+};
+function ToolIcon({ tool }: { tool: Tool | 'layers' }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" className="tool-icon" aria-hidden="true">
+      {ICONS[tool]}
+    </svg>
+  );
+}
+
+/**
+ * The phone's tool bar, floating at the bottom: Orbitar, Medir, Perfil, Corte and Capas, each
+ * with icon and name and at least 44 px to tap. The active one has a light bar and bold text
+ * (never yellow). There is no Radio key: the asset sheet's «Cercanos y radio» starts it.
+ */
+export function PhoneToolBar() {
+  const tool = useTool((s) => s.tool),
+    panel = useTool((s) => s.panel),
+    setTool = useTool((s) => s.setTool),
+    togglePanel = useTool((s) => s.togglePanel);
+  return (
+    <nav className="plate phone-tools" aria-label="Herramientas del visor" data-map-overlay>
+      {TOOLS.filter(([id]) => id !== 'radius').map(([id, , label]) => {
+        const pending = PENDING_TOOLS[id];
+        const on = tool === id && panel !== 'layers';
+        return (
+          <button
+            key={id}
+            id={toolButtonId(id)}
+            type="button"
+            className={`phone-key ${on ? 'on' : ''}`}
+            aria-pressed={on}
+            aria-disabled={pending ? true : undefined}
+            aria-describedby={pending ? 'pending-tools' : undefined}
+            title={pending ? `${label}: ${pending.toLowerCase()}` : label}
+            onClick={() => !pending && setTool(id)}
+          >
+            <ToolIcon tool={id} />
+            {label}
+          </button>
+        );
+      })}
+      <span id="pending-tools" hidden>
+        {PENDING_TOOLS.profile}
+      </span>
+      <button
+        id={toolButtonId('layers')}
+        type="button"
+        className={`phone-key ${panel === 'layers' ? 'on' : ''}`}
+        aria-expanded={panel === 'layers'}
+        aria-controls={panel === 'layers' ? 'panel-layers' : undefined}
+        onClick={() => togglePanel('layers')}
+      >
+        <ToolIcon tool="layers" />
+        Capas
+      </button>
+    </nav>
+  );
+}

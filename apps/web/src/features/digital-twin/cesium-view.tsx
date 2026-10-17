@@ -71,6 +71,7 @@ import { imageryLevelFor } from '../layers/point-style';
 import { useLayerView } from '../../stores/layers';
 import { measuring } from '../../stores/measure';
 import { useScene } from '../../stores/viewer';
+import { flightSeconds } from '../../lib/motion';
 type DevWindow = Window & {
   __geotwinViewer?: Viewer;
   /** Installation labels as last placed (canvas px), for end-to-end checks. */
@@ -134,7 +135,7 @@ function flyToPoints(
     ),
     {
       offset: new HeadingPitchRange(heading, FRAME_PITCH, view.distance),
-      duration,
+      duration: flightSeconds(duration),
       complete,
       cancel,
     },
@@ -641,7 +642,7 @@ export default function CesiumView({
         liftToGround(aim.lift, pitch),
       );
       v.camera.flyToBoundingSphere(sphere, {
-        duration: 1,
+        duration: flightSeconds(1),
         offset: new HeadingPitchRange(0, pitch, 650),
         complete,
         cancel,
@@ -777,7 +778,7 @@ export default function CesiumView({
               surface.height + 500,
             ),
             orientation: { heading: v.camera.heading, pitch: v.camera.pitch, roll: v.camera.roll },
-            duration: 1,
+            duration: flightSeconds(1),
           });
         }
       } catch {

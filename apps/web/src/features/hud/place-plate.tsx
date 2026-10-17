@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUpRight } from 'lucide-react';
+import { Search } from 'lucide-react';
 import type { Alert } from '@geotwin/shared';
 import { useAlerts, useInstallations, useOrganization, useSummary } from '../../hooks/data';
-import { useUI, type Page } from '../../stores/ui';
-import { pageTitle } from '../../lib/route';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../../components/ui/dialog';
-import { Brand, Caret, Glyph, Kbd, Sim } from './glyphs';
-import { SHORTCUTS } from './shortcuts';
-
-const MENU: Page[] = ['twin', 'overview', 'assets', 'alerts', 'settings'];
+import { useUI } from '../../stores/ui';
+import { useTool } from '../../stores/tool';
+import { useScene } from '../../stores/viewer';
+import { count } from '../../lib/format';
+import { Brand, Caret, Glyph, Sim } from './glyphs';
+import { GeoTwinMenu } from './geotwin-menu';
 
 /** The most severe active alert, the most recent among equals, and how many others there are. */
 export function activeAlarm(alerts: Alert[] | undefined) {
@@ -19,7 +18,42 @@ export function activeAlarm(alerts: Alert[] | undefined) {
       Number(b.severity === 'critical') - Number(a.severity === 'critical') ||
       b.triggered_at.localeCompare(a.triggered_at),
   );
-  return { alert: sorted[0]!, others: sorted.length - 1 };
+  const same = active.filter((a) => a.severity === sorted[0]!.severity).length;
+  return { alert: sorted[0]!, others: sorted.length - 1, same };
+}
+
+/** The installation of the URL, or none when a shared link names one that no longer exists. */
+function useInstallationChoice() {
+  const installationId = useUI((s) => s.installationId),
+    setInstallation = useUI((s) => s.setInstallation);
+  const installations = useInstallations();
+  const unknownInstallation =
+    !!installationId && !!installations.data?.every((i) => i.id !== installationId);
+  useEffect(() => {
+    if (unknownInstallation) setInstallation('');
+  }, [unknownInstallation, setInstallation]);
+  return { installationId, setInstallation, installations: installations.data };
+}
+
+function InstallationSelect() {
+  const { installationId, setInstallation, installations } = useInstallationChoice();
+  return (
+    <label className="select-plain">
+      <select
+        aria-label="Seleccionar instalación"
+        value={installationId}
+        onChange={(e) => setInstallation(e.target.value)}
+      >
+        <option value="">Todas las instalaciones</option>
+        {installations?.map((i) => (
+          <option key={i.id} value={i.id}>
+            {i.name}
+          </option>
+        ))}
+      </select>
+      <Caret />
+    </label>
+  );
 }
 
 /**
@@ -28,48 +62,12 @@ export function activeAlarm(alerts: Alert[] | undefined) {
  * Alertas).
  */
 export function PlacePlate() {
-  const page = useUI((s) => s.page),
-    setPage = useUI((s) => s.setPage),
-    installationId = useUI((s) => s.installationId),
-    setInstallation = useUI((s) => s.setInstallation);
-  const installations = useInstallations(),
-    summary = useSummary().data,
+  const setPage = useUI((s) => s.setPage);
+  const summary = useSummary().data,
     region = useOrganization().data?.region,
     alarm = activeAlarm(useAlerts(undefined, 'active').data);
-  const [menu, setMenu] = useState(false),
-    [shortcuts, setShortcuts] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null),
-    trigger = useRef<HTMLButtonElement>(null);
-  // A shared link may name an installation that no longer exists: show the whole network.
-  const unknownInstallation =
-    !!installationId && !!installations.data?.every((i) => i.id !== installationId);
-  useEffect(() => {
-    if (unknownInstallation) setInstallation('');
-  }, [unknownInstallation, setInstallation]);
-  // The menu closes on Esc (focus back to its button) and on a click elsewhere.
-  useEffect(() => {
-    if (!menu) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.stopPropagation();
-      setMenu(false);
-      trigger.current?.focus();
-    };
-    const onDown = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node) && event.target !== trigger.current)
-        setMenu(false);
-    };
-    document.addEventListener('keydown', onKey, true);
-    document.addEventListener('pointerdown', onDown);
-    return () => {
-      document.removeEventListener('keydown', onKey, true);
-      document.removeEventListener('pointerdown', onDown);
-    };
-  }, [menu]);
-  const go = (target: Page) => {
-    setMenu(false);
-    setPage(target);
-  };
+  const [menu, setMenu] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
   const workspace = region?.split(' (')[0] ?? '—';
   return (
     <div className="plate place-plate" data-map-overlay data-testid="place-plate">
@@ -86,40 +84,7 @@ export function PlacePlate() {
           GeoTwin
           <Caret />
         </button>
-        {menu && (
-          <div className="menu plate" id="geotwin-menu" ref={menuRef}>
-            <nav aria-label="Secciones">
-              {MENU.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  aria-current={page === p ? 'page' : undefined}
-                  onClick={() => go(p)}
-                >
-                  {pageTitle[p]}
-                  {p === 'alerts' && !!summary?.active_alerts && (
-                    <span className="menu-count num" aria-hidden="true">
-                      {summary.active_alerts}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </nav>
-            <div className="menu-rule" />
-            <button
-              type="button"
-              onClick={() => {
-                setMenu(false);
-                setShortcuts(true);
-              }}
-            >
-              Atajos de teclado
-            </button>
-            <a href="/api/docs" target="_blank" rel="noreferrer">
-              Documentación de la API <ArrowUpRight size={12} aria-hidden="true" />
-            </a>
-          </div>
-        )}
+        <GeoTwinMenu open={menu} setOpen={setMenu} trigger={trigger} />
       </div>
       <div className="place-context">
         <span className="workspace">{workspace}</span>
@@ -129,21 +94,7 @@ export function PlacePlate() {
         <span className="f2" aria-hidden="true">
           /
         </span>
-        <label className="select-plain">
-          <select
-            aria-label="Seleccionar instalación"
-            value={installationId}
-            onChange={(e) => setInstallation(e.target.value)}
-          >
-            <option value="">Todas las instalaciones</option>
-            {installations.data?.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.name}
-              </option>
-            ))}
-          </select>
-          <Caret />
-        </label>
+        <InstallationSelect />
       </div>
       <div className="annunciator" role="status" aria-label="Anunciador">
         <button
@@ -184,24 +135,147 @@ export function PlacePlate() {
           </button>
         )}
       </div>
-      <Dialog open={shortcuts} onOpenChange={setShortcuts}>
-        <DialogContent>
-          <DialogTitle className="dialog-title">Atajos de teclado</DialogTitle>
-          <DialogDescription className="dialog-description">
-            Funcionan en toda la página salvo al escribir en un campo. Se pueden apagar en Ajustes.
-          </DialogDescription>
-          <dl className="shortcut-list">
-            {SHORTCUTS.map(([key, label]) => (
-              <div key={key}>
-                <dt>
-                  <Kbd>{key}</Kbd>
-                </dt>
-                <dd>{label}</dd>
-              </div>
-            ))}
-          </dl>
-        </DialogContent>
-      </Dialog>
+    </div>
+  );
+}
+
+/** «Tiempo real» and the clock (the readout's last cell on desktop; the top plate's on a phone). */
+export function useClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+export const connectionWord = (connection: 'connecting' | 'connected' | 'offline') =>
+  connection === 'connected'
+    ? 'Tiempo real'
+    : connection === 'offline'
+      ? 'Reconectando'
+      : 'Conectando';
+
+/**
+ * The phone's top plate (A/phone.png, floating as in C/phone.png): the installation as the title
+ * (a selector), a line with the workspace, the asset count, «demo» and the real-time state, «Ir
+ * a» and Menú; under it, while an alarm is active, the annunciator row («◆ 1 crítico · Sonda de
+ * nivel · simulado · Ver»), which opens Alertas.
+ */
+export function PhonePlate() {
+  const setPage = useUI((s) => s.setPage),
+    connection = useUI((s) => s.connection);
+  const { installationId, installations } = useInstallationChoice();
+  const summary = useSummary().data,
+    region = useOrganization().data?.region,
+    alarm = activeAlarm(useAlerts(undefined, 'active').data);
+  const setPalette = useTool((s) => s.setPalette);
+  const api = useScene((s) => s.api);
+  const [menu, setMenu] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const installation = installations?.find((i) => i.id === installationId);
+  const total = installation ? installation.asset_count : summary?.total_assets;
+  const workspace = region?.split(' (')[0] ?? '—';
+  const critical = alarm?.alert.severity === 'critical';
+  return (
+    <div className="plate phone-plate" data-map-overlay data-testid="place-plate">
+      <div className="phone-plate-row">
+        <Brand />
+        <div className="phone-title">
+          <InstallationSelect />
+          <p className="phone-sub">
+            <span>{workspace}</span>
+            <span aria-hidden="true"> · </span>
+            <button
+              type="button"
+              className="link-plain"
+              data-testid="annunciator-counts"
+              aria-label={
+                total !== undefined
+                  ? `${count(total, 'activo', 'activos')}. Abre Activos.`
+                  : 'Activos'
+              }
+              onClick={() => setPage('assets')}
+            >
+              {total !== undefined ? count(total, 'activo', 'activos') : '—'}
+            </button>
+            <span aria-hidden="true"> · </span>
+            <span className="demo-tag" title="Instalaciones ficticias y telemetría simulada">
+              demo
+            </span>
+            <span aria-hidden="true"> · </span>
+            <span className={`connection ${connection}`} data-testid="connection">
+              <i className="live-dot" aria-hidden="true" />
+              {connectionWord(connection)}
+            </span>
+          </p>
+        </div>
+        <button
+          type="button"
+          className="plate-btn"
+          aria-label="Ir a…"
+          title="Ir a un activo, una instalación o una capa"
+          onClick={() => setPalette(true)}
+        >
+          <Search size={18} aria-hidden="true" />
+        </button>
+        <div className="place-brand">
+          <button
+            ref={trigger}
+            type="button"
+            className="plate-btn menu-btn"
+            aria-expanded={menu}
+            aria-controls="geotwin-menu"
+            onClick={() => setMenu(!menu)}
+          >
+            Menú
+          </button>
+          <GeoTwinMenu
+            open={menu}
+            setOpen={setMenu}
+            trigger={trigger}
+            className="menu-right"
+            extra={
+              <button
+                type="button"
+                disabled={!api}
+                onClick={() => {
+                  setMenu(false);
+                  api?.home();
+                }}
+              >
+                Encuadre inicial
+              </button>
+            }
+          />
+        </div>
+      </div>
+      {alarm && (
+        <button
+          type="button"
+          className={`phone-annun annun-${alarm.alert.severity}`}
+          data-testid="annunciator-alarm"
+          title="Abre Alertas"
+          onClick={() => setPage('alerts')}
+        >
+          <Glyph status={alarm.alert.severity} />
+          <b>
+            {alarm.same}{' '}
+            {critical
+              ? alarm.same === 1
+                ? 'crítico'
+                : 'críticos'
+              : alarm.same === 1
+                ? 'advertencia'
+                : 'advertencias'}
+          </b>
+          <span className="annun-name">{alarm.alert.asset_name}</span>
+          {alarm.alert.source === 'telemetry' ? <Sim /> : <Sim text="manual" />}
+          {alarm.others >= alarm.same && (
+            <span className="num annun-more">+{alarm.others - alarm.same + 1}</span>
+          )}
+          <span className="annun-go">Ver</span>
+        </button>
+      )}
     </div>
   );
 }

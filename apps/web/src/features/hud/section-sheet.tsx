@@ -4,6 +4,8 @@ import { useUI } from '../../stores/ui';
 import { pageTitle, type Sheet } from '../../lib/route';
 import { Loading } from '../../components/common';
 import { Kbd } from './glyphs';
+import { usePhone } from '../../hooks/media';
+import { PhoneSheet } from './bottom-sheet';
 
 // The sections are only downloaded when their sheet first opens (charts and tables).
 const Dashboard = lazy(() =>
@@ -28,8 +30,30 @@ export function SectionSheet({ sheet }: { sheet: Sheet }) {
   const setPage = useUI((s) => s.setPage);
   const heading = useRef<HTMLHeadingElement>(null);
   const Body = body[sheet];
+  const phone = usePhone();
   // Focus moves to the sheet's title, so a screen reader announces it and Tab continues inside.
   useEffect(() => heading.current?.focus(), [sheet]);
+  // On a phone the section is a sheet over nearly the whole screen, under the credits.
+  if (phone)
+    return (
+      <PhoneSheet
+        key={sheet}
+        label={pageTitle[sheet]}
+        titleId="sheet-title"
+        snaps={[45, 90]}
+        initial={90}
+        onClose={() => setPage('twin')}
+        testId="section-sheet"
+        attrs={{ 'data-sheet': sheet }}
+        className="section-phone"
+      >
+        <div className="sheet-body">
+          <Suspense fallback={<Loading />}>
+            <Body />
+          </Suspense>
+        </div>
+      </PhoneSheet>
+    );
   return (
     <section
       className="panel section-sheet"

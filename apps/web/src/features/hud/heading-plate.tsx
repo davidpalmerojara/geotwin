@@ -171,3 +171,33 @@ export function HeadingPlate({ info }: { info: CameraInfo | null }) {
     </div>
   );
 }
+
+/**
+ * The phone's heading plate: heading and pitch in figures and the north needle (tap: north up).
+ */
+export function PhoneHeading({ info }: { info: CameraInfo | null }) {
+  const api = useScene((s) => s.api);
+  const heading = info ? ((info.heading % 360) + 360) % 360 : 0;
+  return (
+    <div className="plate phone-heading" data-map-overlay data-testid="heading-plate">
+      <span className="num phone-heading-deg">{info ? `${Math.round(heading) % 360}°` : '—'}</span>
+      <span className="num f1">{info ? `${signed(info.pitch, 0)}°` : ''}</span>
+      <button
+        type="button"
+        className="needle"
+        aria-label="Norte arriba"
+        title="Norte arriba"
+        disabled={!api}
+        onClick={() => api?.northUp()}
+      >
+        <svg width="34" height="34" viewBox="-17 -17 34 34" aria-hidden="true">
+          <circle r="15" className="needle-ring" />
+          <g transform={`rotate(${-heading})`}>
+            <path d="M0,-12 L4,2 L0,0 L-4,2Z" className="needle-n" />
+            <path d="M0,0 L4,2 L0,12 L-4,2Z" className="needle-s" />
+          </g>
+        </svg>
+      </button>
+    </div>
+  );
+}

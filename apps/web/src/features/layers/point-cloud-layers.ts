@@ -39,6 +39,7 @@ import {
   shadingFor,
 } from './point-style';
 import { SharedCredits } from './shared-credits';
+import { flightSeconds } from '../../lib/motion';
 
 interface Loaded {
   url: string;
@@ -183,7 +184,7 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
       pitch = CesiumMath.toRadians(-38),
       range = Math.max(sphere.radius * 2.6, 120);
     viewer.camera.flyToBoundingSphere(clearOfOverlays(viewer, sphere, heading, pitch, range), {
-      duration: 1.2,
+      duration: flightSeconds(1.2),
       offset: new HeadingPitchRange(heading, pitch, range),
     });
     viewer.scene.requestRender();

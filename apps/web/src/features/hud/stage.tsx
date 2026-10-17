@@ -9,11 +9,11 @@ import { useScene } from '../../stores/viewer';
 import { ErrorState, Loading } from '../../components/common';
 import { AssetCard } from '../assets/asset-card';
 import { LayersPanel, LayersSummary } from '../layers/layers-panel';
-import { PlacePlate } from './place-plate';
-import { ToolBar, toolButtonId } from './tool-bar';
+import { PhonePlate, PlacePlate } from './place-plate';
+import { PhoneToolBar, ToolBar, toolButtonId } from './tool-bar';
 import { FloatingPanel } from './floating-panel';
 import { SectionSheet } from './section-sheet';
-import { HeadingPlate, useCamera } from './heading-plate';
+import { HeadingPlate, PhoneHeading, useCamera } from './heading-plate';
 import { ScalePlate } from './scale-bar';
 import { ReadoutPlate } from './readout-plate';
 import { CreditsPlate } from './credits-plate';
@@ -22,6 +22,9 @@ import { EdgeChips } from './edge-chips';
 import { Palette } from './palette';
 import { RadiusPanel } from './radius-panel';
 import { useShortcuts } from './use-shortcuts';
+import { PhoneSheet } from './bottom-sheet';
+import { SceneAssetList } from './scene-asset-list';
+import { usePhone } from '../../hooks/media';
 
 const CesiumView = lazy(() => import('../digital-twin/cesium-view'));
 // The measuring tool is only downloaded when it is first opened.
@@ -52,6 +55,7 @@ export function Stage() {
     lidarOn = useScene((s) => s.terrain === 'lidar'),
     lidar = useScene((s) => s.lidar);
   const camera = useCamera();
+  const phone = usePhone();
   const failed = assets.isError || installations.isError;
   // The viewer is never gated on query state: unmounting it would destroy the WebGL context, the
   // chosen base layer, ion terrain and buildings, and the camera.
@@ -74,6 +78,7 @@ export function Stage() {
         `${Math.ceil(window.innerHeight - (bottom ?? window.innerHeight - 60)) + 8}px`,
       );
     };
+    if (phone) return;
     measure();
     const observer = new ResizeObserver(measure);
     for (const part of element.querySelectorAll('.hud-tl, .hud-bottom')) observer.observe(part);
@@ -82,7 +87,25 @@ export function Stage() {
       observer.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, []);
+  }, [phone]);
+  const measureTool = api ? (
+    <Suspense fallback={<Loading />}>
+      <MeasureTool viewer={api.viewer} ground={ground} />
+    </Suspense>
+  ) : (
+    <Loading label="Esperando al visor…" />
+  );
+  const error = failed && (
+    <div className="plate hud-error" data-map-overlay>
+      <ErrorState
+        error={assets.error ?? installations.error}
+        retry={() => {
+          void assets.refetch();
+          void installations.refetch();
+        }}
+      />
+    </div>
+  );
   return (
     <main className="stage" ref={stage} aria-label="Gemelo digital de Laguna de Duero">
       <Suspense fallback={<Loading label="Inicializando motor geoespacial…" />}>
@@ -95,81 +118,129 @@ export function Stage() {
           onInstallation={setInstallation}
         />
       </Suspense>
-      <div className="hud">
-        <div className="hud-tl">
-          <PlacePlate />
-          <ToolBar />
-        </div>
-        {failed && (
-          <div className="plate hud-error" data-map-overlay>
-            <ErrorState
-              error={assets.error ?? installations.error}
-              retry={() => {
-                void assets.refetch();
-                void installations.refetch();
-              }}
-            />
+      {phone ? (
+        <div className="hud hud-phone">
+          <div className="phone-top">
+            <PhonePlate />
+            <div className="phone-row">
+              <ScalePlate info={camera} />
+              <PhoneHeading info={camera} />
+            </div>
           </div>
-        )}
-        {page !== 'twin' ? (
-          <SectionSheet sheet={page} />
-        ) : panel === 'layers' ? (
-          <FloatingPanel
-            id="panel-layers"
-            anchorId={toolButtonId('layers')}
-            label="Capas"
-            title="Capas"
-            extra={<LayersSummary />}
-            width={340}
-            onClose={closePanel}
-          >
-            <LayersPanel />
-          </FloatingPanel>
-        ) : panel === 'measure' ? (
-          <FloatingPanel
-            id="panel-measure"
-            anchorId={toolButtonId('measure')}
-            label="Medir"
-            title="Medir"
-            width={330}
-            onClose={closePanel}
-          >
-            {api ? (
-              <Suspense fallback={<Loading />}>
-                <MeasureTool viewer={api.viewer} ground={ground} />
-              </Suspense>
-            ) : (
-              <Loading label="Esperando al visor…" />
-            )}
-          </FloatingPanel>
-        ) : panel === 'radius' ? (
-          <FloatingPanel
-            id="panel-radius"
-            anchorId={toolButtonId('radius')}
-            label="Radio"
-            title="Radio"
-            extra={<span className="panel-sub">ST_DWithin · PostGIS</span>}
-            width={330}
-            onClose={closePanel}
-          >
-            <RadiusPanel />
-          </FloatingPanel>
-        ) : null}
-        <HeadingPlate info={camera} />
-        <AssetCard />
-        <EdgeChips />
-        <div className="hud-bottom">
-          <div className="hud-bl">
-            <ScalePlate info={camera} />
-            <ReadoutPlate />
-          </div>
-          <div className="hud-br">
+          <SceneAssetList />
+          {error}
+          {page !== 'twin' ? (
+            <SectionSheet sheet={page} />
+          ) : panel === 'layers' ? (
+            <PhoneSheet
+              key="layers"
+              id="panel-layers"
+              anchorId={toolButtonId('layers')}
+              label="Capas"
+              extra={<LayersSummary />}
+              snaps={[45, 90]}
+              initial={90}
+              onClose={closePanel}
+            >
+              <LayersPanel />
+            </PhoneSheet>
+          ) : panel === 'measure' ? (
+            <PhoneSheet
+              key="measure"
+              id="panel-measure"
+              anchorId={toolButtonId('measure')}
+              label="Medir"
+              snaps={[25, 45, 90]}
+              initial={45}
+              onClose={closePanel}
+            >
+              {measureTool}
+            </PhoneSheet>
+          ) : panel === 'radius' ? (
+            <PhoneSheet
+              key="radius"
+              id="panel-radius"
+              label="Radio"
+              extra={<span className="panel-sub">ST_DWithin · PostGIS</span>}
+              snaps={[25, 45, 90]}
+              initial={45}
+              onClose={closePanel}
+            >
+              <RadiusPanel />
+            </PhoneSheet>
+          ) : (
+            <AssetCard />
+          )}
+          <EdgeChips />
+          <div className="phone-bottom">
             <NotesStack />
             <CreditsPlate />
           </div>
+          <PhoneToolBar />
+          <Palette />
         </div>
-        <Palette />
-      </div>
+      ) : (
+        <div className="hud">
+          <div className="hud-tl">
+            <PlacePlate />
+            <ToolBar />
+          </div>
+          <SceneAssetList />
+          {error}
+          {page !== 'twin' ? (
+            <SectionSheet sheet={page} />
+          ) : panel === 'layers' ? (
+            <FloatingPanel
+              id="panel-layers"
+              anchorId={toolButtonId('layers')}
+              label="Capas"
+              title="Capas"
+              extra={<LayersSummary />}
+              width={340}
+              onClose={closePanel}
+            >
+              <LayersPanel />
+            </FloatingPanel>
+          ) : panel === 'measure' ? (
+            <FloatingPanel
+              id="panel-measure"
+              anchorId={toolButtonId('measure')}
+              label="Medir"
+              title="Medir"
+              width={330}
+              onClose={closePanel}
+            >
+              {measureTool}
+            </FloatingPanel>
+          ) : panel === 'radius' ? (
+            <FloatingPanel
+              id="panel-radius"
+              anchorId={toolButtonId('radius')}
+              label="Radio"
+              title="Radio"
+              extra={<span className="panel-sub">ST_DWithin · PostGIS</span>}
+              width={330}
+              onClose={closePanel}
+            >
+              <RadiusPanel />
+            </FloatingPanel>
+          ) : null}
+          <HeadingPlate info={camera} />
+          <AssetCard />
+          <EdgeChips />
+          <div className="hud-bottom">
+            <div className="hud-bl">
+              <ScalePlate info={camera} />
+              <ReadoutPlate />
+            </div>
+            <div className="hud-br">
+              <NotesStack />
+              <CreditsPlate />
+            </div>
+          </div>
+          <Palette />
+        </div>
+      )}
     </main>
   );
 }
