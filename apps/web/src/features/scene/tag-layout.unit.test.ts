@@ -4,6 +4,7 @@ import {
   FAR_M,
   NEAR_M,
   isOccluded,
+  occlusionMargin,
   layoutTags,
   lodFor,
   rankOf,
@@ -150,6 +151,13 @@ describe('occlusion', () => {
     // 3 m is not enough: the roof the gateway stands on.
     expect(isOccluded(500, [497.5, 497.1, 499])).toBe(false);
     expect(isOccluded(500, [496.9, 496.5, 499])).toBe(true);
+  });
+  it('allows more depth noise far away', () => {
+    // 4,3 km: 17 m of margin; a roof 10 m in front of a far mark does not hide it.
+    expect(occlusionMargin(500)).toBe(3);
+    expect(occlusionMargin(4300)).toBeCloseTo(17.2);
+    expect(isOccluded(4300, [4290, 4288, 4300])).toBe(false);
+    expect(isOccluded(4300, [4250, 4270, 4300])).toBe(true);
   });
   it('ignores the sky and missing reads', () => {
     expect(isOccluded(500, [null, undefined, 400])).toBe(false);

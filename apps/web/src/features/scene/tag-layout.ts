@@ -162,16 +162,22 @@ export const OCCLUSION_SAMPLES: [number, number][] = [
 ];
 /** Metres something must stand in front of the mark to count as hiding it. */
 export const OCCLUSION_MARGIN_M = 3;
+/**
+ * Far away the depth of a frame is coarser and each LiDAR point covers more ground (a 4 px splat
+ * at 4 km is several metres across): the margin grows to 0,4 % of the distance beyond 750 m.
+ */
+export const occlusionMargin = (distance: number) => Math.max(OCCLUSION_MARGIN_M, distance * 0.004);
 
 /**
  * Whether a mark is hidden: in at least two of the three samples of a 3 px cross the scene's depth
  * (the camera distance of whatever is drawn there; null for the sky) is more than 3 m nearer than
- * the mark. A thin post or a wire in front catches one sample at most and does not hide it.
+ * the mark (more far away, see occlusionMargin). A thin post or a wire in front catches one
+ * sample at most and does not hide it.
  */
 export function isOccluded(
   anchorDistance: number,
   samples: (number | null | undefined)[],
-  margin = OCCLUSION_MARGIN_M,
+  margin = occlusionMargin(anchorDistance),
 ) {
   let nearer = 0;
   for (const d of samples)

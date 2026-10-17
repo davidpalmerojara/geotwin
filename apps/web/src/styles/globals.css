@@ -531,6 +531,19 @@ textarea {
     linear-gradient(var(--sig), var(--sig)) right bottom / 7px 2px no-repeat,
     linear-gradient(var(--sig), var(--sig)) right bottom / 2px 7px no-repeat;
 }
+/* The value of a dimension line drawn in the DOM (the selected asset's mounting height). */
+.dim-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 2px 5px;
+  border-radius: 1px;
+  background: var(--sig);
+  color: var(--sig-ink);
+  font: 500 13px/17px var(--mono);
+  white-space: nowrap;
+  box-shadow: 0 0 0 1px var(--ink-0);
+}
 /* The tag: a solid plate with a dashed outline, the «dato simulado» convention of the legend. */
 .scene-tag {
   position: absolute;

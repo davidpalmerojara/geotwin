@@ -103,12 +103,14 @@ export class AlertBeams {
   private stopRendering: (() => void) | undefined;
   private offRender: () => void;
   private motionQuery: MediaQueryList | undefined;
+  /** DataSourceCollection.add resolves later: removal waits for it. */
+  private added: Promise<unknown>;
   constructor(
     private viewer: Viewer,
     /** Called when the counts or the motion change (for the data attributes). */
     private onChange: (state: { beams: number; pulses: number; motion: PulseMotion }) => void,
   ) {
-    void viewer.dataSources.add(this.source);
+    this.added = viewer.dataSources.add(this.source);
     this.offRender = viewer.scene.postRender.addEventListener(() => this.rendered());
     document.addEventListener('visibilitychange', this.restart);
     try {
@@ -179,8 +181,12 @@ export class AlertBeams {
     this.motionQuery?.removeEventListener?.('change', this.restart);
     if (this.viewer.isDestroyed()) return;
     for (const id of [...this.pulses.keys()]) this.removePulse(id);
-    this.viewer.dataSources.remove(this.source, true);
-    this.viewer.scene.requestRender();
+    const { viewer, source } = this;
+    void this.added.then(() => {
+      if (viewer.isDestroyed()) return;
+      viewer.dataSources.remove(source, true);
+      viewer.scene.requestRender();
+    });
   }
 
   private addPulse(id: string, anchor: Cartesian3, at: Cartographic, color: Color) {

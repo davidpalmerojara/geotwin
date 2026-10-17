@@ -23,6 +23,7 @@ import type { ScreenBox } from '../digital-twin/camera';
 import { overlayBoxes } from '../hud/dom';
 import { useTool } from '../../stores/tool';
 import { STATUS_WORD, useTagInfos, type TagInfo } from './tag-data';
+import { overlaps } from '../digital-twin/labels';
 import {
   OCCLUSION_SAMPLES,
   isOccluded,
@@ -137,25 +138,36 @@ export default function AssetTags({
       : null;
   const mountKey = mount ? `${mount.lng},${mount.lat},${mount.metres}` : '';
   const dimensionOf = useRef<string | null>(null);
+  // Its value is a DOM label (not a Cesium one) so it can step aside from the floating card.
+  const mountLabel = useRef<{ at: Cartesian3; text: string } | null>(null);
+  const mountElement = useRef<HTMLSpanElement>(null);
+  const [mountText, setMountText] = useState('');
   useEffect(() => {
     if (!mountKey) return;
     const [lng, lat, metres] = mountKey.split(',').map(Number) as [number, number, number];
     const source = new CustomDataSource('cota-montaje');
-    void viewer.dataSources.add(source);
+    const added = viewer.dataSources.add(source);
     let live = true;
     void dimensionFontReady().then(() => {
       if (!live || viewer.isDestroyed()) return;
-      drawDimensions(source, [mountDimension(lng, lat, ground(lng, lat), metres)], 'montaje');
+      const dimension = mountDimension(lng, lat, ground(lng, lat), metres);
+      drawDimensions(source, [{ ...dimension, labels: [] }], 'montaje');
+      const label = dimension.labels[0]!;
+      mountLabel.current = { at: label.at, text: label.text };
+      setMountText(label.text);
       dimensionOf.current = selectedId;
       viewer.scene.requestRender();
     });
     return () => {
       live = false;
       dimensionOf.current = null;
-      if (!viewer.isDestroyed()) {
+      mountLabel.current = null;
+      setMountText('');
+      void added.then(() => {
+        if (viewer.isDestroyed()) return;
         viewer.dataSources.remove(source, true);
         viewer.scene.requestRender();
-      }
+      });
     };
   }, [mountKey, viewer, ground, selectedId]);
 
@@ -216,6 +228,8 @@ export default function AssetTags({
     const offMove = camera.moveEnd.addEventListener(() => {
       occlusionDue.current = performance.now();
     });
+    // Development builds keep the last depth samples for checks.
+    const depthSamples = new Map<string, (number | null)[]>();
     const place = () => {
       const root = layer.current;
       if (!root || viewer.isDestroyed()) return;
@@ -281,6 +295,25 @@ export default function AssetTags({
         })),
         ...(labelBoxes.current ?? []),
       ];
+      // The mounting height's value: to the left of the dimension line, or to its right when a
+      // plate (the card) is there; tags keep clear of it.
+      const value = mountElement.current,
+        label = mountLabel.current;
+      if (value) {
+        const at = label ? SceneTransforms.worldToWindowCoordinates(scene, label.at) : undefined;
+        const w = value.offsetWidth,
+          h = value.offsetHeight;
+        const boxAt = (left: number) =>
+          at ? { left, right: left + w, top: at.y - h / 2, bottom: at.y + h / 2 } : null;
+        const free = (box: ScreenBox | null) =>
+          !!box && box.left >= 0 && box.right <= width && !blocked.some((b) => overlaps(box, b));
+        const box = at ? [boxAt(at.x - 12 - w), boxAt(at.x + 12)].find(free) : undefined;
+        if (box) {
+          value.style.display = '';
+          value.style.transform = `translate(${box.left}px, ${box.top}px)`;
+          blocked.push(box);
+        } else value.style.display = 'none';
+      }
       const placement = layoutTags(items, {
         view: { width, height },
         blocked,
@@ -302,6 +335,7 @@ export default function AssetTags({
                 : null;
             });
             if (isOccluded(s.distance, samples)) occluded.current.add(s.info.id);
+            if (import.meta.env.DEV) depthSamples.set(s.info.id, [s.distance, ...samples]);
           }
         }
         if (photoreal && scene.sampleHeightSupported)
@@ -365,6 +399,7 @@ export default function AssetTags({
         (window as Window & { __geotwinTags?: unknown }).__geotwinTags = {
           placed: [...placement].filter(([, p]) => p).map(([id]) => id),
           occluded: [...occluded.current],
+          samples: Object.fromEntries(depthSamples),
         };
     };
     const offRender = scene.postRender.addEventListener(place);
@@ -389,6 +424,15 @@ export default function AssetTags({
           </g>
         ))}
       </svg>
+      <span
+        ref={mountElement}
+        className="dim-label num"
+        data-testid="mount-dimension"
+        style={{ display: 'none' }}
+        hidden={!mountText}
+      >
+        {mountText}
+      </span>
       {infos.map((info) => (
         <span
           key={`mark:${info.id}`}
