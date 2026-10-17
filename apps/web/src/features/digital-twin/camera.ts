@@ -161,6 +161,19 @@ export function coveredRight(canvas: ScreenBox, overlays: ScreenBox[]) {
 }
 
 /**
+ * Whether a box lies along the top or bottom edge (a strip) rather than a side. A wide box is a
+ * strip, unless it is a panel against a side, taller than 120 px and under 60 % of the width
+ * (a short section sheet on the left is a side panel, not a strip at the top).
+ */
+function isStrip(box: ScreenBox, canvas: ScreenBox, width: number) {
+  const w = box.right - box.left,
+    h = box.bottom - box.top;
+  if (w < h) return false;
+  const againstSide = box.left - canvas.left <= 40 || canvas.right - box.right <= 40;
+  return !(againstSide && h > 120 && w < 0.6 * width);
+}
+
+/**
  * Pixels of each edge of the canvas hidden by the HUD. A wide box (a strip of plates) counts for
  * the top or the bottom when it lies in that quarter of the canvas; a tall one (a panel, a sheet,
  * a docked card) for the left or the right edge when it hugs it. A wide plate stacked within
@@ -168,7 +181,8 @@ export function coveredRight(canvas: ScreenBox, overlays: ScreenBox[]) {
  * Anything else floats over the scene (a card beside its asset) and is left out.
  */
 export function coveredEdges(canvas: ScreenBox, overlays: ScreenBox[]): Edges {
-  const height = canvas.bottom - canvas.top;
+  const height = canvas.bottom - canvas.top,
+    width = canvas.right - canvas.left;
   const edges: Edges = { top: 0, right: 0, bottom: 0, left: 0 };
   const near = 40;
   for (const raw of overlays) {
@@ -181,7 +195,7 @@ export function coveredEdges(canvas: ScreenBox, overlays: ScreenBox[]): Edges {
     const w = box.right - box.left,
       h = box.bottom - box.top;
     if (w <= 0 || h <= 0) continue;
-    if (w >= h) {
+    if (isStrip(box, canvas, width)) {
       if (box.top - canvas.top <= height / 4)
         edges.top = Math.max(edges.top, box.bottom - canvas.top);
       else if (canvas.bottom - box.bottom <= height / 4)
@@ -199,7 +213,12 @@ export function coveredEdges(canvas: ScreenBox, overlays: ScreenBox[]): Edges {
         right = Math.min(raw.right, canvas.right);
       const top = Math.max(raw.top, canvas.top),
         bottom = Math.min(raw.bottom, canvas.bottom);
-      if (right - left <= 0 || bottom - top <= 0 || right - left < bottom - top) continue;
+      if (
+        right - left <= 0 ||
+        bottom - top <= 0 ||
+        !isStrip({ left, right, top, bottom }, canvas, width)
+      )
+        continue;
       const fromBottom = canvas.bottom - bottom,
         reach = canvas.bottom - top;
       if (edges.bottom && fromBottom <= edges.bottom + near && reach > edges.bottom) {

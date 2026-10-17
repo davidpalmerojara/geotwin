@@ -165,6 +165,17 @@ describe('Framing beside a floating panel', () => {
     // Clipped to the canvas.
     expect(coveredEdges(canvas, [{ left: -50, top: 100, right: 300, bottom: 900 }]).left).toBe(300);
   });
+  it('counts a short section sheet against the left edge as a side panel, not a top strip', () => {
+    const canvas = { left: 0, top: 0, right: 1440, bottom: 900 };
+    const sheet = { left: 12, top: 104, right: 572, bottom: 416 };
+    const place = { left: 12, top: 12, right: 880, bottom: 52 };
+    expect(coveredEdges(canvas, [place, sheet])).toEqual({
+      top: 52,
+      right: 0,
+      bottom: 0,
+      left: 572,
+    });
+  });
   it('counts the plates stacked on a phone sheet as part of the bottom edge', () => {
     const canvas = { left: 0, top: 0, right: 390, bottom: 844 };
     const plates = {
