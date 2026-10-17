@@ -5,7 +5,7 @@
  *
  * The rings move with a render loop of its own, at most 30 frames a second, that only runs while
  * a pulse is shown, the tab is visible and the user has not asked for less motion; then, and on a
- * renderer too slow to animate (under 10 fps), the rings stay still.
+ * renderer too slow to animate (under about 16 fps), the rings stay still.
  */
 import {
   Cartesian3,
@@ -37,10 +37,11 @@ export const PULSE_RADIUS_M = 18;
 export const PULSE_PERIOD_MS = 1600;
 const FRAME_MS = 1000 / 30;
 /**
- * A renderer slower than this (ms a frame, several frames running: under 10 fps the rings would
- * jump, not spread) keeps the rings still, so a weak device is not kept drawing for nothing.
+ * A renderer that cannot hold about 16 fps while the rings move (60 ms a frame or more, over six
+ * frames) keeps them still: they would jump rather than spread, and a software renderer would be
+ * kept drawing the whole scene without a break.
  */
-const SLOW_FRAME_MS = 100;
+const SLOW_FRAME_MS = 60;
 const SLOW_FRAMES = 6;
 const COLORS: Record<AlertLevel, string> = { critical: '#FF5A4C', warning: '#FF9F1A' };
 
