@@ -21,7 +21,7 @@ export interface Size {
 export const MARGIN = 12;
 export const GAP = 8;
 /** Length of the guide between the asset and its floating card (clear of the asset's label). */
-export const GUIDE = 64;
+export const GUIDE = 84;
 /** Below this width the card is always docked (tablets and phones). */
 export const FLOAT_MIN_WIDTH = 1024;
 
@@ -80,7 +80,7 @@ export function placeCard({ viewport, anchor, card, obstacles, dockTop, bottom }
   const sides: ('left' | 'right')[] =
     viewport.width - x >= x ? ['right', 'left'] : ['left', 'right'];
   // The asset itself stays visible, with its glyph and the name label drawn above it.
-  const asset = { left: x - 60, right: x + 60, top: y - 44, bottom: y + 16 };
+  const asset = { left: x - 80, right: x + 80, top: y - 44, bottom: y + 16 };
   for (const side of sides) {
     const left = side === 'right' ? x + GUIDE : x - GUIDE - card.width;
     if (left < MARGIN || left + card.width > viewport.width - MARGIN) continue;

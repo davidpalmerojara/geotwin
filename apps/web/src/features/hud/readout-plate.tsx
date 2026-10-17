@@ -147,7 +147,11 @@ export function ReadoutPlate() {
   }, []);
   const selection = !cursor && !!selectedId;
   return (
-    <div className="plate readout-plate" data-map-overlay data-testid="readout">
+    <div
+      className={`plate readout-plate ${selection ? 'selection' : ''}`}
+      data-map-overlay
+      data-testid="readout"
+    >
       {CELLS.map(([key, name], i) => (
         <span key={key} className={`ro-cell ro-${key}`}>
           <span className="ro-k" ref={i === 0 ? label : undefined}>

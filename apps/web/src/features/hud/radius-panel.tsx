@@ -47,9 +47,14 @@ export function RadiusPanel() {
     queryFn: () => api.nearby(query!.lat, query!.lng, query!.radius),
     enabled: !!query,
   });
+  // The asset at the centre is not one of its own neighbours.
+  const found = nearby.data?.filter((a) => a.id !== selectedAsset?.id);
+  const foundCount = found?.length;
   useEffect(() => {
-    setRadius(query && nearby.data ? { metres: query.radius, count: nearby.data.length } : null);
-  }, [query, nearby.data, setRadius]);
+    setRadius(
+      query && foundCount !== undefined ? { metres: query.radius, count: foundCount } : null,
+    );
+  }, [query, foundCount, setRadius]);
   useEffect(() => () => setRadius(null), [setRadius]);
   return (
     <div className="radius-panel">
@@ -88,12 +93,12 @@ export function RadiusPanel() {
         ) : (
           <>
             <p className="panel-note">
-              {count(nearby.data.length, 'activo', 'activos')} a menos de{' '}
+              {count(found?.length ?? 0, 'activo', 'activos')} a menos de{' '}
               {query.radius >= 1000 ? `${query.radius / 1000} km` : `${query.radius} m`} (toda la
               red) · <span className="f2">ST_DWithin · PostGIS</span>
             </p>
             <ul className="near-list">
-              {nearby.data.map((a) => (
+              {(found ?? []).map((a) => (
                 <li key={a.id}>
                   <button
                     type="button"

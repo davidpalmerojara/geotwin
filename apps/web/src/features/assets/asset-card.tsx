@@ -312,7 +312,7 @@ function AssetCardBody({ id }: { id: string }) {
                     <ErrorState error={readings.error} />
                   ) : history.length ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={history} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                      <LineChart data={history} margin={{ top: 8, right: 18, bottom: 0, left: 0 }}>
                         <CartesianGrid stroke="#363531" vertical={false} />
                         <XAxis
                           dataKey="recorded_at"

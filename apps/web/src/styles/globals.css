@@ -285,9 +285,6 @@ kbd.kbd-sig {
 .btn-danger:hover:not(:disabled) {
   background: #4d1a16;
 }
-.push-right {
-  margin-left: auto;
-}
 .icon-btn {
   display: inline-grid;
   place-items: center;
@@ -921,16 +918,6 @@ progress::-moz-progress-bar {
   color: #ffb3ab;
   font-size: 12px;
 }
-.layer-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.layer-actions .btn {
-  height: 24px;
-  padding: 0 7px;
-  font-size: 12px;
-}
 .layer-style,
 .layer-terrain {
   display: grid;
@@ -950,6 +937,17 @@ progress::-moz-progress-bar {
 .field-row > span:first-child,
 .point-mode > span:first-child {
   min-width: 52px;
+}
+.size-row input[type='range'] {
+  flex: 1;
+  min-width: 100px;
+}
+.size-row b {
+  font-weight: 500;
+  color: var(--fg-0);
+}
+.class-codes {
+  font-size: 11px;
 }
 .height-legend {
   display: grid;
@@ -992,29 +990,6 @@ progress::-moz-progress-bar {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-}
-.layer-sliders {
-  display: grid;
-  gap: 6px;
-}
-.layer-sliders label {
-  display: grid;
-  grid-template-columns: 52px 1fr;
-  align-items: center;
-  gap: 8px;
-  color: var(--fg-1);
-}
-.layer-sliders label > span {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: space-between;
-}
-.layer-sliders b {
-  font: 500 12px var(--mono);
-  color: var(--fg-0);
-}
-.layer-sliders input[type='range'] {
-  grid-column: 1 / -1;
 }
 .layer-check {
   display: flex;
@@ -1124,18 +1099,6 @@ progress::-moz-progress-bar {
     linear-gradient(var(--sig), var(--sig)) center / 1.5px 12px no-repeat,
     linear-gradient(var(--sig), var(--sig)) center / 12px 1.5px no-repeat;
   filter: drop-shadow(0 0 1px var(--ink-0)) drop-shadow(0 0 1px var(--ink-0));
-}
-.measure-crosshair::before,
-.measure-crosshair::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border: 1.5px solid var(--sig);
-  clip-path: polygon(0 0, 30% 0, 30% 100%, 0 100%, 0 0, 100% 0, 100% 30%, 0 30%);
-}
-.measure-crosshair::before,
-.measure-crosshair::after {
-  display: none;
 }
 .measure-results {
   display: grid;
@@ -1414,6 +1377,11 @@ progress::-moz-progress-bar {
 .ro-cell:last-child {
   border-right: 0;
 }
+/* The selected asset: position, UTM, ground and the radius, as the A mockup's selection line. */
+.readout-plate.selection .ro-cota,
+.readout-plate.selection .ro-sobre {
+  display: none;
+}
 .ro-k {
   font: 400 12px var(--sans);
   color: var(--fg-1);
@@ -1449,7 +1417,8 @@ progress::-moz-progress-bar {
 .credits-line {
   color: var(--fg-0);
 }
-.credits-line > span {
+.credits-line [data-testid='map-base'],
+.credits-line .honesty {
   white-space: nowrap;
 }
 .credits-line .honesty {
@@ -1800,9 +1769,6 @@ progress::-moz-progress-bar {
 .metric-card p {
   color: var(--fg-2);
   font-size: 11.5px;
-}
-.tone-warning strong {
-  color: var(--warn);
 }
 .tone-critical strong {
   color: var(--alarm);

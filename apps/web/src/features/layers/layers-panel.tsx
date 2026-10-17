@@ -264,17 +264,20 @@ export function LayersPanel() {
         )}
         {ready.length > 0 && (
           <div className="layer-style">
-            <div className="segmented" role="group" aria-label="Color de los puntos">
-              {modes.map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  aria-pressed={view.colorMode === mode}
-                  onClick={() => view.setColorMode(mode)}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="field-row">
+              <span aria-hidden="true">Color</span>
+              <div className="segmented" role="group" aria-label="Color de los puntos">
+                {modes.map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={view.colorMode === mode}
+                    onClick={() => view.setColorMode(mode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
             {view.colorMode === 'height' && (
               <div className="height-legend">
@@ -333,37 +336,44 @@ export function LayersPanel() {
                     <i style={{ background: group.color }} aria-hidden="true" />
                   )}
                   {group.label}
+                  {group.codes.length > 0 && (
+                    <span className="f2 num class-codes">
+                      {group.codes.length > 1
+                        ? `${group.codes[0]}–${group.codes.at(-1)}`
+                        : group.codes[0]}
+                    </span>
+                  )}
                 </label>
               ))}
             </fieldset>
-            <div className="layer-sliders">
-              <label>
-                <span>
-                  Tamaño de punto <b>{view.pointSize} px</b>
-                </span>
-                <input
-                  type="range"
-                  min={1}
-                  max={8}
-                  step={1}
-                  value={view.pointSize}
-                  onChange={(e) => view.setPointSize(Number(e.target.value))}
-                />
-              </label>
-              <label>
-                Calidad
-                <select
-                  value={view.quality}
-                  onChange={(e) => view.setQuality(e.target.value as Quality)}
-                >
-                  {qualities.map(([q, label]) => (
-                    <option key={q} value={q}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <div className="field-row">
+              <span id="quality-label">Calidad</span>
+              <div className="segmented" role="group" aria-labelledby="quality-label">
+                {qualities.map(([q, label]) => (
+                  <button
+                    key={q}
+                    type="button"
+                    aria-pressed={view.quality === q}
+                    onClick={() => view.setQuality(q)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
+            <label className="field-row size-row">
+              <span>Tamaño</span>
+              <input
+                type="range"
+                min={1}
+                max={8}
+                step={1}
+                aria-label="Tamaño de punto"
+                value={view.pointSize}
+                onChange={(e) => view.setPointSize(Number(e.target.value))}
+              />
+              <b className="num">{view.pointSize} px</b>
+            </label>
             <label className="layer-check">
               <input
                 type="checkbox"
@@ -375,8 +385,7 @@ export function LayersPanel() {
               <span>
                 Realzar bordes (EDL)
                 <small id="edl-help">
-                  Oscurece los saltos de profundidad: ayuda a leer volúmenes, pero dibuja contornos
-                  y la nube parece menos natural.
+                  Oscurece los saltos de profundidad: ayuda a leer volúmenes, pero dibuja contornos.
                 </small>
               </span>
             </label>
@@ -396,10 +405,9 @@ export function LayersPanel() {
               <span>
                 Relieve del LiDAR <span className="f2">MDT 2 m</span>
                 <small id="lidar-terrain-help">
-                  El suelo de {count(withGround, 'capa', 'capas')} (clase 2, malla de 2 m) hace de
-                  terreno: mapa, activos y nubes quedan a su altura real y la lectura da cotas.
-                  Fuera de la cobertura es un plano orientativo. Con el relieve de Cesium ion se usa
-                  ese.
+                  El suelo de {count(withGround, 'capa', 'capas')} hace de terreno: mapa, activos y
+                  nubes a su altura real, y la lectura da cotas. Fuera de las hojas es un plano
+                  orientativo.
                 </small>
               </span>
             </label>
