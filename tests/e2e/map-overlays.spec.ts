@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 import type { Page } from '@playwright/test';
-import { coveredCredits, openCapas } from './hud';
+import { coveredCredits, openCapas, panel } from './hud';
 
 // The camera must leave every framed installation clear of the HUD's plates (the Capas panel, the
 // tool bar, the readout and credits...), which float over the full-screen scene.
@@ -310,5 +310,49 @@ test.describe('without the orthophoto', () => {
           panel!.y >= message!.y + message!.height;
         expect(apart).toBe(true);
       }
+    });
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ])
+    test(`the error message stays clear of the open measuring panel at ${width} x ${height}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await page.goto('/gemelo');
+      const map = page.getByTestId('cesium-view');
+      await expect(map).toHaveAttribute('data-ready', 'true', { timeout: 30000 });
+      await expect(map).toHaveAttribute('data-pnoa', 'error', { timeout: 30000 });
+      await page.getByRole('button', { name: 'Medir', exact: true }).click();
+      // A panel beside the scene, or on a phone a sheet: the notes stack above its top edge.
+      const tool = panel(page, 'Medir');
+      await expect(tool).toBeVisible();
+      const message = page.getByTestId('map-message');
+      await expect(message).toContainText('ortofoto PNOA');
+      // Once both have settled: the message and the panel do not overlap.
+      await expect
+        .poll(async () => {
+          const [m, t] = [await message.boundingBox(), await tool.boundingBox()];
+          if (!m || !t) return false;
+          return (
+            m.x >= t.x + t.width ||
+            t.x >= m.x + m.width ||
+            m.y + m.height <= t.y ||
+            t.y + t.height <= m.y
+          );
+        })
+        .toBe(true);
+      // Nothing else covers the message: the point at the middle of each line is the message.
+      const free = await message.evaluate((element) => {
+        const r = element.getBoundingClientRect();
+        return [0.25, 0.5, 0.75].every((f) =>
+          element.contains(document.elementFromPoint(r.left + r.width * f, r.top + r.height / 2)),
+        );
+      });
+      expect(free).toBe(true);
+      // And the credits stay readable with both on screen.
+      const { shown, covered } = await coveredCredits(page);
+      expect(shown).toBeGreaterThan(40);
+      expect(covered).toEqual([]);
     });
 });

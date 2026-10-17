@@ -35,8 +35,12 @@ import { loadIonEnvironment } from './ion-environment';
 import {
   GOOGLE_PHOTOREALISTIC_ASSET,
   loadPhotorealistic,
+  PHOTOREAL_START_TIMEOUT_MS,
   PhotorealError,
   TileFailureWatch,
+  topContentFailed,
+  type PhotorealProblem,
+  type TileState,
 } from './photorealistic';
 import {
   aimOffsets,
@@ -164,6 +168,11 @@ export default function CesiumView({
   const [photoreal, setPhotoreal] = useState<'off' | 'loading' | 'on' | 'error'>('off');
   const photorealRef = useRef<Cesium3DTileset | undefined>(undefined);
   const stopPhotorealFrames = useRef<(() => void) | undefined>(undefined);
+  // The loaded tileset's failure watch, and the timer that gives up when no tile ever arrives.
+  const photorealGuard = useRef<
+    { watch: TileFailureWatch; fail: (problem: PhotorealProblem) => void } | undefined
+  >(undefined);
+  const photorealTimer = useRef<number | undefined>(undefined);
   const photorealOn = photoreal === 'on';
   const ionLoading = useRef<Viewer | null>(null);
   const lidarOption = useLayerView((s) => s.lidarTerrain);
@@ -201,6 +210,7 @@ export default function CesiumView({
   const baseImagery = useLayerView((s) => s.baseImagery),
     pnoa = useLayerView((s) => s.pnoa);
   usePnoaImagery(ready ? viewer.current : null, ready, imageryLevelFor(quality));
+  // Under the Google mesh the globe, and the PNOA layer on it, are hidden (see usePnoaImagery).
   const base = effectiveBase(baseImagery, pnoa.state);
   const tooltip = useRef<HTMLDivElement>(null);
   const token = import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined;
@@ -318,6 +328,9 @@ export default function CesiumView({
       framed.current = false;
       buildingsRef.current = undefined;
       photorealRef.current = undefined;
+      photorealGuard.current = undefined;
+      window.clearTimeout(photorealTimer.current);
+      useLayerView.getState().setPhotoreal(false);
       stopPhotorealFrames.current?.();
       if (ionLoading.current === v) ionLoading.current = null;
     };
@@ -624,7 +637,17 @@ export default function CesiumView({
       setBuildings('off');
     }
     setPhotoreal(show ? 'on' : 'off');
+    // The PNOA layer (and its credit) goes with the globe: see usePnoaImagery.
+    useLayerView.getState().setPhotoreal(show);
     v.scene.requestRender();
+    // Shown and nothing loaded yet: give up after a while (no answer is also a failure).
+    window.clearTimeout(photorealTimer.current);
+    const guard = photorealGuard.current;
+    if (show && guard && !guard.watch.started)
+      photorealTimer.current = window.setTimeout(() => {
+        const problem = guard.watch.timedOut();
+        if (problem) guard.fail(problem);
+      }, PHOTOREAL_START_TIMEOUT_MS);
     // In request-render mode the mesh can stop half loaded until something else draws a frame
     // (a camera flight used to): keep drawing until its tiles are in.
     stopPhotorealFrames.current?.();
@@ -649,10 +672,10 @@ export default function CesiumView({
     }
     setPhotoreal('loading');
     try {
-      // Ion is asked on every load, so a click after a failure really retries: Cesium's
-      // createGooglePhotorealistic3DTileset keeps the first answer for the page's life, a
-      // failed one included. The options are that helper's own. The viewer has no geocoder,
-      // so no other geocoder is used alongside these tiles.
+      // Cesium3DTileset.fromIonAssetId asks ion on every load, so a click after a failure
+      // really retries: Cesium's createGooglePhotorealistic3DTileset keeps the first answer for
+      // the page's life, a failed one included. The options are that helper's own. The viewer
+      // has no geocoder, so no other geocoder is used alongside these tiles.
       const tileset = await loadPhotorealistic(() =>
         Cesium3DTileset.fromIonAssetId(GOOGLE_PHOTOREALISTIC_ASSET, {
           cacheBytes: 1536 * 1024 * 1024,
@@ -666,18 +689,35 @@ export default function CesiumView({
         tileset.destroy();
         return;
       }
-      // A refused tile request (no access, quota) or a run of failures puts the LiDAR view back.
+      // A refused tile request (no access, quota), a failed top tile, a run of failures, or no
+      // tile at all after PHOTOREAL_START_TIMEOUT_MS puts the LiDAR view back (TileFailureWatch).
+      // The tileset is dropped: a failed tile is never asked again, so the next click starts
+      // over from ion instead of showing an empty layer.
       const watch = new TileFailureWatch();
-      tileset.tileLoad.addEventListener(() => watch.loaded());
-      tileset.tileFailed.addEventListener((failure: unknown) => {
-        const problem = watch.failed(failure);
-        if (!problem || v.isDestroyed() || !tileset.show) return;
+      const fail = (problem: PhotorealProblem) => {
+        if (v.isDestroyed() || photorealRef.current !== tileset || !tileset.show) return;
         showPhotoreal(v, false);
+        photorealRef.current = undefined;
+        photorealGuard.current = undefined;
         setPhotoreal('error');
         setMapMessage(new PhotorealError(problem).message);
+        // Not while the tileset may be in the middle of its own update.
+        window.setTimeout(() => {
+          if (!v.isDestroyed() && !tileset.isDestroyed()) v.scene.primitives.remove(tileset);
+        }, 0);
+      };
+      tileset.tileLoad.addEventListener(() => {
+        watch.loaded();
+        window.clearTimeout(photorealTimer.current);
+      });
+      tileset.tileFailed.addEventListener((failure: unknown) => {
+        const top = topContentFailed(tileset.root as unknown as TileState);
+        const problem = watch.failed(failure, top);
+        if (problem) fail(problem);
       });
       v.scene.primitives.add(tileset);
       photorealRef.current = tileset;
+      photorealGuard.current = { watch, fail };
       showPhotoreal(v, true);
     } catch (failure) {
       if (v.isDestroyed()) return;
@@ -846,7 +886,7 @@ export default function CesiumView({
         data-pointclouds={cloudsShown}
         data-color-mode={colorMode}
         data-point-mode={pointMode}
-        data-base-imagery={base}
+        data-base-imagery={photorealOn ? 'google' : base}
         data-pnoa={pnoa.state}
         data-pnoa-source={pnoa.source}
         tabIndex={0}

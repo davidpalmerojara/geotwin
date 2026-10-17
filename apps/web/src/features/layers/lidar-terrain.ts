@@ -199,12 +199,22 @@ export function buildTerrain(grids: DtmGrid[]): LidarTerrain | undefined {
   };
 }
 
+/**
+ * Weight of one footprint's edge height outside every footprint: inverse distance squared, so the
+ * closest edge wins as the point nears it (the surface meets each DTM without a step), tapered to
+ * nothing at BLEND_M, where the base plane has taken over, so no footprint ever drops in or out
+ * of the blend with a jump.
+ */
+const edgeWeight = (distance: number) =>
+  (1 - smoothstep(distance / BLEND_M)) / Math.max(distance, 0.05) ** 2;
+
 /** Ellipsoidal height of the terrain at (lng, lat), in metres (before TERRAIN_SINK_M). */
 export function terrainHeight(terrain: LidarTerrain, lng: number, lat: number) {
-  let nearest: DtmGrid | undefined,
-    edge: [number, number] | undefined,
-    distance = Infinity,
-    gapInside = NaN;
+  let nearestBox = Infinity,
+    nearestEdge = Infinity,
+    gapInside = NaN,
+    sum = 0,
+    weights = 0;
   for (const grid of terrain.grids) {
     const box = distanceToGrid(grid, lng, lat);
     if (box === 0 && insidePolygon(lng, lat, grid.footprint)) {
@@ -214,30 +224,31 @@ export function terrainHeight(terrain: LidarTerrain, lng: number, lat: number) {
       gapInside = sampleGrid(grid, lng, lat, grid.filled);
       continue;
     }
-    // Near a grid, the distance to its footprint (a slightly rotated square in lng/lat).
-    if (box < BLEND_M * 1.5) {
+    nearestBox = Math.min(nearestBox, box);
+    // Near a grid, the height at the closest point of its footprint (a slightly rotated square
+    // in lng/lat). Every footprint within BLEND_M takes part: in a concave notch (an L of sheets)
+    // two or three of them are about as close, and taking only the nearest would leave a step
+    // where the nearest one changes.
+    if (box < BLEND_M) {
       const near = nearestOnFootprint(grid, lng, lat);
-      if (near.distance < distance) {
-        distance = near.distance;
-        nearest = grid;
-        edge = near.point;
-      }
-    } else if (box < distance) {
-      distance = box;
-      nearest = grid;
-      edge = undefined;
+      if (near.distance >= BLEND_M) continue;
+      const h = sampleGrid(grid, near.point[0], near.point[1], grid.filled);
+      if (!Number.isFinite(h)) continue;
+      nearestEdge = Math.min(nearestEdge, near.distance);
+      const w = edgeWeight(near.distance);
+      sum += h * w;
+      weights += w;
     }
   }
   if (Number.isFinite(gapInside)) return gapInside;
-  if (!nearest) return 0;
-  // Outside every footprint: the height at the closest point of the nearest footprint's edge,
-  // blended into the base plane.
-  if (edge) {
-    const h = sampleGrid(nearest, edge[0], edge[1], nearest.filled);
-    const w = smoothstep(distance / BLEND_M);
-    return Number.isFinite(h) ? h * (1 - w) + terrain.base * w : terrain.base;
+  // Outside every footprint: the edge heights of the nearby footprints, blended into the base
+  // plane as the closest of them gets farther.
+  if (weights > 0) {
+    const w = smoothstep(nearestEdge / BLEND_M);
+    return (sum / weights) * (1 - w) + terrain.base * w;
   }
-  return terrain.base * (1 - smoothstep((distance - FAR_START_M) / (FAR_END_M - FAR_START_M)));
+  if (!Number.isFinite(nearestBox)) return 0;
+  return terrain.base * (1 - smoothstep((nearestBox - FAR_START_M) / (FAR_END_M - FAR_START_M)));
 }
 
 /**

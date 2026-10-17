@@ -15,9 +15,9 @@ import {
   tileHeights,
 } from './lidar-terrain';
 
-// A small synthetic DTM: 11 x 11 nodes over 0.01° x 0.01° near Laguna de Duero, h = 750 m rising
-// 1 m per node eastwards, 1 cm steps.
-function grid(west = -4.73, south = 41.57, nodata: number[] = [], rise = 1) {
+// A small synthetic DTM: 11 x 11 nodes over 0.01° x 0.01° near Laguna de Duero, h = 750 m (+ lift)
+// rising `rise` m per node eastwards, 1 cm steps.
+function grid(west = -4.73, south = 41.57, nodata: number[] = [], rise = 1, lift = 0) {
   const width = 11,
     height = 11;
   const meta: DtmMeta = {
@@ -51,7 +51,11 @@ function grid(west = -4.73, south = 41.57, nodata: number[] = [], rise = 1) {
   for (let r = 0; r < height; r++)
     for (let c = 0; c < width; c++) {
       const i = r * width + c;
-      view.setUint16(i * 2, nodata.includes(i) ? 65535 : Math.round((10 + c * rise) / 0.01), true);
+      view.setUint16(
+        i * 2,
+        nodata.includes(i) ? 65535 : Math.round((10 + lift + c * rise) / 0.01),
+        true,
+      );
     }
   return { meta, buffer };
 }
@@ -217,6 +221,51 @@ describe('LiDAR ground model as terrain', () => {
     // along rows gave 1.0 m and 8.9 m here.
     expect(worst).toBeLessThan(0.3);
     expect(worstFar).toBeLessThan(0.5);
+  });
+
+  it('blends the nearby footprints in a concave notch, with no step where the nearest changes', () => {
+    // An L of three flat sheets at 750, 760 and 770 m: A, B east of A, C north of A. The notch is
+    // north-east of their shared corner, between B's north edge and C's east edge.
+    const flat = (west: number, south: number, lift: number) => {
+      const { meta, buffer } = grid(west, south, [], 0, lift);
+      return decodeDtm(meta, buffer);
+    };
+    const terrain = buildTerrain([
+      flat(-4.73, 41.57, 0),
+      flat(-4.72, 41.57, 10),
+      flat(-4.73, 41.58, 20),
+    ])!;
+    const corner = { lng: -4.72, lat: 41.58 };
+    const mLng = 111_132 * Math.cos((corner.lat * Math.PI) / 180);
+    const at = (east: number, north: number) =>
+      terrainHeight(terrain, corner.lng + east / mLng, corner.lat + north / 111_132);
+    // Across the bisector, 1 m apart, at 60 m and 200 m from both edges: the nearest footprint
+    // changes there. Taking only the nearest gave a step of (1 - smoothstep(d / BLEND_M)) x 10 m,
+    // 9.4 m at 60 m.
+    for (const d of [60, 200]) {
+      let worst = 0;
+      let previous = at(d - 40, d + 40);
+      for (let t = -39; t <= 40; t++) {
+        const h = at(d + t, d - t);
+        worst = Math.max(worst, Math.abs(h - previous));
+        previous = h;
+      }
+      expect(worst).toBeLessThan(0.5);
+      // On the bisector B and C weigh the same; A's corner, √2 times farther, weighs about half
+      // (inverse distance squared, tapered to nothing at BLEND_M). Then the base takes over.
+      const smooth = (x: number) => x * x * (3 - 2 * x);
+      const wBC = (1 - smooth(d / BLEND_M)) / d ** 2,
+        wA = (1 - smooth((d * Math.SQRT2) / BLEND_M)) / (2 * d ** 2);
+      const edges = (760 * wBC + 770 * wBC + 750 * wA) / (2 * wBC + wA);
+      const s = smooth(d / BLEND_M);
+      expect(at(d, d)).toBeCloseTo(edges * (1 - s) + terrain.base * s, 1);
+    }
+    // Next to one edge that sheet wins: no step against its own DTM.
+    expect(at(150, 0.5)).toBeCloseTo(760, 0);
+    expect(at(0.5, 150)).toBeCloseTo(770, 0);
+    expect(Math.abs(at(150, 0.5) - at(150, -0.5))).toBeLessThan(0.2);
+    // Beyond BLEND_M from every footprint: the base.
+    expect(at(BLEND_M + 10, BLEND_M + 10)).toBeCloseTo(terrain.base, 3);
   });
 
   it('builds heightmap tiles north to south, sunk below the ground, and flat when far away', () => {

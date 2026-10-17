@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
 import { chooseBase, mapBase, openCapas } from './hud';
+import { fakeIon } from './fake-ion';
 
 // The SYNTHETIC fixture (not measured data): 5,540 points near Laguna de Duero, EPSG:25830.
 const fixture = 'apps/worker/tests/fixtures/synthetic-laguna-duero.laz';
@@ -121,6 +122,25 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   await chooseBase(page, 'Ortofoto PNOA');
   await expect(map).toHaveAttribute('data-base-imagery', 'pnoa');
   await expect(hint).toContainText('El suelo es la ortofoto PNOA');
+  // Over the Google mesh (ion answered locally, see fake-ion.ts) the ground is that mesh.
+  const google = page.getByRole('button', { name: 'Fotorrealista (Google)', exact: true });
+  // Without a token (a build without VITE_CESIUM_ION_TOKEN) the switch is shown disabled.
+  if (await google.isEnabled()) {
+    await fakeIon(page);
+    await google.click();
+    await expect(map).toHaveAttribute('data-photoreal', 'on', { timeout: 60000 });
+    await expect(hint).toContainText('el suelo es la malla 3D de Google');
+    const groundLabel = panel
+      .locator('.class-filter label')
+      .filter({ has: page.getByRole('checkbox', { name: 'Suelo', exact: true }) });
+    await expect(groundLabel).toHaveAttribute(
+      'title',
+      'En modo híbrido el suelo es la malla de Google',
+    );
+    await google.click();
+    await expect(map).toHaveAttribute('data-photoreal', 'off');
+    await expect(hint).toContainText('El suelo es la ortofoto PNOA');
+  }
   const axe = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'])
     .include('#panel-layers')

@@ -35,6 +35,9 @@ interface LayerViewState {
   pointMode: PointMode;
   // Reported by the viewer: is the orthophoto loading, shown, or unavailable, and from where.
   pnoa: { state: PnoaState; source?: PnoaSourceId };
+  // Reported by the viewer: the Google mesh is shown, so it is the ground (the globe, with the
+  // PNOA layer on it, is hidden).
+  photoreal: boolean;
   // A fly-to request; `n` makes repeated requests for the same layer distinct.
   flyTo: { id: string; n: number } | null;
   render: Record<string, RenderState>;
@@ -49,6 +52,7 @@ interface LayerViewState {
   setBaseImagery: (value: BaseImagery) => void;
   setPointMode: (mode: PointMode) => void;
   setPnoa: (pnoa: { state: PnoaState; source?: PnoaSourceId }) => void;
+  setPhotoreal: (photoreal: boolean) => void;
   requestFlyTo: (id: string) => void;
   setRender: (id: string, state: RenderState | null) => void;
 }
@@ -79,6 +83,7 @@ export const useLayerView = create<LayerViewState>((set) => ({
   baseImagery: initialBase,
   pointMode: 'all',
   pnoa: { state: 'off' },
+  photoreal: false,
   flyTo: null,
   render: {},
   toggle: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),
@@ -95,6 +100,7 @@ export const useLayerView = create<LayerViewState>((set) => ({
   setPointMode: (pointMode) =>
     set(pointMode === 'hybrid' ? { pointMode, lidarTerrain: true } : { pointMode }),
   setPnoa: (pnoa) => set({ pnoa }),
+  setPhotoreal: (photoreal) => set({ photoreal }),
   requestFlyTo: (id) => set((s) => ({ flyTo: { id, n: (s.flyTo?.n ?? 0) + 1 } })),
   setRender: (id, state) =>
     set((s) => {

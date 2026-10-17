@@ -169,7 +169,20 @@ test.describe('every source refused or unreachable', () => {
     // Capas › Fondo says so too, next to the choice.
     await chooseBase(page, 'Ortofoto PNOA');
     await expect(page.getByTestId('base-failure')).toContainText('fondo neutro');
-    // Choosing a base on purpose removes the warning: the atlas, or the neutral ground.
+    // Choosing a base on purpose removes the warning (the atlas, or the neutral ground), and the
+    // other choices say so.
+    const fondo = page.getByRole('group', { name: 'Fondo' });
+    await expect(fondo.getByRole('button', { name: 'Natural Earth', exact: true })).toHaveAttribute(
+      'title',
+      'Ocultar el aviso y quedarse con el atlas',
+    );
+    await expect(fondo.getByRole('button', { name: 'Neutro', exact: true })).toHaveAttribute(
+      'title',
+      'Ocultar el aviso y quedarse con el fondo neutro',
+    );
+    await expect(
+      fondo.getByRole('button', { name: 'Ortofoto PNOA', exact: true }),
+    ).not.toHaveAttribute('title', /.+/);
     await chooseBase(page, 'Natural Earth');
     await expect(map).toHaveAttribute('data-base-imagery', 'natural-earth');
     await expect(page.getByTestId('map-message')).toBeHidden();
