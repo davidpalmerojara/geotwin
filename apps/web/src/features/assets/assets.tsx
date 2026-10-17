@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Search, ArrowUpRight, Box } from 'lucide-react';
+import { Search, ArrowUpRight } from 'lucide-react';
 import { useAssets, useInstallations } from '../../hooks/data';
 import { useUI } from '../../stores/ui';
 import { Status, Loading, ErrorState, Empty, SectionHeading } from '../../components/common';
 import { Button } from '../../components/ui/button';
-import { assetTypeLabel, count } from '../../lib/format';
+import { assetTypeLabel, coordinates, count } from '../../lib/format';
 export function Assets() {
   const assets = useAssets(),
     installations = useInstallations(),
@@ -17,15 +17,11 @@ export function Assets() {
   );
   return (
     <div className="page">
-      <SectionHeading
-        eyebrow="INVENTARIO / ACTIVOS"
-        title="El inventario de tu red"
-        description="Activos geolocalizados y estados operativos compartidos con el gemelo digital."
-      />
+      <SectionHeading description="Activos geolocalizados de la red y su estado. Los mismos que se ven en la escena." />
       <section className="panel">
         <div className="table-toolbar">
           <label className="search-box">
-            <Search size={16} />
+            <Search size={14} aria-hidden="true" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -43,7 +39,7 @@ export function Assets() {
             <option value="warning">Advertencia</option>
             <option value="critical">Crítico</option>
           </select>
-          <span className="text-xs text-slate-400">
+          <span className="f1 num">
             {visible ? count(visible.length, 'activo', 'activos') : '—'}
           </span>
         </div>
@@ -70,7 +66,6 @@ export function Assets() {
                   <tr key={a.id}>
                     <td>
                       <div className="cell-name">
-                        <Box size={17} />
                         <div>
                           <strong>{a.name}</strong>
                           <small>
@@ -85,9 +80,7 @@ export function Assets() {
                     <td>
                       <Status status={a.status} />
                     </td>
-                    <td className="font-mono text-xs">
-                      {a.location.lat.toFixed(5)}, {a.location.lng.toFixed(5)}
-                    </td>
+                    <td className="num">{coordinates(a.location.lat, a.location.lng)}</td>
                     <td>
                       <Button
                         variant="ghost"
@@ -98,7 +91,7 @@ export function Assets() {
                         }}
                       >
                         Inspeccionar
-                        <ArrowUpRight size={14} />
+                        <ArrowUpRight size={14} aria-hidden="true" />
                       </Button>
                     </td>
                   </tr>

@@ -1,5 +1,5 @@
 // Workers and imagery assets are served from /cesium/ in dev and production.
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   Cartesian3,
   Cartesian2,
@@ -33,8 +33,6 @@ import {
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import type { Asset, Installation } from '@geotwin/shared';
-import { Building2, Crosshair, Layers, Mountain, Plus, Minus, Ruler } from 'lucide-react';
-import { Button } from '../../components/ui/button';
 import { loadIonEnvironment } from './ion-environment';
 import {
   GOOGLE_PHOTOREALISTIC_ASSET,
@@ -43,6 +41,7 @@ import {
   TileFailureWatch,
 } from './photorealistic';
 import {
+  aimOffsets,
   fitInView,
   flyOnOwn,
   frameOf,
@@ -52,32 +51,36 @@ import {
   type Pose,
   type ScreenBox,
 } from './camera';
-import { coveredByOverlays, shiftedRight, viewerFov } from './overlays';
+import {
+  coveredByOverlays,
+  liftToGround,
+  overlayBoxes,
+  shiftedOnGround,
+  viewerFov,
+} from './overlays';
 import { placeLabels, type LabelAnchor, type LabelOffset } from './labels';
+import { createSceneApi } from './scene-api';
 import { useLayers } from '../../hooks/data';
-import { coordinates } from '../../lib/format';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
 import { renderUntil } from '../measure/render-until';
 import { useLidarTerrain } from '../layers/lidar-terrain-provider';
 import { terrainHeight, type LidarTerrain } from '../layers/lidar-terrain';
 import { usePnoaImagery } from '../layers/pnoa-imagery';
-import { baseImageryLabel, PNOA_UNAVAILABLE } from '../layers/base-imagery';
+import { effectiveBase } from '../layers/base-imagery';
 import { imageryLevelFor } from '../layers/point-style';
 import { useLayerView } from '../../stores/layers';
-import { useMeasure } from '../../stores/measure';
-// The measuring tool is only downloaded when it is first opened.
-const MeasureTool = lazy(() => import('../measure/measure-tool'));
+import { measuring } from '../../stores/measure';
+import { useScene } from '../../stores/viewer';
 type DevWindow = Window & {
   __geotwinViewer?: Viewer;
   /** Installation labels as last placed (canvas px), for end-to-end checks. */
   __geotwinLabels?: { boxes: ScreenBox[]; blocked: ScreenBox[] };
 };
-const INSTALLATION_FONT = '12px sans-serif';
+const INSTALLATION_FONT = '500 12px "IBM Plex Sans Condensed", sans-serif';
+const ASSET_FONT = '500 13px "IBM Plex Sans Condensed", sans-serif';
 // Cesium's default label background padding is 7 x 5 px.
 const LABEL_PAD_X = 7,
   LABEL_HEIGHT = 26;
-// What floats over the map: installation labels keep clear of it.
-const MAP_FURNITURE = '.map-controls, .map-top .map-tag, .map-bottom, .map-hint, .map-message';
 // Position (lng, lat in radians) and orientation, but not height: Cesium may lift a camera that
 // ends up below newly loaded terrain, and that is not a move by the user.
 const poseOf = (v: Viewer): Pose => {
@@ -90,13 +93,16 @@ const groundOf =
   (terrain: LidarTerrain | undefined): Ground =>
   (lng, lat) =>
     terrain ? terrainHeight(terrain, lng, lat) : 0;
-const colors = { healthy: '#34d399', warning: '#fbbf24', critical: '#fb7185' };
+// Status colours of the «Estación total» palette: operational in light grey, amber for a
+// warning, red for a critical asset (the HUD adds the shape and the word).
+const colors = { healthy: '#EEECE6', warning: '#FF9F1A', critical: '#FF5A4C' };
 // A ground asset gets a tall marker volume; one on a roof or tower top, a small one on top of it.
 // Without relief there is no roof to stand on: every asset is drawn on the globe.
 const assetBox = (a: Asset, relief: boolean) =>
   relief && a.mount_height_m > 0 ? new Cartesian3(6, 6, 4) : new Cartesian3(9, 9, 14);
-// Oblique view that fits every point on desktop and on a portrait phone, in the part of the map
-// that floating panels (the «Capas» panel) leave visible.
+const FRAME_PITCH = CesiumMath.toRadians(-55);
+// Oblique view that fits every point in the part of the scene that the HUD's plates leave
+// visible, on every edge.
 function flyToPoints(
   v: Viewer,
   points: LatLng[],
@@ -113,7 +119,7 @@ function flyToPoints(
   const view = fitInView(frame.radius, viewerFov(v), width, height, coveredByOverlays(v));
   const heading = 0;
   v.camera.flyToBoundingSphere(
-    shiftedRight(
+    shiftedOnGround(
       new BoundingSphere(
         Cartesian3.fromDegrees(
           frame.center.lng,
@@ -124,9 +130,10 @@ function flyToPoints(
       ),
       heading,
       view.shift,
+      liftToGround(view.lift, FRAME_PITCH),
     ),
     {
-      offset: new HeadingPitchRange(heading, CesiumMath.toRadians(-55), view.distance),
+      offset: new HeadingPitchRange(heading, FRAME_PITCH, view.distance),
       duration,
       complete,
       cancel,
@@ -138,7 +145,6 @@ interface Props {
   assets: Asset[];
   installations: Installation[];
   installationId: string;
-  region: string;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onInstallation: (id: string) => void;
@@ -147,13 +153,11 @@ export default function CesiumView({
   assets,
   installations,
   installationId,
-  region,
   selectedId,
   onSelect,
   onInstallation,
 }: Props) {
   const container = useRef<HTMLDivElement>(null),
-    shell = useRef<HTMLDivElement>(null),
     viewer = useRef<Viewer | null>(null);
   const callbacks = useRef({ onSelect, onInstallation });
   const [error, setError] = useState(''),
@@ -167,8 +171,6 @@ export default function CesiumView({
   const stopPhotorealFrames = useRef<(() => void) | undefined>(undefined);
   const photorealOn = photoreal === 'on';
   const ionLoading = useRef<Viewer | null>(null);
-  const measuring = useMeasure((s) => s.active),
-    setMeasuring = useMeasure((s) => s.setActive);
   const lidarOption = useLayerView((s) => s.lidarTerrain);
   const lidar = useLidarTerrain(
     ready ? viewer.current : null,
@@ -199,13 +201,12 @@ export default function CesiumView({
   const colorMode = useLayerView((s) => s.colorMode),
     pointMode = useLayerView((s) => s.pointMode),
     quality = useLayerView((s) => s.quality);
-  // The PNOA orthophoto on top of Natural Earth; phones (quality «Baja») stop at a coarser level.
+  // The PNOA orthophoto; phones (quality «Baja») stop at a coarser level. Under it there is only
+  // the dark ground of the globe, unless the Natural Earth atlas is chosen.
   const baseImagery = useLayerView((s) => s.baseImagery),
-    setBaseImagery = useLayerView((s) => s.setBaseImagery),
     pnoa = useLayerView((s) => s.pnoa);
   usePnoaImagery(ready ? viewer.current : null, ready, imageryLevelFor(quality));
-  const pnoaShown = baseImagery === 'pnoa' && pnoa.state === 'on';
-  useEffect(() => () => setMeasuring(false), [setMeasuring]);
+  const base = effectiveBase(baseImagery, pnoa.state);
   const tooltip = useRef<HTMLDivElement>(null);
   const token = import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined;
   const buildingsRef = useRef<Awaited<ReturnType<typeof createOsmBuildingsAsync>> | undefined>(
@@ -231,6 +232,9 @@ export default function CesiumView({
     let v: Viewer | undefined, handler: ScreenSpaceEventHandler | undefined;
     let pointer: Cartesian2 | undefined;
     let hoverFrame = 0;
+    // Cesium writes its credits here; the credits plate of the HUD adopts the element.
+    const credits = document.createElement('div');
+    credits.className = 'scene-credits';
     try {
       Ion.defaultAccessToken = token ?? '';
       v = new Viewer(container.current, {
@@ -244,11 +248,10 @@ export default function CesiumView({
         fullscreenButton: false,
         selectionIndicator: false,
         infoBox: false,
-        // Natural Earth ships with Cesium and needs no network: it is always underneath, so the
-        // globe is never blank; the PNOA orthophoto goes on top (usePnoaImagery).
-        baseLayer: ImageryLayer.fromProviderAsync(
-          TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII')),
-        ),
+        // No base layer: the dark ground of the globe is the neutral base. The PNOA orthophoto
+        // goes on top (usePnoaImagery) and the Natural Earth atlas only when chosen.
+        baseLayer: false,
+        creditContainer: credits,
         requestRenderMode: true,
         maximumRenderTimeChange: Infinity,
       });
@@ -257,14 +260,14 @@ export default function CesiumView({
       if (import.meta.env.DEV) (window as DevWindow).__geotwinViewer = v;
       setTerrain('ellipsoid');
       setBuildings('off');
-      v.scene.backgroundColor = Color.fromCssColorString('#090e17');
-      v.scene.globe.baseColor = Color.fromCssColorString('#172537');
+      v.scene.backgroundColor = Color.fromCssColorString('#0E0E0D');
+      v.scene.globe.baseColor = Color.fromCssColorString('#1d2420');
       v.scene.globe.enableLighting = false;
       v.scene.globe.depthTestAgainstTerrain = true;
       handler = new ScreenSpaceEventHandler(v.scene.canvas);
       handler.setInputAction((movement: { position: Cartesian2 }) => {
         // While measuring, clicks add measurement points instead of selecting.
-        if (useMeasure.getState().active) return;
+        if (measuring()) return;
         const picked: unknown = v?.scene.pick(movement.position);
         if (typeof picked === 'object' && picked && 'id' in picked && picked.id instanceof Entity) {
           const id = String(picked.id.id);
@@ -282,7 +285,7 @@ export default function CesiumView({
         hoverFrame = 0;
         const tip = tooltip.current;
         if (!v || v.isDestroyed() || !tip || !pointer) return;
-        if (useMeasure.getState().active) {
+        if (measuring()) {
           tip.style.display = 'none';
           return;
         }
@@ -298,10 +301,11 @@ export default function CesiumView({
         }
         const width = container.current?.clientWidth ?? 400;
         tip.firstChild!.textContent = entity.name ?? 'Activo';
-        tip.style.left = `${Math.max(8, Math.min(pointer.x + 15, width - 200))}px`;
+        tip.style.left = `${Math.max(8, Math.min(pointer.x + 15, width - 220))}px`;
         tip.style.top = `${pointer.y + 15}px`;
         tip.style.display = '';
       };
+      useScene.getState().set({ credits });
       setReady(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'WebGL no disponible');
@@ -312,6 +316,8 @@ export default function CesiumView({
       handler?.destroy();
       if (v && !v.isDestroyed()) v.destroy();
       viewer.current = null;
+      if (useScene.getState().credits === credits) useScene.getState().set({ credits: null });
+      credits.remove();
       if (import.meta.env.DEV && (window as DevWindow).__geotwinViewer === v)
         delete (window as DevWindow).__geotwinViewer;
       framed.current = false;
@@ -321,6 +327,27 @@ export default function CesiumView({
       if (ionLoading.current === v) ionLoading.current = null;
     };
   }, [token]);
+  // The Natural Earth atlas, added the first time it is chosen and then only shown or hidden.
+  const atlas = useRef<ImageryLayer | null>(null);
+  useEffect(() => {
+    const v = viewer.current;
+    if (!v || !ready) return;
+    const wanted = base === 'natural-earth';
+    if (!atlas.current && wanted) {
+      atlas.current = ImageryLayer.fromProviderAsync(
+        TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII')),
+      );
+      v.imageryLayers.add(atlas.current, 0);
+    }
+    if (atlas.current) atlas.current.show = wanted;
+    v.scene.requestRender();
+  }, [base, ready]);
+  useEffect(
+    () => () => {
+      atlas.current = null;
+    },
+    [],
+  );
   useEffect(() => {
     const v = viewer.current;
     if (!v || !ready) return;
@@ -369,7 +396,7 @@ export default function CesiumView({
             heightReference: reference,
             pixelSize: 13,
             color,
-            outlineColor: Color.WHITE,
+            outlineColor: Color.fromCssColorString('#0E0E0D'),
             outlineWidth: 2,
             disableDepthTestDistance: Infinity,
           },
@@ -384,11 +411,11 @@ export default function CesiumView({
           label: {
             heightReference: reference,
             text: a.name,
-            font: '13px sans-serif',
+            font: ASSET_FONT,
             show: selectedId === a.id,
-            fillColor: Color.WHITE,
+            fillColor: Color.fromCssColorString('#EEECE6'),
             showBackground: true,
-            backgroundColor: Color.fromCssColorString('#0b1422'),
+            backgroundColor: Color.fromCssColorString('#0E0E0D'),
             pixelOffset: new Cartesian2(0, -28),
             disableDepthTestDistance: Infinity,
             distanceDisplayCondition: new DistanceDisplayCondition(0, 100000),
@@ -415,15 +442,15 @@ export default function CesiumView({
             classificationType: classification,
             semiMajorAxis: 210,
             semiMinorAxis: 210,
-            material: Color.CYAN.withAlpha(0.08),
+            material: Color.fromCssColorString('#EEECE6').withAlpha(0.06),
           },
           label: {
             heightReference: clamp,
             text: i.name,
-            font: '12px sans-serif',
-            fillColor: Color.CYAN,
+            font: INSTALLATION_FONT,
+            fillColor: Color.fromCssColorString('#EEECE6'),
             showBackground: true,
-            backgroundColor: Color.fromCssColorString('#101c30'),
+            backgroundColor: Color.fromCssColorString('#0E0E0D'),
             // Placed after each render (see placeInstallationLabels): below the area by default.
             verticalOrigin: VerticalOrigin.CENTER,
             pixelOffset: new Cartesian2(0, 50),
@@ -435,7 +462,7 @@ export default function CesiumView({
     v.scene.requestRender();
   }, [assets, installations, selectedId, ready, relief, photorealOn]);
   // Installation labels: placed after every render so they neither overlap each other nor hide
-  // under the floating controls (on a phone the control column covers the left of the map).
+  // under the plates of the HUD.
   useEffect(() => {
     const v = viewer.current;
     if (!v || !ready) return;
@@ -453,20 +480,13 @@ export default function CesiumView({
     const place = () => {
       if (v.isDestroyed()) return;
       const rect = v.scene.canvas.getBoundingClientRect();
-      const shell = container.current?.parentElement;
-      // The map's own controls, and panels floating over it from outside (the «Capas» panel).
-      const floating = [...document.querySelectorAll('[data-map-overlay]')].filter(
-        (el) => getComputedStyle(el).position === 'absolute',
-      );
-      const blocked = [...(shell?.querySelectorAll(MAP_FURNITURE) ?? []), ...floating].map((el) => {
-        const b = el.getBoundingClientRect();
-        return {
-          left: b.left - rect.left,
-          right: b.right - rect.left,
-          top: b.top - rect.top,
-          bottom: b.bottom - rect.top,
-        };
-      });
+      // The plates of the HUD floating over the scene.
+      const blocked = overlayBoxes().map((b) => ({
+        left: b.left - rect.left,
+        right: b.right - rect.left,
+        top: b.top - rect.top,
+        bottom: b.bottom - rect.top,
+      }));
       const current = installationIdRef.current;
       const ordered = [...installationsRef.current].sort(
         (a, b) => Number(b.id === current) - Number(a.id === current),
@@ -554,30 +574,10 @@ export default function CesiumView({
     })(),
   );
   const framePoints = useMemo(() => JSON.parse(frameKey) as LatLng[], [frameKey]);
-  const placeCenter = useMemo(() => frameOf(framePoints)?.center, [framePoints]);
-  const place = installations.find((i) => i.id === installationId)?.name ?? region;
   useEffect(() => {
     selectedRef.current = selectedId;
   }, [selectedId]);
   const autoFlight = useRef<AutoFlight | null>(null);
-  // The notes over the map stay above the viewer credits, which wrap to several lines in a
-  // narrow map: the CC-BY attributions (PNOA, PNOA-LiDAR) must never be covered. The credits'
-  // distance from the bottom of the map goes to CSS as --credits-clear.
-  useEffect(() => {
-    const v = viewer.current,
-      element = shell.current;
-    if (!v || !ready || !element) return;
-    const credits = v.bottomContainer as HTMLElement;
-    const dock = () => {
-      const clear = element.getBoundingClientRect().bottom - credits.getBoundingClientRect().top;
-      element.style.setProperty('--credits-clear', `${Math.max(0, Math.ceil(clear))}px`);
-    };
-    dock();
-    const observer = new ResizeObserver(dock);
-    observer.observe(credits);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [ready]);
   useEffect(() => {
     groundRef.current = ground;
     reliefRef.current = relief;
@@ -624,9 +624,25 @@ export default function CesiumView({
         lat,
         groundRef.current(lng, lat) + (reliefRef.current ? asset.mount_height_m : 0),
       );
-      v.camera.flyToBoundingSphere(new BoundingSphere(position, 60), {
+      // Aimed so the asset lands in the middle of what the plates leave visible.
+      const pitch = CesiumMath.toRadians(-45);
+      const canvas = v.scene.canvas;
+      const aim = aimOffsets(
+        650,
+        viewerFov(v),
+        canvas.clientWidth,
+        canvas.clientHeight,
+        coveredByOverlays(v),
+      );
+      const sphere = shiftedOnGround(
+        new BoundingSphere(position, 60),
+        0,
+        aim.shift,
+        liftToGround(aim.lift, pitch),
+      );
+      v.camera.flyToBoundingSphere(sphere, {
         duration: 1,
-        offset: new HeadingPitchRange(0, CesiumMath.toRadians(-45), 650),
+        offset: new HeadingPitchRange(0, pitch, 650),
         complete,
         cancel,
       });
@@ -806,194 +822,77 @@ export default function CesiumView({
     move();
     v.scene.requestRender();
   };
+  // What the HUD shows about the scene: relief, Google, ion, notes.
+  const reliefHint =
+    !relief && !photorealOn && lidar.state !== 'loading' && assets.some((a) => a.mount_height_m > 0)
+      ? `Sin relieve, los activos de cubiertas y torres se dibujan a ras del mapa. ${
+          groundLayers && !lidarOption
+            ? 'Activa «Relieve del LiDAR» en Capas para verlos a su altura.'
+            : 'Carga las hojas LiDAR en Capas para verlos a su altura.'
+        }`
+      : '';
+  const terrainMode = terrain === 'world' ? 'world' : lidarOn ? 'lidar' : 'ellipsoid';
+  useEffect(() => {
+    useScene.getState().set({
+      terrain: terrainMode,
+      lidar: lidarOn ? lidar.terrain : undefined,
+      relief,
+      photoreal,
+      buildings,
+      mapMessage,
+      reliefHint,
+    });
+  }, [terrainMode, lidarOn, lidar.terrain, relief, photoreal, buildings, mapMessage, reliefHint]);
+  // The actions the plates call: always the latest closures.
+  const actions = useRef({ togglePhotoreal, toggleBuildings, framePoints });
+  useEffect(() => {
+    actions.current = { togglePhotoreal, toggleBuildings, framePoints };
+  });
+  useEffect(() => {
+    const v = viewer.current;
+    if (!v || !ready) return;
+    useScene.getState().set({
+      api: createSceneApi(v, {
+        ground: (lng, lat) => groundRef.current(lng, lat),
+        home: () => flyToPoints(v, actions.current.framePoints, 1, groundRef.current),
+        togglePhotoreal: () => void actions.current.togglePhotoreal(),
+        toggleBuildings: () => void actions.current.toggleBuildings(),
+      }),
+    });
+    return () => useScene.getState().set({ api: null });
+  }, [ready]);
   if (error)
     return (
-      <div className="state-box">
+      <div className="state-box scene-error">
         <strong>El visor necesita WebGL</strong>
         <p>{error}</p>
-        <p>Los activos y las alertas siguen disponibles en el menú.</p>
+        <p>Los activos y las alertas siguen disponibles en el menú GeoTwin.</p>
       </div>
     );
   return (
-    <div ref={shell} className={`map-shell ${measuring ? 'measuring' : ''}`}>
+    <div className="scene">
       <div
         ref={container}
         className="cesium-host"
         data-testid="cesium-view"
         data-ready={ready}
-        data-terrain={terrain === 'world' ? 'world' : lidarOn ? 'lidar' : 'ellipsoid'}
+        data-terrain={terrainMode}
         data-photoreal={photoreal}
         data-buildings={buildings}
         data-pointclouds={cloudsShown}
         data-color-mode={colorMode}
         data-point-mode={pointMode}
-        data-base-imagery={pnoaShown ? 'pnoa' : 'natural-earth'}
+        data-base-imagery={base}
         data-pnoa={pnoa.state}
         data-pnoa-source={pnoa.source}
         tabIndex={0}
         role="application"
-        aria-label="Mapa 3D. Flechas para desplazarse; + y - para acercar o alejar."
+        aria-label="Escena 3D. Flechas para desplazarse; + y - para acercar o alejar."
         onKeyDown={onMapKey}
       />
-      <div className="map-top">
-        <span className="map-tag">
-          <span className="tiny-dot" />
-          {place.toUpperCase()}
-          {placeCenter && <b>{coordinates(placeCenter.lat, placeCenter.lng, 4)}</b>}
-        </span>
-        <span className="map-tag">
-          {token ? 'ION LISTO' : 'MODO BÁSICO'} ·{' '}
-          {!photorealOn && `${baseImageryLabel(baseImagery, pnoa.state, pnoa.source)} · `}
-          {photorealOn
-            ? 'FOTORREALISTA (GOOGLE)'
-            : terrain === 'world'
-              ? 'RELIEVE 3D'
-              : lidarOn
-                ? 'RELIEVE LIDAR'
-                : 'GLOBO BÁSICO'}
-        </span>
-      </div>
-      <div className="map-controls">
-        <Button
-          variant="outline"
-          size="icon"
-          title="Acercar"
-          aria-label="Acercar"
-          onClick={() => {
-            viewer.current?.camera.zoomIn(viewer.current.camera.positionCartographic.height * 0.4);
-            viewer.current?.scene.requestRender();
-          }}
-        >
-          <Plus size={17} />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          title="Alejar"
-          aria-label="Alejar"
-          onClick={() => {
-            viewer.current?.camera.zoomOut(viewer.current.camera.positionCartographic.height * 0.4);
-            viewer.current?.scene.requestRender();
-          }}
-        >
-          <Minus size={17} />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          title="Centrar red"
-          aria-label="Centrar red"
-          onClick={() =>
-            viewer.current && flyToPoints(viewer.current, framePoints, 1, groundRef.current)
-          }
-        >
-          <Crosshair size={17} />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          title={
-            photorealOn
-              ? 'Oculto con Fotorrealista: la malla de Google tapa el mapa base'
-              : baseImagery === 'pnoa'
-                ? 'Cambiar al atlas Natural Earth (sin conexión, poco detalle)'
-                : 'Cambiar a la ortofoto PNOA'
-          }
-          aria-label="Alternar cartografía"
-          aria-pressed={baseImagery === 'pnoa'}
-          disabled={photorealOn}
-          onClick={() => setBaseImagery(baseImagery === 'pnoa' ? 'natural-earth' : 'pnoa')}
-        >
-          <Layers size={17} />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          disabled={!token || buildings === 'loading'}
-          title={
-            token
-              ? 'Edificios OSM y terreno 3D de Cesium ion'
-              : 'Configura VITE_CESIUM_ION_TOKEN para edificios 3D'
-          }
-          aria-label="Edificios 3D"
-          aria-pressed={buildings === 'on'}
-          onClick={() => void toggleBuildings()}
-        >
-          <Mountain size={17} />
-        </Button>
-        {token && (
-          <Button
-            variant="outline"
-            size="icon"
-            disabled={photoreal === 'loading'}
-            title="Fotorrealista (Google): malla 3D de Google Photorealistic 3D Tiles a través de Cesium ion"
-            aria-label="Fotorrealista (Google)"
-            aria-pressed={photorealOn}
-            onClick={() => void togglePhotoreal()}
-          >
-            <Building2 size={17} />
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          size="icon"
-          title="Medir distancias, desniveles y áreas"
-          aria-label="Medir"
-          aria-pressed={measuring}
-          disabled={!ready}
-          onClick={() => setMeasuring(!measuring)}
-        >
-          <Ruler size={17} />
-        </Button>
-      </div>
-      {measuring && ready && viewer.current && (
-        <Suspense fallback={null}>
-          <MeasureTool
-            viewer={viewer.current}
-            onClose={() => setMeasuring(false)}
-            ground={lidarOn ? ground : undefined}
-          />
-        </Suspense>
-      )}
-      <div ref={tooltip} className="map-tooltip" style={{ display: 'none' }} aria-hidden="true">
+      <div ref={tooltip} className="scene-tooltip" style={{ display: 'none' }} aria-hidden="true">
         <span />
-        <small>Haz clic para inspeccionar</small>
-      </div>
-      {/* Notes and errors over the map, stacked just above the viewer credits. */}
-      <div className="map-notes">
-        {!relief &&
-          !photorealOn &&
-          lidar.state !== 'loading' &&
-          assets.some((a) => a.mount_height_m > 0) && (
-            <div className="map-hint" role="note" data-testid="relief-hint">
-              Sin relieve, los activos de cubiertas y torres se dibujan a ras del mapa.{' '}
-              {groundLayers && !lidarOption
-                ? 'Activa «Relieve del LiDAR» en Capas para verlos a su altura.'
-                : 'Carga las hojas LiDAR en Capas para verlos a su altura.'}
-            </div>
-          )}
-        {(mapMessage || (pnoa.state === 'error' && baseImagery === 'pnoa' && !photorealOn)) && (
-          <div className="map-message" role="status" data-testid="map-message">
-            {mapMessage || PNOA_UNAVAILABLE}
-          </div>
-        )}
-      </div>
-      <div className="map-bottom">
-        <div className="map-legend">
-          <span>
-            <i className="bg-emerald-400" />
-            Operativo
-          </span>
-          <span>
-            <i className="bg-amber-400" />
-            Advertencia
-          </span>
-          <span>
-            <i className="bg-rose-400" />
-            Crítico
-          </span>
-        </div>
-        <span>WGS 84 · SRID 4326 · geometrías demo</span>
+        <small>Haz clic para ver su ficha</small>
       </div>
     </div>
   );

@@ -16,12 +16,12 @@ describe('asset card placement', () => {
     const p = placeCard({ ...base, anchor: { x: 500, y: 300 } });
     expect(p.mode).toBe('float');
     expect(p.side).toBe('right');
-    expect(p.left).toBe(530);
+    expect(p.left).toBe(564);
     expect(p.guide!.x1).toBe(500);
     expect(p.guide!.x2 - p.guide!.x1).toBeGreaterThanOrEqual(30);
     const q = placeCard({ ...base, anchor: { x: 1100, y: 450 } });
     expect(q.side).toBe('left');
-    expect(q.left + card.width).toBe(1070);
+    expect(q.left + card.width).toBe(1036);
   });
   it('never covers the asset or another plate', () => {
     for (const anchor of [

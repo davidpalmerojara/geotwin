@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { CircleAlert, Plus, ShieldCheck } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import type { Alert } from '@geotwin/shared';
 import { useAlerts, useAssets, useSync } from '../../hooks/data';
 import { useUI } from '../../stores/ui';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { SectionHeading, Loading, ErrorState, Empty } from '../../components/common';
-import { AlertDialog } from '../assets/asset-detail';
+import { AlertDialog } from './alert-dialog';
 import { date } from '../../lib/utils';
 import { api } from '../../lib/api';
 export function Alerts() {
@@ -31,11 +31,7 @@ export function Alerts() {
   });
   return (
     <div className="page">
-      <SectionHeading
-        eyebrow="GESTIÓN DE INCIDENCIAS"
-        title="Cada señal, una acción"
-        description="Detecta anomalías, registra incidencias y conserva un historial auditable."
-      >
+      <SectionHeading description="Incidencias registradas en PostgreSQL, con su historial. La telemetría es simulada.">
         <Button
           onClick={() => {
             setAssetId(selected ?? assets.data?.[0]?.id ?? '');
@@ -44,20 +40,18 @@ export function Alerts() {
           }}
           disabled={!assets.data?.length}
         >
-          <Plus size={16} />
+          <Plus size={15} aria-hidden="true" />
           Crear incidencia
         </Button>
       </SectionHeading>
       <div className="alert-tabs">
         <button className={status === 'active' ? 'active' : ''} onClick={() => setStatus('active')}>
-          <CircleAlert size={16} />
           Activas
         </button>
         <button
           className={status === 'resolved' ? 'active' : ''}
           onClick={() => setStatus('resolved')}
         >
-          <ShieldCheck size={16} />
           Resueltas
         </button>
         <span>Telemetría simulada · resolución persistente</span>
@@ -85,17 +79,19 @@ export function Alerts() {
               onClick={() => setIncident(al)}
             >
               <div className="incident-card-top">
-                <span className={`severity-${al.severity}`}>
-                  <CircleAlert size={13} />
-                  {al.severity === 'critical' ? 'CRÍTICA' : 'ADVERTENCIA'}
+                <span className={`status status-${al.severity}`}>
+                  <i className={`glyph glyph-${al.severity}`} aria-hidden="true" />
+                  {al.severity === 'critical' ? 'Crítica' : 'Advertencia'}
                 </span>
                 <span className="pill">{al.status === 'active' ? 'Activa' : 'Resuelta'}</span>
               </div>
-              <h2>{al.asset_name}</h2>
+              <h3>{al.asset_name}</h3>
               <p>{al.message}</p>
               <footer>
                 <span>{date(al.triggered_at)}</span>
-                <span>{al.source === 'telemetry' ? 'Sensor · simulado' : 'Manual'}</span>
+                <span>
+                  {al.source === 'telemetry' ? <span className="sim">simulado</span> : 'Manual'}
+                </span>
               </footer>
             </button>
           ))}
@@ -104,8 +100,8 @@ export function Alerts() {
       <AlertDialog alert={incident} onClose={() => setIncident(null)} />
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent>
-          <DialogTitle className="text-xl font-semibold">Nueva incidencia</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-slate-400">
+          <DialogTitle className="dialog-title">Nueva incidencia</DialogTitle>
+          <DialogDescription className="dialog-description">
             Se guardará en PostgreSQL y cambiará el estado del activo.
           </DialogDescription>
           <form
@@ -146,7 +142,7 @@ export function Alerts() {
               />
             </label>
             {create.isError && (
-              <p role="alert" className="text-red-300">
+              <p role="alert" className="form-error">
                 {create.error.message}
               </p>
             )}

@@ -28,7 +28,8 @@ interface LayerViewState {
   realHeight: boolean;
   // Use the layers' ground models (DTM) as the globe's terrain when there is no ion terrain.
   lidarTerrain: boolean;
-  // What lies under the clouds: the PNOA orthophoto (when it loads) or the Natural Earth atlas.
+  // What lies under the clouds: the PNOA orthophoto (the neutral dark ground if it fails), the
+  // neutral ground on purpose, or the Natural Earth atlas.
   baseImagery: BaseImagery;
   // «Todos» or «Híbrido (sin suelo)»: ground and water hidden, so the ground is the orthophoto.
   pointMode: PointMode;
@@ -63,8 +64,9 @@ function deviceDefaults() {
   });
 }
 const initial = deviceDefaults();
+const envBase = import.meta.env.VITE_BASE_IMAGERY as string | undefined;
 const initialBase: BaseImagery =
-  import.meta.env.VITE_BASE_IMAGERY === 'natural-earth' ? 'natural-earth' : 'pnoa';
+  envBase === 'natural-earth' || envBase === 'neutral' ? envBase : 'pnoa';
 export const useLayerView = create<LayerViewState>((set) => ({
   hidden: {},
   colorMode: 'rgb',

@@ -3,11 +3,11 @@ import type { Asset } from '@geotwin/shared';
 export function count(n: number, singular: string, plural: string) {
   return `${n} ${n === 1 ? singular : plural}`;
 }
-/** Hemisphere-aware coordinates: 41.65523° N, 4.73700° O (Spanish uses O for oeste). */
+/** Hemisphere-aware coordinates with a decimal comma: 41,65523° N, 4,73700° O (O for oeste). */
 export function coordinates(lat: number, lng: number, digits = 5) {
   const ns = lat >= 0 ? 'N' : 'S';
   const ew = lng >= 0 ? 'E' : 'O';
-  return `${Math.abs(lat).toFixed(digits)}° ${ns}, ${Math.abs(lng).toFixed(digits)}° ${ew}`;
+  return `${number(Math.abs(lat), digits)}° ${ns}, ${number(Math.abs(lng), digits)}° ${ew}`;
 }
 export const assetTypeLabel: Record<Asset['type'], string> = {
   pump: 'Bomba',

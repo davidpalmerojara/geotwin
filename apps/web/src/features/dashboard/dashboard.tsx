@@ -1,5 +1,5 @@
 // Trend points come from SQL aggregates; the client does not synthesize sensor data.
-import { Activity, ArrowUpRight, Box, CircleAlert, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -39,55 +39,43 @@ export function Dashboard() {
       label: 'Activos monitorizados',
       value: d.total_assets,
       sub: count(d.installations, 'instalación conectada', 'instalaciones conectadas'),
-      icon: Box,
-      color: 'cyan',
+      tone: 'neutral',
     },
     {
       label: 'Activos operativos',
       value: d.operational_assets,
       sub: `${d.total_assets ? Math.round((d.operational_assets / d.total_assets) * 100) : 0}% de disponibilidad actual`,
-      icon: ShieldCheck,
-      color: 'green',
+      tone: 'neutral',
     },
     {
       label: 'Alertas activas',
       value: d.active_alerts,
       sub: 'Incidencias pendientes de resolución',
-      icon: CircleAlert,
-      color: 'amber',
+      tone: 'neutral',
     },
     {
       label: 'Incidencias críticas',
       value: d.critical_incidents,
       sub: 'Requieren intervención',
-      icon: TriangleAlert,
-      color: 'red',
+      tone: 'critical',
     },
   ];
   return (
     <div className="page dashboard">
       <SectionHeading
-        eyebrow={`OPERACIONES${region ? ` / ${region.split(',')[0]!.toUpperCase()}` : ''}`}
-        title="Tu infraestructura. En perspectiva."
-        description="Una visión compartida de cada activo, lectura e incidencia."
-      >
-        <Button onClick={() => setPage('twin')}>
-          Abrir gemelo digital
-          <ArrowUpRight size={16} />
-        </Button>
-      </SectionHeading>
+        description={`Estado de la red${region ? ` de ${region}` : ''}: activos, lecturas e incidencias. Telemetría simulada.`}
+      />
       <div className="metric-grid">
         {cards.map((c) => (
-          <div className={`metric-card accent-${c.color}`} key={c.label}>
+          <div className={`metric-card tone-${c.tone}`} key={c.label}>
             <div className="metric-label">
+              {c.tone === 'critical' && <i className="glyph glyph-critical" aria-hidden="true" />}
               {c.label}
-              <c.icon size={18} />
             </div>
             <strong data-testid={c.label === 'Alertas activas' ? 'active-alerts' : undefined}>
               {c.value.toString().padStart(2, '0')}
             </strong>
             <p>{c.sub}</p>
-            <div className="metric-line" />
           </div>
         ))}
       </div>
@@ -95,21 +83,18 @@ export function Dashboard() {
         <section className="panel chart-panel">
           <div className="panel-heading">
             <div>
-              <h2>Telemetría de la red</h2>
+              <h3>Telemetría de la red</h3>
               <p>Media por minuto · últimos 30 minutos · datos simulados</p>
             </div>
-            <span className="live-label">
-              <Activity size={13} />
-              EN DIRECTO
-            </span>
+            <span className="sim">simulado</span>
           </div>
           <div className="chart-legend">
             <span>
-              <i className="bg-cyan-400" />
+              <i className="key-line key-temp" />
               Temperatura °C
             </span>
             <span>
-              <i className="bg-violet-400" />
+              <i className="key-line key-vib" />
               Vibración mm/s
             </span>
           </div>
@@ -117,25 +102,19 @@ export function Dashboard() {
             {d.trend.length ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={d.trend}>
-                  <defs>
-                    <linearGradient id="temperatureFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="#22d3ee" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="#223044" vertical={false} />
+                  <CartesianGrid stroke="#363531" vertical={false} />
                   <XAxis
                     dataKey="recorded_at"
                     tickFormatter={(v) => time(String(v)).slice(0, 5)}
                     minTickGap={50}
-                    tick={{ fill: '#8293a8', fontSize: 11 }}
+                    tick={{ fill: '#BAB6AC', fontSize: 11, fontFamily: 'IBM Plex Mono' }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
                     yAxisId="temp"
                     tickFormatter={axisTick}
-                    tick={{ fill: '#8293a8', fontSize: 11 }}
+                    tick={{ fill: '#BAB6AC', fontSize: 11, fontFamily: 'IBM Plex Mono' }}
                     axisLine={false}
                     tickLine={false}
                     width={30}
@@ -144,16 +123,17 @@ export function Dashboard() {
                     yAxisId="vib"
                     tickFormatter={axisTick}
                     orientation="right"
-                    tick={{ fill: '#8293a8', fontSize: 11 }}
+                    tick={{ fill: '#BAB6AC', fontSize: 11, fontFamily: 'IBM Plex Mono' }}
                     axisLine={false}
                     tickLine={false}
                     width={30}
                   />
                   <Tooltip
                     contentStyle={{
-                      background: '#111c2d',
-                      border: '1px solid #304158',
-                      borderRadius: 10,
+                      background: '#0E0E0D',
+                      border: '1px solid #706D64',
+                      borderRadius: 2,
+                      color: '#EEECE6',
                     }}
                     labelFormatter={(v) => time(String(v))}
                     formatter={(v, name) => [
@@ -166,17 +146,18 @@ export function Dashboard() {
                     yAxisId="temp"
                     type="monotone"
                     dataKey="temperature"
-                    stroke="#22d3ee"
-                    strokeWidth={2}
-                    fill="url(#temperatureFill)"
+                    stroke="#EEECE6"
+                    strokeWidth={1.5}
+                    fill="transparent"
                   />
                   <Area
                     isAnimationActive={false}
                     yAxisId="vib"
                     type="monotone"
                     dataKey="vibration"
-                    stroke="#a78bfa"
-                    strokeWidth={2}
+                    stroke="#BAB6AC"
+                    strokeWidth={1.5}
+                    strokeDasharray="5 3"
                     fill="transparent"
                   />
                 </AreaChart>
@@ -189,7 +170,7 @@ export function Dashboard() {
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>Instalaciones</h2>
+              <h3>Instalaciones</h3>
               <p>Red de demostración{region ? ` · ${region}` : ''}</p>
             </div>
             <span className="pill">
@@ -210,7 +191,7 @@ export function Dashboard() {
                   setPage('twin');
                 }}
               >
-                <div className="install-icon">0{index + 1}</div>
+                <div className="install-icon num">0{index + 1}</div>
                 <div>
                   <strong>{i.name}</strong>
                   <p>
@@ -218,24 +199,21 @@ export function Dashboard() {
                     {coordinates(i.location.lat, i.location.lng, 4)}
                   </p>
                 </div>
-                <ArrowUpRight size={16} />
+                <ArrowUpRight size={14} aria-hidden="true" />
               </button>
             ))
           )}
-          <div className="network-note">
-            <RadioDot />
-            Ubicaciones reales. Instalaciones y operación simuladas.
-          </div>
+          <p className="network-note">Ubicaciones reales. Instalaciones y operación simuladas.</p>
         </section>
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>Estado de los activos</h2>
+              <h3>Estado de los activos</h3>
               <p>Selecciona un activo para explorar su gemelo</p>
             </div>
             <Button variant="ghost" size="sm" onClick={() => setPage('assets')}>
               Ver todos
-              <ArrowUpRight size={14} />
+              <ArrowUpRight size={14} aria-hidden="true" />
             </Button>
           </div>
           {assets.isError ? (
@@ -250,9 +228,6 @@ export function Dashboard() {
                   setPage('twin');
                 }}
               >
-                <div className="asset-symbol">
-                  <Box size={17} />
-                </div>
                 <div>
                   <strong>{a.name}</strong>
                   <p>
@@ -267,12 +242,12 @@ export function Dashboard() {
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>Centro de alertas</h2>
+              <h3>Centro de alertas</h3>
               <p>Incidencias persistidas en PostgreSQL</p>
             </div>
             <Button variant="ghost" size="sm" onClick={() => setPage('alerts')}>
               Ver todas
-              <ArrowUpRight size={14} />
+              <ArrowUpRight size={14} aria-hidden="true" />
             </Button>
           </div>
           {alerts.isError ? (
@@ -287,10 +262,7 @@ export function Dashboard() {
                   setPage('alerts');
                 }}
               >
-                <TriangleAlert
-                  className={a.severity === 'critical' ? 'text-red-400' : 'text-amber-400'}
-                  size={19}
-                />
+                <i className={`glyph glyph-${a.severity}`} aria-hidden="true" />
                 <div>
                   <strong>{a.asset_name}</strong>
                   <p>{a.message}</p>
@@ -300,19 +272,12 @@ export function Dashboard() {
             ))
           ) : (
             <div className="all-clear">
-              <ShieldCheck size={32} />
-              <h3>La red está bajo control</h3>
+              <i className="glyph glyph-healthy" aria-hidden="true" />
               <p>No hay incidencias activas en este momento.</p>
-              <Button size="sm" variant="outline" onClick={() => setPage('twin')}>
-                Explorar sensores
-              </Button>
             </div>
           )}
         </section>
       </div>
     </div>
   );
-}
-function RadioDot() {
-  return <span className="tiny-dot" />;
 }

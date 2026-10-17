@@ -2,6 +2,13 @@ import React, { Component } from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
+// IBM Plex Sans Condensed and IBM Plex Mono (SIL Open Font License 1.1), Latin subset only.
+import '@fontsource/ibm-plex-sans-condensed/latin-400.css';
+import '@fontsource/ibm-plex-sans-condensed/latin-500.css';
+import '@fontsource/ibm-plex-sans-condensed/latin-600.css';
+import '@fontsource/ibm-plex-mono/latin-400.css';
+import '@fontsource/ibm-plex-mono/latin-500.css';
+import '@fontsource/ibm-plex-mono/latin-600.css';
 import './styles/globals.css';
 const client = new QueryClient({
   defaultOptions: {
@@ -16,10 +23,12 @@ class Boundary extends Component<{ children: React.ReactNode }, { error: Error |
   }
   render() {
     return this.state.error ? (
-      <div className="state-box">
+      <div className="state-box app-error">
         <h1>No se pudo mostrar esta vista</h1>
         <p>{this.state.error.message}</p>
-        <button onClick={() => location.reload()}>Recargar la aplicación</button>
+        <button className="btn" onClick={() => location.reload()}>
+          Recargar la aplicación
+        </button>
       </div>
     ) : (
       this.props.children

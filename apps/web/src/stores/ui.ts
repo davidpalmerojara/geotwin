@@ -12,7 +12,7 @@ interface UIState extends Route {
 // The first render already reflects a shared link (page, installation and asset).
 const initial: Route =
   typeof window === 'undefined'
-    ? { page: 'overview', installationId: '', selectedAssetId: null }
+    ? { page: 'twin', installationId: '', selectedAssetId: null }
     : parseRoute(window.location.pathname, window.location.search);
 export const useUI = create<UIState>((set) => ({
   ...initial,

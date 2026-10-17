@@ -1,0 +1,174 @@
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { Asset, Installation } from '@geotwin/shared';
+import { useAssets, useInstallations } from '../../hooks/data';
+import { useRealtime } from '../../hooks/realtime';
+import { useRouteSync } from '../../hooks/route';
+import { useUI } from '../../stores/ui';
+import { useTool } from '../../stores/tool';
+import { useScene } from '../../stores/viewer';
+import { ErrorState, Loading } from '../../components/common';
+import { AssetCard } from '../assets/asset-card';
+import { LayersPanel, LayersSummary } from '../layers/layers-panel';
+import { PlacePlate } from './place-plate';
+import { ToolBar, toolButtonId } from './tool-bar';
+import { FloatingPanel } from './floating-panel';
+import { SectionSheet } from './section-sheet';
+import { HeadingPlate, ScalePlate, useCamera } from './heading-plate';
+import { ReadoutPlate } from './readout-plate';
+import { CreditsPlate } from './credits-plate';
+import { NotesStack } from './notes-stack';
+import { EdgeChips } from './edge-chips';
+import { Palette } from './palette';
+import { RadiusPanel } from './radius-panel';
+import { useShortcuts } from './use-shortcuts';
+
+const CesiumView = lazy(() => import('../digital-twin/cesium-view'));
+// The measuring tool is only downloaded when it is first opened.
+const MeasureTool = lazy(() => import('../measure/measure-tool'));
+// Stable empty arrays so the viewer's effects do not re-run on every render while loading.
+const noAssets: Asset[] = [];
+const noInstallations: Installation[] = [];
+
+/**
+ * The whole application: the 3D scene runs to every edge of the screen and is mounted once, never
+ * rebuilt (not for a section sheet, another installation or a new URL); the HUD floats over it as
+ * opaque plates. Sections open as sheets over the scene.
+ */
+export function Stage() {
+  useRealtime();
+  useRouteSync();
+  useShortcuts();
+  const assets = useAssets(),
+    installations = useInstallations();
+  const page = useUI((s) => s.page),
+    selected = useUI((s) => s.selectedAssetId),
+    installationId = useUI((s) => s.installationId),
+    select = useUI((s) => s.selectAsset),
+    setInstallation = useUI((s) => s.setInstallation);
+  const panel = useTool((s) => s.panel),
+    closePanel = useTool((s) => s.closePanel);
+  const api = useScene((s) => s.api),
+    lidarOn = useScene((s) => s.terrain === 'lidar'),
+    lidar = useScene((s) => s.lidar);
+  const camera = useCamera();
+  const failed = assets.isError || installations.isError;
+  // The viewer is never gated on query state: unmounting it would destroy the WebGL context, the
+  // chosen base layer, ion terrain and buildings, and the camera.
+  const [ground, setGround] = useState<((lng: number, lat: number) => number) | undefined>();
+  useEffect(() => {
+    setGround(() => (lidarOn && api ? api.groundAt : undefined));
+  }, [lidarOn, api, lidar]);
+  // Panels and sheets run from under the tool bar down to the bottom plates: the CSS gets both
+  // limits as variables, kept current as plates wrap or notes appear.
+  const stage = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = stage.current;
+    if (!element) return;
+    const measure = () => {
+      const top = element.querySelector('.hud-tl')?.getBoundingClientRect().bottom ?? 96;
+      const bottom = element.querySelector('.hud-bottom')?.getBoundingClientRect().top;
+      element.style.setProperty('--hud-top', `${Math.ceil(top) + 8}px`);
+      element.style.setProperty(
+        '--hud-bottom',
+        `${Math.ceil(window.innerHeight - (bottom ?? window.innerHeight - 60)) + 8}px`,
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    for (const part of element.querySelectorAll('.hud-tl, .hud-bottom')) observer.observe(part);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+  return (
+    <div className="stage" ref={stage}>
+      <Suspense fallback={<Loading label="Inicializando motor geoespacial…" />}>
+        <CesiumView
+          assets={assets.data ?? noAssets}
+          installations={installations.data ?? noInstallations}
+          installationId={installationId}
+          selectedId={selected}
+          onSelect={select}
+          onInstallation={setInstallation}
+        />
+      </Suspense>
+      <div className="hud">
+        <div className="hud-tl">
+          <PlacePlate />
+          <ToolBar />
+        </div>
+        {failed && (
+          <div className="plate hud-error" data-map-overlay>
+            <ErrorState
+              error={assets.error ?? installations.error}
+              retry={() => {
+                void assets.refetch();
+                void installations.refetch();
+              }}
+            />
+          </div>
+        )}
+        {page !== 'twin' ? (
+          <SectionSheet sheet={page} />
+        ) : panel === 'layers' ? (
+          <FloatingPanel
+            id="panel-layers"
+            anchorId={toolButtonId('layers')}
+            label="Capas"
+            title="Capas"
+            extra={<LayersSummary />}
+            width={340}
+            onClose={closePanel}
+          >
+            <LayersPanel />
+          </FloatingPanel>
+        ) : panel === 'measure' ? (
+          <FloatingPanel
+            id="panel-measure"
+            anchorId={toolButtonId('measure')}
+            label="Medir"
+            title="Medir"
+            width={330}
+            onClose={closePanel}
+          >
+            {api ? (
+              <Suspense fallback={<Loading />}>
+                <MeasureTool viewer={api.viewer} ground={ground} />
+              </Suspense>
+            ) : (
+              <Loading label="Esperando al visor…" />
+            )}
+          </FloatingPanel>
+        ) : panel === 'radius' ? (
+          <FloatingPanel
+            id="panel-radius"
+            anchorId={toolButtonId('radius')}
+            label="Radio"
+            title="Radio"
+            extra={<span className="panel-sub">ST_DWithin · PostGIS</span>}
+            width={330}
+            onClose={closePanel}
+          >
+            <RadiusPanel />
+          </FloatingPanel>
+        ) : null}
+        <HeadingPlate info={camera} />
+        <AssetCard />
+        <EdgeChips />
+        <div className="hud-bottom">
+          <div className="hud-bl">
+            <ScalePlate info={camera} />
+            <ReadoutPlate />
+          </div>
+          <div className="hud-br">
+            <NotesStack />
+            <CreditsPlate />
+          </div>
+        </div>
+        <Palette />
+      </div>
+    </div>
+  );
+}

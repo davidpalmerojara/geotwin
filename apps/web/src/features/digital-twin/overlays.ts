@@ -12,19 +12,9 @@ import {
   type Viewer,
 } from 'cesium';
 import { coveredEdges, type Edges } from './camera';
+import { overlayBoxes } from '../hud/dom';
 
-/** Boxes of the plates floating over the scene (visible ones only). */
-export function overlayBoxes() {
-  return [...document.querySelectorAll('[data-map-overlay]')]
-    .filter((overlay) => {
-      const style = getComputedStyle(overlay);
-      return (
-        (style.position === 'absolute' || style.position === 'fixed') && style.display !== 'none'
-      );
-    })
-    .map((overlay) => overlay.getBoundingClientRect())
-    .filter((box) => box.width > 0 && box.height > 0);
-}
+export { overlayBoxes };
 
 /** Pixels of each edge of the canvas hidden by the HUD. */
 export function coveredByOverlays(viewer: Viewer): Edges {
