@@ -134,6 +134,8 @@ export const api = {
       body: JSON.stringify({ sensor_id, mode }),
     }),
   resolve: (id: string) => request(`/alerts/${id}/resolve`, alertSchema, { method: 'PATCH' }),
+  acknowledge: (id: string) =>
+    request(`/alerts/${id}/acknowledge`, alertSchema, { method: 'PATCH' }),
   createAlert: (asset_id: string, severity: 'warning' | 'critical', message: string) =>
     request('/alerts', alertSchema, {
       method: 'POST',

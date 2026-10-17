@@ -21,6 +21,8 @@ import { Loading, ErrorState, Empty } from '../../components/common';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { AlertDialog } from '../alerts/alert-dialog';
+import { ACKNOWLEDGE_EVENT, useAlertActions } from '../alerts/alert-actions';
+import { sensorLevel } from '../scene/tag-data';
 import { Glyph, Kbd, Sim, StatusWord } from '../hud/glyphs';
 import { formatLatLon, formatMetres, formatUtm, geoidAt } from '../hud/readout';
 import { placeCard, MARGIN, GAP } from '../hud/placement';
@@ -38,14 +40,7 @@ export function AssetCard() {
   return id ? <AssetCardBody key={id} id={id} /> : null;
 }
 
-const levelOf = (s: Sensor) =>
-  s.latest_value === null
-    ? 'healthy'
-    : s.latest_value >= s.critical_threshold
-      ? 'critical'
-      : s.latest_value >= s.warning_threshold
-        ? 'warning'
-        : 'healthy';
+const levelOf = (s: Sensor) => sensorLevel(s);
 
 /**
  * Floats the card beside its asset (or docks it to the right) on every camera move, writing the
@@ -165,6 +160,16 @@ function AssetCardBody({ id }: { id: string }) {
     queryFn: () => api.readings(id, selected?.id),
     enabled: !!selected,
   });
+  const { acknowledge, resolve } = useAlertActions();
+  const pending = (alerts.data ?? []).filter((al) => !al.acknowledged_at).map((al) => al.id);
+  const pendingKey = pending.join(',');
+  // «R» acknowledges the alerts of this card's asset.
+  useEffect(() => {
+    if (!pendingKey) return;
+    const onAcknowledge = () => acknowledge.mutate(pendingKey.split(','));
+    window.addEventListener(ACKNOWLEDGE_EVENT, onAcknowledge);
+    return () => window.removeEventListener(ACKNOWLEDGE_EVENT, onAcknowledge);
+  }, [pendingKey, acknowledge]);
   const simulate = useMutation({
     mutationFn: (mode: 'warning' | 'critical') => api.simulate(selected!.id, mode),
     onSuccess: () => void sync(),
@@ -446,11 +451,39 @@ function AssetCardBody({ id }: { id: string }) {
                 </span>
                 <ChevronRight size={14} aria-hidden="true" />
               </button>
-              <div className="row">
+              <div className="row incident-acts">
+                {al.acknowledged_at ? (
+                  <span className="incident-ack num" data-testid="acknowledged">
+                    reconocida a las {time(al.acknowledged_at)}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={acknowledge.isPending}
+                    onClick={() => acknowledge.mutate([al.id])}
+                    title="Marca la alerta como vista: el pulso se apaga y el haz sigue hasta resolverla"
+                  >
+                    Reconocer {!phone && <Kbd>R</Kbd>}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={resolve.isPending}
+                  onClick={() => resolve.mutate(al.id)}
+                >
+                  Resolver
+                </button>
                 <button type="button" className="btn btn-ghost" onClick={() => setPage('alerts')}>
                   Ver en Alertas
                 </button>
               </div>
+              {(acknowledge.isError || resolve.isError) && (
+                <p role="alert" className="form-error">
+                  {(acknowledge.error ?? resolve.error)?.message}
+                </p>
+              )}
             </div>
           ))
         ) : (

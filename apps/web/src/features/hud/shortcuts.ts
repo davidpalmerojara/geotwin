@@ -1,5 +1,5 @@
 /**
- * One-key shortcuts of the viewer (1–5, C, 0, N, /) and the rule that keeps them out of the way
+ * One-key shortcuts of the viewer (1–5, C, 0, N, /, R) and the rule that keeps them out of the way
  * (WCAG 2.1.4): never while typing in a field, never with Ctrl, ⌘ or Alt, never behind a modal
  * dialog, and never when the user has switched them off in Ajustes. Ctrl/⌘+K and Esc always work.
  */
@@ -13,6 +13,7 @@ export type ShortcutAction =
   | 'home'
   | 'north'
   | 'palette'
+  | 'acknowledge'
   | 'escape';
 
 /** The keys, as the Atajos list shows them. */
@@ -26,6 +27,7 @@ export const SHORTCUTS: [string, string][] = [
   ['0', 'Encuadre inicial'],
   ['N', 'Norte arriba'],
   ['/', 'Ir a…'],
+  ['R', 'Reconocer las alertas del activo de la ficha'],
   ['Ctrl+K', 'Ir a… (también en un campo de texto)'],
   ['Esc', 'Cierra el panel, después la hoja y después la ficha'],
 ];
@@ -40,6 +42,7 @@ const KEYS: Record<string, ShortcutAction> = {
   '0': 'home',
   n: 'north',
   '/': 'palette',
+  r: 'acknowledge',
 };
 
 /** What a keyboard event's target needs to expose (a DOM element, or a stand-in in tests). */

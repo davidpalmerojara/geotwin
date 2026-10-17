@@ -3,12 +3,14 @@ import { useUI } from '../../stores/ui';
 import { useTool } from '../../stores/tool';
 import { useScene } from '../../stores/viewer';
 import { shortcutFor, shortcutsEnabled } from './shortcuts';
+import { ACKNOWLEDGE_EVENT } from '../alerts/alert-actions';
 
 /** A Radix dialog (modal) is open: it handles its own keys. */
 const modalOpen = () => !!document.querySelector('[role="dialog"][data-state="open"]');
 
 /**
- * Binds the HUD's keys: 1–5 tools, C Capas, 0 framing, N north up, / and Ctrl/⌘+K «Ir a», and
+ * Binds the HUD's keys: 1–5 tools, C Capas, 0 framing, N north up, / and Ctrl/⌘+K «Ir a», R
+ * «Reconocer» (the open card's alerts), and
  * Esc, which closes the top-most thing: the panel, then the sheet, then the asset card.
  */
 export function useShortcuts() {
@@ -29,6 +31,11 @@ export function useShortcuts() {
           break;
         case 'palette':
           tool.setPalette(true);
+          break;
+        case 'acknowledge':
+          // Only with an asset card open: it knows the asset's alerts.
+          if (!ui.selectedAssetId) return;
+          window.dispatchEvent(new Event(ACKNOWLEDGE_EVENT));
           break;
         case 'layers':
           tool.togglePanel('layers');

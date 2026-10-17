@@ -10,7 +10,8 @@ import { Loading, ErrorState, Empty } from '../../components/common';
 import { Glyph, Sim } from '../hud/glyphs';
 import { count } from '../../lib/format';
 import { AlertDialog } from './alert-dialog';
-import { date } from '../../lib/utils';
+import { date, time } from '../../lib/utils';
+import { useAlertActions } from './alert-actions';
 import { api } from '../../lib/api';
 export function Alerts() {
   const [status, setStatus] = useState('active'),
@@ -31,6 +32,7 @@ export function Alerts() {
       void sync();
     },
   });
+  const { acknowledge } = useAlertActions();
   const total = alerts.data?.length;
   return (
     <div className="page">
@@ -95,6 +97,7 @@ export function Alerts() {
               <th scope="col">Activo e incidencia</th>
               <th scope="col">{status === 'active' ? 'Desde' : 'Resuelta'}</th>
               <th scope="col">Origen</th>
+              {status === 'active' && <th scope="col">Reconocida</th>}
             </tr>
           </thead>
           <tbody>
@@ -120,10 +123,32 @@ export function Alerts() {
                 <td data-label="Origen">
                   {al.source === 'telemetry' ? <Sim /> : <Sim text="manual" />}
                 </td>
+                {status === 'active' && (
+                  <td data-label="Reconocida">
+                    {al.acknowledged_at ? (
+                      <span className="num f1">{time(al.acknowledged_at)}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={acknowledge.isPending}
+                        aria-label={`Reconocer la alerta de ${al.asset_name}`}
+                        onClick={() => acknowledge.mutate([al.id])}
+                      >
+                        Reconocer
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+      {acknowledge.isError && (
+        <p role="alert" className="form-error">
+          {acknowledge.error.message}
+        </p>
       )}
       <AlertDialog alert={incident} onClose={() => setIncident(null)} />
       <Dialog open={creating} onOpenChange={setCreating}>

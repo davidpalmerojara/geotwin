@@ -7,6 +7,7 @@ import { useSync } from '../../hooks/data';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { Glyph, Sim } from '../hud/glyphs';
+import { useAlertActions } from './alert-actions';
 // Mutations persist on the server before queries recover authoritative state.
 export function AlertDialog({
   alert: selectedAlert,
@@ -29,6 +30,7 @@ export function AlertDialog({
       onClose();
     },
   });
+  const { acknowledge } = useAlertActions();
   return (
     <Dialog
       open={!!selectedAlert}
@@ -60,6 +62,12 @@ export function AlertDialog({
                 Inicio: {date(alert.triggered_at)}
                 <br />
                 ID: {alert.id}
+                {alert.acknowledged_at && (
+                  <>
+                    <br />
+                    Reconocida: {date(alert.acknowledged_at)}
+                  </>
+                )}
                 {alert.resolved_at && (
                   <>
                     <br />
@@ -77,6 +85,17 @@ export function AlertDialog({
               <Button variant="outline" onClick={onClose}>
                 Cerrar
               </Button>
+              {alert.status === 'active' && !alert.acknowledged_at && (
+                <Button
+                  variant="outline"
+                  disabled={acknowledge.isPending}
+                  onClick={() =>
+                    acknowledge.mutate([alert.id], { onSuccess: () => void fresh.refetch() })
+                  }
+                >
+                  Reconocer
+                </Button>
+              )}
               {alert.status === 'active' && (
                 <Button disabled={resolve.isPending} onClick={() => resolve.mutate()}>
                   <Check size={15} aria-hidden="true" />

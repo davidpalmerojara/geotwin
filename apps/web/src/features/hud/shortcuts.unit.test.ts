@@ -15,6 +15,9 @@ describe('one-key shortcuts', () => {
     expect(shortcutFor(key('0'), on)).toBe('home');
     expect(shortcutFor(key('N'), on)).toBe('north');
     expect(shortcutFor(key('/'), on)).toBe('palette');
+    expect(shortcutFor(key('r'), on)).toBe('acknowledge');
+    expect(shortcutFor(key('R'), on)).toBe('acknowledge');
+    expect(shortcutFor(key('r', { ctrlKey: true }), on)).toBeNull();
     expect(shortcutFor(key('x'), on)).toBeNull();
   });
   it('do nothing while typing in a text field, a select or contenteditable', () => {
