@@ -60,7 +60,7 @@ export function Stage() {
   }, [lidarOn, api, lidar]);
   // Panels and sheets run from under the tool bar down to the bottom plates: the CSS gets both
   // limits as variables, kept current as plates wrap or notes appear.
-  const stage = useRef<HTMLDivElement>(null);
+  const stage = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
     const element = stage.current;
     if (!element) return;
@@ -83,7 +83,7 @@ export function Stage() {
     };
   }, []);
   return (
-    <div className="stage" ref={stage}>
+    <main className="stage" ref={stage} aria-label="Gemelo digital de Laguna de Duero">
       <Suspense fallback={<Loading label="Inicializando motor geoespacial…" />}>
         <CesiumView
           assets={assets.data ?? noAssets}
@@ -169,6 +169,6 @@ export function Stage() {
         </div>
         <Palette />
       </div>
-    </div>
+    </main>
   );
 }

@@ -26,6 +26,8 @@ export interface ReadoutInput {
   geoid: number | null;
   /** Whether the LiDAR relief is on: without it the clouds are lowered to the ellipsoid. */
   relief: boolean;
+  /** Why there is no point (the cursor is off the scene, or it points at the sky). */
+  missing?: string;
 }
 export interface Readout {
   position: Cell;
@@ -36,6 +38,7 @@ export interface Readout {
 }
 
 export const NO_CURSOR = 'mueve el cursor sobre la escena';
+export const NO_GROUND = 'el cursor no apunta al suelo';
 export const NO_RELIEF = 'activa Relieve del LiDAR';
 export const OUTSIDE = 'fuera de las hojas LiDAR';
 
@@ -71,15 +74,17 @@ export function formatSigned(m: number, digits = 1) {
   return `${sign}${number(Math.abs(rounded), digits)}${NBSP}m`;
 }
 
-export function readout({ point, ground, geoid, relief }: ReadoutInput): Readout {
-  if (!point)
+export function readout({ point, ground, geoid, relief, missing }: ReadoutInput): Readout {
+  if (!point) {
+    const why = missing ?? NO_CURSOR;
     return {
-      position: none(NO_CURSOR),
-      utm: none(NO_CURSOR),
-      cota: none(NO_CURSOR),
-      suelo: none(NO_CURSOR),
-      sobre: none(NO_CURSOR),
+      position: none(why),
+      utm: none(why),
+      cota: none(why),
+      suelo: none(why),
+      sobre: none(why),
     };
+  }
   const position = { text: formatLatLon(point.lat, point.lng) };
   const utm = { text: formatUtm(point.lng, point.lat) };
   // Without the relief globeShift lowers the clouds by about 700 m: no height would be true.

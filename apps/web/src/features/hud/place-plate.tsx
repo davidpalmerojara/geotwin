@@ -98,7 +98,9 @@ export function PlacePlate() {
                 >
                   {pageTitle[p]}
                   {p === 'alerts' && !!summary?.active_alerts && (
-                    <span className="menu-count">{summary.active_alerts}</span>
+                    <span className="menu-count num" aria-hidden="true">
+                      {summary.active_alerts}
+                    </span>
                   )}
                 </button>
               ))}

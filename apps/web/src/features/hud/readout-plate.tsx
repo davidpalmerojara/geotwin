@@ -4,7 +4,7 @@ import { useUI } from '../../stores/ui';
 import { useScene } from '../../stores/viewer';
 import { useTool } from '../../stores/tool';
 import { measuredGround } from '../layers/lidar-terrain';
-import { geoidAt, readout, NBSP, type Cell, type Readout } from './readout';
+import { geoidAt, readout, NBSP, NO_GROUND, type Cell, type Readout } from './readout';
 
 const CELLS: [keyof Readout, string][] = [
   ['position', 'Cursor'],
@@ -94,7 +94,10 @@ export function ReadoutPlate() {
       const { lidar: grid, layers: sheets, relief } = inputs.current;
       const hit = surface?.point ?? api.pickGround(at.x, at.y);
       if (!hit) {
-        write(readout({ point: null, ground: null, geoid: null, relief }), 'Cursor');
+        write(
+          readout({ point: null, ground: null, geoid: null, relief, missing: NO_GROUND }),
+          'Cursor',
+        );
         return;
       }
       const ground = grid ? measuredGround(grid, hit.lng, hit.lat) : null;

@@ -1,12 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { Kbd } from './glyphs';
-import { MARGIN } from './placement';
 
 /**
- * A panel that opens next to its button, under the tool bar, aligned with it. It never runs below
- * the bottom plates (the credits stay visible) and scrolls inside. Esc and «Cerrar» close it and
- * give the focus back to the button (Esc is handled by the HUD's shortcuts, see stage.tsx).
+ * A panel that opens under the tool bar, aligned with its left edge (where the A and C mockups
+ * dock Capas), so the camera framing can count it as covering the left of the scene. It never runs
+ * below the bottom plates (the credits stay visible) and scrolls inside. Esc and «Cerrar» close it
+ * and give the focus back to the button that opened it (Esc is handled by use-shortcuts.ts).
  */
 export function FloatingPanel({
   id,
@@ -20,7 +20,7 @@ export function FloatingPanel({
   className = '',
 }: {
   id: string;
-  /** The id of the button that opened it. */
+  /** The id of the button that opened it, which gets the focus back. */
   anchorId: string;
   label: string;
   title: ReactNode;
@@ -31,19 +31,6 @@ export function FloatingPanel({
   className?: string;
 }) {
   const panel = useRef<HTMLElement>(null);
-  useLayoutEffect(() => {
-    const place = () => {
-      const element = panel.current,
-        anchor = document.getElementById(anchorId);
-      if (!element || !anchor) return;
-      const box = anchor.getBoundingClientRect();
-      const max = window.innerWidth - MARGIN - element.offsetWidth;
-      element.style.left = `${Math.max(MARGIN, Math.min(box.left - 6, max))}px`;
-    };
-    place();
-    window.addEventListener('resize', place);
-    return () => window.removeEventListener('resize', place);
-  }, [anchorId, width]);
   // Back to the button when the panel goes away with the focus inside it (or on the page body).
   useEffect(() => {
     const element = panel.current;

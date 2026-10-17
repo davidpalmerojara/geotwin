@@ -8,6 +8,7 @@ import {
   NBSP,
   niceScale,
   NO_CURSOR,
+  NO_GROUND,
   NO_RELIEF,
   OUTSIDE,
   readout,
@@ -49,6 +50,14 @@ describe('cursor readout', () => {
     expect(flat.suelo).toEqual({ text: '—', reason: NO_RELIEF });
     const nothing = readout({ point: null, ground: null, geoid: null, relief: true });
     expect(nothing.position).toEqual({ text: '—', reason: NO_CURSOR });
+    const sky = readout({
+      point: null,
+      ground: null,
+      geoid: null,
+      relief: true,
+      missing: NO_GROUND,
+    });
+    expect(sky.cota).toEqual({ text: '—', reason: NO_GROUND });
   });
 });
 
