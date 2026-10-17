@@ -7,24 +7,21 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArcType,
   Cartesian2,
   Cartesian3,
   Color,
-  ColorMaterialProperty,
   CustomDataSource,
   Entity,
-  LabelStyle,
   PolygonHierarchy,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
-  VerticalOrigin,
   type Viewer,
 } from 'cesium';
 import { Crosshair, Ruler, Shapes, Trash2, Undo2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { formatArea, formatHeight, formatLength, measure, snapToGround } from './geodesy';
 import { renderUntil } from './render-until';
+import { dimensionFontReady, drawDimensions, measureDimensions } from './dimension-lines';
 
 type Mode = 'distance' | 'area';
 // Signal yellow: the instrument colour, used only for what measures.
@@ -119,84 +116,55 @@ export default function MeasureTool({
     return () => document.removeEventListener('keydown', onKey);
   }, [undo]);
 
-  // Draw the points, the line or polygon, and the running total.
+  // Draw the points and the measurement as dimension lines (the line, ticks, values), once the
+  // labels' mono font is in.
   useEffect(() => {
     const ds = source.current;
     if (!ds || viewer.isDestroyed()) return;
-    ds.entities.removeAll();
-    points.forEach((position, i) =>
-      ds.entities.add({
-        id: `medida:${i}`,
-        position,
-        point: {
-          pixelSize: 9,
-          color: Color.fromCssColorString('#0E0E0D'),
-          outlineColor: accent,
-          outlineWidth: 2,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        },
-      }),
-    );
-    const shapes: Entity[] = [];
-    if (points.length > 1) {
-      const line = mode === 'area' && points.length > 2 ? [...points, points[0]!] : points;
-      shapes.push(
+    let live = true;
+    const draw = () => {
+      if (!live || viewer.isDestroyed()) return;
+      ds.entities.removeAll();
+      points.forEach((position, i) =>
         ds.entities.add({
-          polyline: {
-            positions: line,
-            width: 2.5,
-            arcType: ArcType.NONE,
-            material: accent,
-            depthFailMaterial: new ColorMaterialProperty(accent.withAlpha(0.45)),
+          id: `medida:${i}`,
+          position,
+          point: {
+            pixelSize: 9,
+            color: Color.fromCssColorString('#0E0E0D'),
+            outlineColor: accent,
+            outlineWidth: 2,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
           },
         }),
       );
-    }
-    if (mode === 'area' && points.length > 2)
-      shapes.push(
-        ds.entities.add({
-          polygon: {
-            hierarchy: new PolygonHierarchy(points),
-            perPositionHeight: true,
-            material: accent.withAlpha(0.18),
-          },
-        }),
-      );
-    const last = points.at(-1);
-    const text =
-      mode === 'area'
-        ? points.length > 2
-          ? formatArea(result.area)
-          : ''
-        : points.length > 1
-          ? formatLength(result.distance3d)
-          : '';
-    if (last && text)
-      ds.entities.add({
-        position: last,
-        label: {
-          text,
-          font: '500 13px "IBM Plex Mono", monospace',
-          fillColor: Color.fromCssColorString('#191500'),
-          style: LabelStyle.FILL,
-          showBackground: true,
-          backgroundColor: accent,
-          verticalOrigin: VerticalOrigin.BOTTOM,
-          pixelOffset: new Cartesian2(0, -14),
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        },
-      });
-    viewer.scene.requestRender();
-    // Lines and polygons are built asynchronously and, in request-render mode, Cesium does not
-    // ask for a frame when they are done: keep drawing until they are, so they never go missing.
-    stopRendering.current?.();
-    stopRendering.current = shapes.length
-      ? renderUntil(
-          () => !viewer.isDestroyed() && viewer.scene.requestRender(),
-          () => viewer.isDestroyed() || viewer.dataSourceDisplay.ready,
-        )
-      : undefined;
-  }, [points, mode, result, viewer]);
+      const shapes: Entity[] = drawDimensions(ds, measureDimensions(points, mode), 'cota');
+      if (mode === 'area' && points.length > 2)
+        shapes.push(
+          ds.entities.add({
+            polygon: {
+              hierarchy: new PolygonHierarchy(points),
+              perPositionHeight: true,
+              material: accent.withAlpha(0.14),
+            },
+          }),
+        );
+      viewer.scene.requestRender();
+      // Lines and polygons are built asynchronously and, in request-render mode, Cesium does not
+      // ask for a frame when they are done: keep drawing until they are, so they never go missing.
+      stopRendering.current?.();
+      stopRendering.current = shapes.length
+        ? renderUntil(
+            () => !viewer.isDestroyed() && viewer.scene.requestRender(),
+            () => viewer.isDestroyed() || viewer.dataSourceDisplay.ready,
+          )
+        : undefined;
+    };
+    void dimensionFontReady().then(draw);
+    return () => {
+      live = false;
+    };
+  }, [points, mode, viewer]);
 
   const switchMode = (next: Mode) => {
     setMode(next);
