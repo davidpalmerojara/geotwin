@@ -154,6 +154,21 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   await expect(results.locator('div', { hasText: 'Desnivel' }).locator('dd')).toHaveText(
     /^[+−±]\d/,
   );
+  // The measurement is drawn on the scene as a dimension line: the yellow line and a label with
+  // the same length as the panel (one segment: its length is the total).
+  const dimension = async () =>
+    page.evaluate(() => {
+      type E = { id: string; polyline?: unknown; label?: { text: { getValue(): string } } };
+      type V = { dataSources: { getByName(name: string): { entities: { values: E[] } }[] } };
+      const v = (window as Window & { __geotwinViewer?: V }).__geotwinViewer!;
+      const entities = v.dataSources.getByName('medicion')[0]?.entities.values ?? [];
+      return {
+        line: entities.some((e) => e.id === 'cota:linea:0' && !!e.polyline),
+        label: entities.find((e) => e.id === 'cota:etiqueta:0:0')?.label?.text.getValue() ?? '',
+      };
+    });
+  await expect.poll(async () => (await dimension()).line).toBe(true);
+  await expect.poll(async () => (await dimension()).label).toBe(await distance.textContent());
   // With the LiDAR relief on, the points can be moved onto the ground model (not a car roof).
   const snap = page.getByRole('checkbox', { name: 'Al suelo (MDT)' });
   await snap.check();
