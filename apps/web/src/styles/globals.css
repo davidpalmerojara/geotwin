@@ -409,6 +409,205 @@ textarea {
   color: var(--fg-1);
   font-size: 11.5px;
 }
+/* ---------- the assets in the scene: marks, stems, tags with their values (B3) ---------- */
+.scene-tags {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.scene-tags-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.tag-stem {
+  stroke: var(--fg-0);
+  stroke-width: 1.5;
+  opacity: 0.85;
+}
+.tag-leader {
+  stroke: var(--fg-1);
+  stroke-width: 1;
+}
+.tag-warning .tag-leader,
+.tag-warning .tag-stem {
+  stroke: var(--warn);
+}
+.tag-critical .tag-leader,
+.tag-critical .tag-stem {
+  stroke: var(--alarm);
+}
+/* The mark: a ring with a dot (operativo), an amber triangle, a red diamond; hollow when hidden. */
+.scene-mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.scene-mark i {
+  position: absolute;
+  left: -7px;
+  top: -7px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--fg-0);
+  border-radius: 50%;
+  background: var(--ink-0);
+  box-shadow: 0 0 0 1.5px var(--ink-0);
+}
+.scene-mark i::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--fg-0);
+}
+.mark-warning i {
+  left: -8px;
+  top: -9px;
+  width: 16px;
+  height: 14px;
+  border: 0;
+  border-radius: 0;
+  background: var(--warn);
+  box-shadow: none;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.mark-critical i {
+  left: -7px;
+  top: -7px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--ink-0);
+  border-radius: 1px;
+  background: var(--alarm);
+  box-shadow: none;
+  transform: rotate(45deg);
+}
+.mark-warning i::after,
+.mark-critical i::after {
+  display: none;
+}
+.scene-mark.occluded i {
+  background: transparent;
+  box-shadow: none;
+}
+.scene-mark.occluded i::after {
+  display: none;
+}
+.mark-warning.occluded i {
+  background: var(--warn);
+  opacity: 0.5;
+}
+.mark-critical.occluded i {
+  background: transparent;
+  border-color: var(--alarm);
+}
+/* The selected asset: the signal-yellow brackets of the instrument around its mark. */
+.scene-mark[data-selected]::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: -14px;
+  width: 28px;
+  height: 28px;
+  background:
+    linear-gradient(var(--sig), var(--sig)) left top / 7px 2px no-repeat,
+    linear-gradient(var(--sig), var(--sig)) left top / 2px 7px no-repeat,
+    linear-gradient(var(--sig), var(--sig)) right top / 7px 2px no-repeat,
+    linear-gradient(var(--sig), var(--sig)) right top / 2px 7px no-repeat,
+    linear-gradient(var(--sig), var(--sig)) left bottom / 7px 2px no-repeat,
+    linear-gradient(var(--sig), var(--sig)) left bottom / 2px 7px no-repeat,
+    linear-gradient(var(--sig), var(--sig)) right bottom / 7px 2px no-repeat,
+    linear-gradient(var(--sig), var(--sig)) right bottom / 2px 7px no-repeat;
+}
+/* The tag: a solid plate with a dashed outline, the «dato simulado» convention of the legend. */
+.scene-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px dashed var(--fg-1);
+  border-radius: 2px;
+  background: var(--ink-0);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+  color: var(--fg-0);
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.scene-tag .tag-name {
+  font-weight: 600;
+}
+.scene-tag .tag-value {
+  font: 500 12px/1 var(--mono);
+}
+.scene-tag .tag-word {
+  font-size: 12px;
+}
+.scene-tag.tag-warning,
+.scene-tag.tag-critical {
+  height: 26px;
+}
+.scene-tag.tag-warning {
+  border-color: var(--warn);
+}
+.scene-tag.tag-warning .tag-value,
+.scene-tag.tag-warning .tag-word {
+  color: var(--warn);
+}
+.scene-tag.tag-critical {
+  border-color: var(--alarm);
+  background: var(--alarm-bg);
+}
+.scene-tag.tag-critical .tag-value,
+.scene-tag.tag-critical .tag-word {
+  color: var(--alarm);
+}
+.scene-tag[data-selected] {
+  border-style: solid;
+  border-color: var(--sig);
+}
+.scene-tag[data-lod='value'] .tag-name,
+.scene-tag[data-lod='value'] .tag-word {
+  display: none;
+}
+.scene-tag.tag-healthy[data-lod='full'] .tag-name {
+  font-weight: 500;
+}
+.scene-tag.occluded {
+  opacity: 0.55;
+  box-shadow: none;
+}
+/* Measured off screen once per change, at both levels of detail. */
+.scene-tag[data-measure] {
+  display: flex !important;
+  visibility: hidden;
+}
+.scene-tag[data-measure='full'] .tag-name,
+.scene-tag[data-measure='full'] .tag-word {
+  display: inline;
+}
+.scene-tag[data-measure='value'] .tag-name,
+.scene-tag[data-measure='value'] .tag-word {
+  display: none;
+}
 .hud {
   position: absolute;
   inset: 0;
@@ -1688,6 +1887,14 @@ progress::-moz-progress-bar {
 .incident .row {
   margin-top: 6px;
 }
+.incident-acts {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.incident-ack {
+  color: var(--fg-1);
+  font-size: 11.5px;
+}
 .quiet {
   color: var(--fg-1);
 }
@@ -2713,4 +2920,29 @@ table.data {
   .bottom-sheet {
     transition: none;
   }
+}
+
+/* Capas › Leyenda: the scene's tag and beam. */
+.legend-tag {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px dashed var(--fg-1);
+  border-radius: 2px;
+  background: var(--ink-0);
+  font-size: 11px;
+  line-height: 16px;
+}
+.legend-beam {
+  display: inline-block;
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: linear-gradient(var(--alarm), rgba(255, 90, 76, 0.2));
+  box-shadow: 0 0 4px var(--alarm);
+}
+.scene-list-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
 }

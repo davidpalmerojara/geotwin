@@ -49,12 +49,13 @@ export function RadiusPanel() {
   });
   // The asset at the centre is not one of its own neighbours.
   const found = nearby.data?.filter((a) => a.id !== selectedAsset?.id);
-  const foundCount = found?.length;
+  const foundIds = found?.map((a) => a.id).join(',');
   useEffect(() => {
+    const ids = foundIds ? foundIds.split(',') : [];
     setRadius(
-      query && foundCount !== undefined ? { metres: query.radius, count: foundCount } : null,
+      query && foundIds !== undefined ? { metres: query.radius, count: ids.length, ids } : null,
     );
-  }, [query, foundCount, setRadius]);
+  }, [query, foundIds, setRadius]);
   useEffect(() => () => setRadius(null), [setRadius]);
   return (
     <div className="radius-panel">

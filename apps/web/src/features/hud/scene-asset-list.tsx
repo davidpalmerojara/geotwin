@@ -4,13 +4,15 @@ import { useAssets } from '../../hooks/data';
 import { useUI } from '../../stores/ui';
 import { useScene } from '../../stores/viewer';
 import { assetTypeLabel } from '../../lib/format';
-import { StatusWord } from './glyphs';
+import { Sim, StatusWord } from './glyphs';
+import { useTagInfos } from '../scene/tag-data';
 import { screenOrder } from './scene-order';
 
 /**
  * The assets drawn in the scene, as a list of buttons in screen order (top to bottom, then left
  * to right), so a keyboard or screen reader user reaches the same things a pointer user sees.
- * The list is hidden until it gets the focus (Tab after the tool bar); Intro selects the asset.
+ * The list is hidden until it gets the focus (Tab after the tool bar); Intro selects the asset. Each
+ * entry mirrors the asset's tag in the scene: its state and the value of its worst sensor.
  */
 export function SceneAssetList() {
   const api = useScene((s) => s.api),
@@ -19,6 +21,8 @@ export function SceneAssetList() {
   const selected = useUI((s) => s.selectedAssetId),
     select = useUI((s) => s.selectAsset);
   const [shown, setShown] = useState<Asset[]>([]);
+  // The same value the asset's tag shows in the scene.
+  const tags = new Map(useTagInfos(assets).map((t) => [t.id, t]));
   useEffect(() => {
     if (!api || !assets) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -65,6 +69,9 @@ export function SceneAssetList() {
                 <span className="scene-list-name">{asset.name}</span>
                 <span className="f1">{assetTypeLabel[asset.type]}</span>
                 <StatusWord status={asset.status} />
+                <span className="scene-list-value">
+                  <span className="num">{tags.get(asset.id)?.value ?? '—'}</span> <Sim />
+                </span>
               </button>
             </li>
           ))}

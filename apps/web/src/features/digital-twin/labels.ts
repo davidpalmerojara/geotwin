@@ -17,7 +17,7 @@ export type LabelOffset = { x: number; y: number } | null;
 export const LABEL_OFFSETS = [50, -34, 78];
 const GAP = 4;
 
-const overlaps = (a: ScreenBox, b: ScreenBox) =>
+export const overlaps = (a: ScreenBox, b: ScreenBox) =>
   a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
 /**

@@ -522,6 +522,14 @@ export function LayersPanel() {
             <li>
               <span className="sim">simulado</span> dato simulado
             </li>
+            <li>
+              <span className="legend-tag num">41,2 °C</span> borde discontinuo: lectura simulada en
+              la escena
+            </li>
+            <li>
+              <span className="legend-beam" aria-hidden="true" /> haz: alerta activa; con anillos,
+              aún sin reconocer
+            </li>
           </ul>
           <p className="layer-hint">
             Instalaciones ficticias en coordenadas reales. WGS 84 · SRID 4326.

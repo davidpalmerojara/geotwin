@@ -4,7 +4,6 @@ import {
   Cartesian3,
   Cartesian2,
   Color,
-  ColorMaterialProperty,
   Viewer,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
@@ -12,7 +11,6 @@ import {
   Entity,
   ConstantProperty,
   ConstantPositionProperty,
-  DistanceDisplayCondition,
   ImageryLayer,
   TileMapServiceImageryProvider,
   buildModuleUrl,
@@ -60,6 +58,7 @@ import {
 } from './overlays';
 import { placeLabels, type LabelAnchor, type LabelOffset } from './labels';
 import { createSceneApi } from './scene-api';
+import AssetTags from '../scene/asset-tags';
 import { useLayers } from '../../hooks/data';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
 import { renderUntil } from '../measure/render-until';
@@ -78,7 +77,6 @@ type DevWindow = Window & {
   __geotwinLabels?: { boxes: ScreenBox[]; blocked: ScreenBox[] };
 };
 const INSTALLATION_FONT = '500 12px "IBM Plex Sans Condensed", sans-serif';
-const ASSET_FONT = '500 13px "IBM Plex Sans Condensed", sans-serif';
 // Cesium's default label background padding is 7 x 5 px.
 const LABEL_PAD_X = 7,
   LABEL_HEIGHT = 26;
@@ -97,10 +95,6 @@ const groundOf =
 // Status colours of the «Estación total» palette: operational in light grey, amber for a
 // warning, red for a critical asset (the HUD adds the shape and the word).
 const colors = { healthy: '#EEECE6', warning: '#FF9F1A', critical: '#FF5A4C' };
-// A ground asset gets a tall marker volume; one on a roof or tower top, a small one on top of it.
-// Without relief there is no roof to stand on: every asset is drawn on the globe.
-const assetBox = (a: Asset, relief: boolean) =>
-  relief && a.mount_height_m > 0 ? new Cartesian3(6, 6, 4) : new Cartesian3(9, 9, 14);
 const FRAME_PITCH = CesiumMath.toRadians(-55);
 // Oblique view that fits every point in the part of the scene that the HUD's plates leave
 // visible, on every edge.
@@ -358,7 +352,6 @@ export default function CesiumView({
     const reference = photorealOn
       ? HeightReference.RELATIVE_TO_3D_TILE
       : HeightReference.RELATIVE_TO_TERRAIN;
-    const surface = relief || photorealOn;
     for (const a of assets) {
       const id = `asset:${a.id}`;
       const mount = relief && !photorealOn ? a.mount_height_m : 0;
@@ -370,56 +363,26 @@ export default function CesiumView({
         existing.position = new ConstantPositionProperty(
           Cartesian3.fromDegrees(a.location.lng, a.location.lat, mount),
         );
-        if (existing.box) {
-          existing.box.dimensions = new ConstantProperty(assetBox(a, surface));
-          existing.box.heightReference = new ConstantProperty(reference);
-        }
         if (existing.point) {
           existing.point.color = new ConstantProperty(color);
           existing.point.heightReference = new ConstantProperty(reference);
-        }
-        if (existing.box) {
-          existing.box.material = new ColorMaterialProperty(color.withAlpha(0.55));
-          existing.box.outlineColor = new ConstantProperty(color);
-        }
-        if (existing.label) {
-          existing.label.text = new ConstantProperty(a.name);
-          existing.label.show = new ConstantProperty(selectedId === a.id);
-          existing.label.heightReference = new ConstantProperty(reference);
         }
       } else
         v.entities.add({
           id,
           name: a.name,
-          // Height above the terrain: 0 on the ground, the roof for a rooftop gateway.
+          // Height above the terrain: 0 on the ground, the roof for a rooftop gateway. The point
+          // records where the asset stands; it is drawn by the scene's marks and tags (DOM, see
+          // features/scene/asset-tags.tsx), so the point itself stays hidden.
           position: Cartesian3.fromDegrees(a.location.lng, a.location.lat, mount),
           point: {
+            show: false,
             heightReference: reference,
             pixelSize: 13,
             color,
             outlineColor: Color.fromCssColorString('#0E0E0D'),
             outlineWidth: 2,
             disableDepthTestDistance: Infinity,
-          },
-          // Demo volume standing on the ground or on the mounting point (bottom at the position).
-          box: {
-            heightReference: reference,
-            dimensions: assetBox(a, surface),
-            material: color.withAlpha(0.55),
-            outline: true,
-            outlineColor: color,
-          },
-          label: {
-            heightReference: reference,
-            text: a.name,
-            font: ASSET_FONT,
-            show: selectedId === a.id,
-            fillColor: Color.fromCssColorString('#EEECE6'),
-            showBackground: true,
-            backgroundColor: Color.fromCssColorString('#0E0E0D'),
-            pixelOffset: new Cartesian2(0, -28),
-            disableDepthTestDistance: Infinity,
-            distanceDisplayCondition: new DistanceDisplayCondition(0, 100000),
           },
         });
     }
@@ -461,7 +424,8 @@ export default function CesiumView({
     }
     for (const entity of [...v.entities.values]) if (!ids.has(entity.id)) v.entities.remove(entity);
     v.scene.requestRender();
-  }, [assets, installations, selectedId, ready, relief, photorealOn]);
+  }, [assets, installations, ready, relief, photorealOn]);
+  const labelBoxes = useRef<ScreenBox[]>([]);
   // Installation labels: placed after every render so they neither overlap each other nor hide
   // under the plates of the HUD.
   useEffect(() => {
@@ -541,17 +505,16 @@ export default function CesiumView({
           changed = true;
         }
       }
-      if (import.meta.env.DEV)
-        (window as DevWindow).__geotwinLabels = {
-          blocked,
-          boxes: anchors.flatMap((a) => {
-            const o = placement.get(a.id);
-            if (!o) return [];
-            const left = a.x + o.x - a.width / 2,
-              top = a.y + o.y - a.height / 2;
-            return [{ left, right: left + a.width, top, bottom: top + a.height }];
-          }),
-        };
+      const boxes = anchors.flatMap((a) => {
+        const o = placement.get(a.id);
+        if (!o) return [];
+        const left = a.x + o.x - a.width / 2,
+          top = a.y + o.y - a.height / 2;
+        return [{ left, right: left + a.width, top, bottom: top + a.height }];
+      });
+      // The asset tags keep clear of these labels.
+      labelBoxes.current = boxes;
+      if (import.meta.env.DEV) (window as DevWindow).__geotwinLabels = { blocked, boxes };
       if (changed) v.scene.requestRender();
     };
     const remove = v.scene.postRender.addEventListener(place);
@@ -891,6 +854,18 @@ export default function CesiumView({
         aria-label="Escena 3D. Flechas para desplazarse; + y - para acercar o alejar."
         onKeyDown={onMapKey}
       />
+      {ready && viewer.current && (
+        <AssetTags
+          viewer={viewer.current}
+          assets={assets}
+          selectedId={selectedId}
+          relief={relief && !photorealOn}
+          photoreal={photorealOn}
+          ground={ground}
+          labelBoxes={labelBoxes}
+          onSelect={onSelect}
+        />
+      )}
       <div ref={tooltip} className="scene-tooltip" style={{ display: 'none' }} aria-hidden="true">
         <span />
         <small>Haz clic para ver su ficha</small>

@@ -16,19 +16,25 @@ export const PENDING_TOOLS: Partial<Record<Tool, string>> = {
 };
 const PANEL_OF: Partial<Record<Tool, Panel>> = { measure: 'measure', radius: 'radius' };
 
+export interface RadiusResult {
+  metres: number;
+  count: number;
+  /** The assets found (their tags go before the other operational ones). */
+  ids: string[];
+}
 interface ToolState {
   tool: Tool;
   panel: Panel | null;
   /** Whether the «Ir a» palette is open. */
   palette: boolean;
-  /** The last «Radio» query (ST_DWithin), for the readout. */
-  radius: { metres: number; count: number } | null;
+  /** The last «Radio» query (ST_DWithin), for the readout and the tags in the scene. */
+  radius: RadiusResult | null;
   setTool: (tool: Tool) => void;
   /** Opens a panel (closing any sheet), or closes it when it is already open. */
   togglePanel: (panel: Panel) => void;
   closePanel: () => void;
   setPalette: (open: boolean) => void;
-  setRadius: (radius: { metres: number; count: number } | null) => void;
+  setRadius: (radius: RadiusResult | null) => void;
 }
 
 const closeSheet = () => {
