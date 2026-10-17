@@ -28,6 +28,27 @@ async function screen(page: Page, p: { lng: number; lat: number }) {
   expect(at, `${p.lng}, ${p.lat} is in front of the camera`).not.toBeNull();
   return [at!.x, at!.y] as [number, number];
 }
+/**
+ * The page position of a ground point once the globe can be picked there: A and B are picked on
+ * the rendered terrain (globe.pick), and right after the camera jumps the terrain tiles under the
+ * new view may not be drawn yet on a slow renderer, so a click would land on nothing.
+ */
+async function pickable(page: Page, p: { lng: number; lat: number }) {
+  const at = await screen(page, p);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(([x, y]) => {
+          const v = (window as unknown as { __geotwinViewer: V }).__geotwinViewer;
+          v.scene.requestRender();
+          const ray = v.camera.getPickRay({ x, y } as never);
+          return !!ray && !!v.scene.globe.pick(ray, v.scene);
+        }, at),
+      { timeout: 30000 },
+    )
+    .toBe(true);
+  return at;
+}
 /** Waits until the camera has not moved for 1,5 s (the app's own first flights are over). */
 async function stillCamera(page: Page) {
   let last: number[] = [],
@@ -140,9 +161,9 @@ test('Perfil A–B, Corte and Radio on a synthetic layer', async ({ page, reques
     await expect(page.getByTestId('profile-hint')).toContainText('poner A');
     // The scene side of the tool loads on demand: picking is on once the viewer says so.
     await expect(map).toHaveAttribute('data-profile', 'on', { timeout: 30000 });
-    await page.mouse.click(...(await screen(page, A)));
+    await page.mouse.click(...(await pickable(page, A)));
     await expect(page.getByTestId('profile-hint')).toContainText('Ahora pon B');
-    await page.mouse.click(...(await screen(page, B)));
+    await page.mouse.click(...(await pickable(page, B)));
     const drawer = page.getByTestId('profile-drawer');
     await expect(drawer.getByRole('heading', { name: 'Perfil A–B' })).toBeVisible();
     // The same points the API gives for that line (the clicks land within a metre or two).
