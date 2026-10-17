@@ -192,7 +192,7 @@ export function coveredEdges(canvas: ScreenBox, overlays: ScreenBox[]): Edges {
       edges.right = Math.max(edges.right, canvas.right - box.left);
   }
   // Wide plates stacked on a covered top or bottom strip extend it, one layer at a time.
-  for (let grown = true; grown; ) {
+  for (let grown = true; grown;) {
     grown = false;
     for (const raw of overlays) {
       const left = Math.max(raw.left, canvas.left),

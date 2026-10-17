@@ -34,6 +34,13 @@ export const useAlerts = (asset_id?: string, status?: string) => {
     placeholderData: keepPreviousData,
   });
 };
+/** Alerts across the whole network, whatever installation is chosen (the annunciator's). */
+export const useNetworkAlerts = (status?: string) =>
+  useQuery({
+    queryKey: ['geo', 'alerts', 'network', status],
+    queryFn: () => api.alerts({ status }),
+    placeholderData: keepPreviousData,
+  });
 export function useSync() {
   const client = useQueryClient();
   return () => client.invalidateQueries({ queryKey: ['geo'] });

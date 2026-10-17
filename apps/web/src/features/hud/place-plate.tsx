@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { Alert } from '@geotwin/shared';
-import { useAlerts, useInstallations, useOrganization, useSummary } from '../../hooks/data';
+import { useInstallations, useNetworkAlerts, useOrganization, useSummary } from '../../hooks/data';
 import { useUI } from '../../stores/ui';
 import { useTool } from '../../stores/tool';
 import { useScene } from '../../stores/viewer';
@@ -59,13 +59,14 @@ function InstallationSelect() {
 /**
  * Top-left plate: the GeoTwin menu, the workspace with its «demo» tag, the installation selector
  * and the annunciator (asset counts, which open Activos, and the active alarm, which opens
- * Alertas).
+ * Alertas). The alarm is the network's, whatever installation is chosen: an operator looking at
+ * one installation still hears about another.
  */
 export function PlacePlate() {
   const setPage = useUI((s) => s.setPage);
   const summary = useSummary().data,
     region = useOrganization().data?.region,
-    alarm = activeAlarm(useAlerts(undefined, 'active').data);
+    alarm = activeAlarm(useNetworkAlerts('active').data);
   const [menu, setMenu] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const workspace = region?.split(' (')[0] ?? '—';
@@ -167,7 +168,7 @@ export function PhonePlate() {
   const { installationId, installations } = useInstallationChoice();
   const summary = useSummary().data,
     region = useOrganization().data?.region,
-    alarm = activeAlarm(useAlerts(undefined, 'active').data);
+    alarm = activeAlarm(useNetworkAlerts('active').data);
   const setPalette = useTool((s) => s.setPalette);
   const api = useScene((s) => s.api);
   const [menu, setMenu] = useState(false);

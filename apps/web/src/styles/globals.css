@@ -2585,6 +2585,10 @@ table.data {
 .hud-phone .hud-error {
   top: 140px;
 }
+/* With a sheet open the scene left above it is small: no edge chips crowding it. */
+.hud-phone .bottom-sheet ~ .edge-chips {
+  display: none;
+}
 /* A modal sheet (90 %) covers the scene: the plates behind it step aside, the credits stay. */
 .hud-phone[data-modal] .phone-top,
 .hud-phone[data-modal] .notes-stack,
