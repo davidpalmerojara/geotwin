@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { basename } from 'node:path';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
@@ -11,6 +12,9 @@ import {
   layerTileParams,
   layerUploadQuery,
   REALTIME_CHANNEL,
+  SECTION_LIMITS,
+  sectionQuery,
+  sectionSchema,
   type LayerNotification,
 } from '@geotwin/shared';
 import { contentTypeFor, isSafeKey, type Storage } from '@geotwin/storage';
@@ -19,6 +23,7 @@ import { AppError, notFound } from '../errors.js';
 import { LasFormatError, LasUploadInspector } from './las.js';
 import { LayerRepository } from './repository.js';
 import type { LayerQueue } from './queue.js';
+import { computeSection, SectionCache, slabBounds, slabFromQuery } from './section.js';
 
 export const PNOA_ATTRIBUTION = 'Obra derivada de LiDAR-PNOA-cob3 2022-2025 CC-BY 4.0 scne.es';
 const errors = {
@@ -57,11 +62,19 @@ function etagMatches(header: string | undefined, etag: string) {
 
 export function registerLayerRoutes(
   app: FastifyInstance,
-  deps: { db: Database; storage: Storage; queue: LayerQueue; maxUploadBytes: number },
+  deps: {
+    db: Database;
+    storage: Storage;
+    queue: LayerQueue;
+    maxUploadBytes: number;
+    sectionMaxPoints?: number;
+  },
 ) {
   const api = app.withTypeProvider<ZodTypeProvider>();
   const repo = new LayerRepository(deps.db);
   const { storage, queue, maxUploadBytes } = deps;
+  const sectionMaxPoints = deps.sectionMaxPoints ?? SECTION_LIMITS.maxPoints;
+  const sections = new SectionCache();
 
   api.get(
     '/api/layers',
@@ -268,6 +281,84 @@ export function registerLayerRoutes(
       if (removed.job_id) await queue.cancel(removed.job_id);
       await storage.deletePrefix(`layers/${req.params.id}/`);
       return reply.code(204).send(null);
+    },
+  );
+
+  api.get(
+    '/api/layers/:id/section',
+    {
+      schema: {
+        tags: ['Layers'],
+        description:
+          'Vertical section along A–B: every tiled point of a ready layer whose footprint lies ' +
+          'within `half` metres of the segment (at every level of detail, so the result does not ' +
+          'depend on the view). `a` and `b` are `lon,lat` in degrees; A–B up to 2 km, `half` ' +
+          '0.25–5 m (default 1.5). Columns sorted by `s`: distance from A, signed distance from ' +
+          'the line (left of A→B positive) and ellipsoidal height in metres (1 cm), ASPRS class ' +
+          'and 0xRRGGBB colour. Orthometric height is h − geoid_offset_m. More than 400,000 ' +
+          'points answers 413. Gzip when accepted; ETag and If-None-Match.',
+        params: idParams,
+        querystring: sectionQuery,
+        response: { 200: sectionSchema, 304: z.null(), ...errors },
+      },
+    },
+    async (req, reply) => {
+      const slab = slabFromQuery(req.query);
+      const layer = (await repo.get(req.params.id)) ?? notFound('Capa', 'f');
+      const stored = await repo.tilesetKey(layer.id);
+      if (layer.status !== 'ready' || !stored?.tileset_root_key)
+        throw new AppError(
+          409,
+          'LAYER_NOT_READY',
+          `La capa «${layer.name}» todavía no está lista (estado: ${layer.status}).`,
+        );
+      const tilesetKey = stored.tileset_root_key;
+      const key = [
+        layer.id,
+        tilesetKey,
+        slab.a.map((v) => v.toFixed(8)).join(','),
+        slab.b.map((v) => v.toFixed(8)).join(','),
+        slab.half,
+        sectionMaxPoints,
+      ].join('|');
+      const entry = await sections.get(key, async () => {
+        const [west, south, east, north] = slabBounds(slab);
+        const box = layer.bbox;
+        const misses = box && (box[2] < west || box[0] > east || box[3] < south || box[1] > north);
+        const columns = misses
+          ? { s: [], d: [], h: [], cls: [], rgb: [] }
+          : await computeSection(storage, tilesetKey, slab, sectionMaxPoints);
+        return {
+          layer_id: layer.id,
+          a: slab.a,
+          b: slab.b,
+          half_m: slab.half,
+          length_m: Math.round(slab.length * 100) / 100,
+          bearing_deg: Math.round(slab.bearing * 10) / 10,
+          geoid_offset_m: layer.vertical.geoid_offset_m,
+          count: columns.s.length,
+          s: columns.s,
+          d: columns.d,
+          h: columns.h,
+          cls: columns.cls,
+          rgb: columns.rgb,
+        };
+      });
+      reply
+        .header('ETag', entry.etag)
+        .header('Cache-Control', 'no-cache')
+        .header('Vary', 'Accept-Encoding');
+      if (etagMatches(req.headers['if-none-match'], entry.etag)) return reply.code(304).send(null);
+      reply.header('Content-Type', 'application/json; charset=utf-8');
+      if (
+        /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? '')) &&
+        entry.json.length > 1024
+      ) {
+        entry.gz ??= gzipSync(entry.json, { level: 6 });
+        // Already serialised when it was built: sent as bytes, past the response serializer.
+        return reply.header('Content-Encoding', 'gzip').send(entry.gz as never);
+      }
+      return reply.send(entry.json as never);
     },
   );
 

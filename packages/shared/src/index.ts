@@ -219,6 +219,49 @@ export const dtmMetaSchema = z.object({
   data: z.string().regex(/^[\w.-]+$/),
 });
 export const layerTileParams = z.object({ id: uuid, '*': z.string().min(1).max(512) });
+// Vertical section of a layer along A–B (`GET /api/layers/:id/section`): every tiled point whose
+// footprint lies within `half` metres of the segment. Points come from all tiles at every level
+// (py3dtiles refines by adding points), so the result does not depend on the view.
+export const SECTION_LIMITS = {
+  maxLengthM: 2000,
+  minHalfM: 0.25,
+  maxHalfM: 5,
+  defaultHalfM: 1.5,
+  maxPoints: 400_000,
+} as const;
+const lonLatText = z
+  .string()
+  .max(64)
+  .regex(/^\s*-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,2}(\.\d+)?\s*$/, 'Usa el formato lon,lat en grados');
+export const sectionQuery = z.object({
+  a: lonLatText,
+  b: lonLatText,
+  half: z.coerce
+    .number()
+    .min(SECTION_LIMITS.minHalfM)
+    .max(SECTION_LIMITS.maxHalfM)
+    .default(SECTION_LIMITS.defaultHalfM),
+});
+export const sectionSchema = z.object({
+  layer_id: uuid,
+  a: z.tuple([z.number(), z.number()]),
+  b: z.tuple([z.number(), z.number()]),
+  half_m: z.number(),
+  length_m: z.number(),
+  // Bearing of A→B from north, clockwise, in degrees [0, 360).
+  bearing_deg: z.number(),
+  // N of the layer (ellipsoidal minus orthometric); null for ellipsoidal sources.
+  geoid_offset_m: z.number().nullable(),
+  count: z.number().int().nonnegative(),
+  // Columns, one entry per point, sorted by s: distance from A along A–B, signed distance from the
+  // line (positive to the left of A→B) and ellipsoidal height, all in metres rounded to 1 cm;
+  // ASPRS class; colour as 0xRRGGBB.
+  s: z.array(z.number()),
+  d: z.array(z.number()),
+  h: z.array(z.number()),
+  cls: z.array(z.number().int()),
+  rgb: z.array(z.number().int()),
+});
 // Queue contract shared by the API (producer) and the worker (consumer).
 export const LAYER_QUEUE = 'layer-process';
 export const layerJobSchema = z.object({ layer_id: uuid });
@@ -273,3 +316,4 @@ export type LayerStage = z.infer<typeof layerStage>;
 export type GeoidMethod = z.infer<typeof geoidMethod>;
 export type LayerJob = z.infer<typeof layerJobSchema>;
 export type LayerNotification = z.infer<typeof layerNotificationSchema>;
+export type Section = z.infer<typeof sectionSchema>;

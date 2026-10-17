@@ -14,6 +14,7 @@ import {
   LAYER_QUEUE,
   layerSchema,
   realtimeEventSchema,
+  sectionSchema,
   type RealtimeEvent,
 } from '@geotwin/shared';
 import { createPool } from '../../api/src/db/pool.js';
@@ -45,6 +46,8 @@ const hasGrid =
 const fixtures = new URL('./fixtures/', import.meta.url);
 const laz = readFileSync(new URL('synthetic-laguna-duero.laz', fixtures));
 const las = readFileSync(new URL('synthetic-laguna-duero.las', fixtures));
+const lazPath = new URL('synthetic-laguna-duero.laz', fixtures).pathname;
+const referenceScript = new URL('./section_reference.py', import.meta.url).pathname;
 const SYNTHETIC = 'Nube SINTÉTICA de prueba generada por GeoTwin (no son datos medidos)';
 const MAX_UPLOAD = 150_000; // the 56 KB LAZ fits; the 202 KB LAS does not
 
@@ -229,6 +232,147 @@ describe.skipIf(!pythonReady)('LiDAR pipeline: upload → queue → worker → 3
     expect(meta.offset + centre * meta.scale).toBeGreaterThan(698.6 + n);
     expect(meta.offset + centre * meta.scale).toBeLessThan(701.4 + n);
     expect(meta.ground_points).toBe(2953);
+  }, 90000);
+
+  it('cuts a section with exactly the source points of the slab (independent laspy reference)', async () => {
+    const { created } = await uploadAndWait(laz, 'seccion.laz');
+    const layer = layerSchema.parse(await (await fetch(`${base}/api/layers/${created.id}`)).json());
+    const n = layer.vertical.geoid_offset_m!;
+    // A–B crosses both synthetic buildings and starts and ends outside the 120 m patch, so only
+    // the long borders of the slab cut through points. The reference reads the SOURCE LAZ with
+    // laspy and pyproj (not the tiles), without the excluded classes.
+    const run = spawnSync(
+      python,
+      [
+        '-I',
+        referenceScript,
+        lazPath,
+        '--a=356795,4604865',
+        '--b=356630,4604975',
+        '--half=1.5',
+        '--exclude=7,12,18',
+        `--geoid-n=${n}`,
+      ],
+      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+    );
+    expect(run.status, run.stderr).toBe(0);
+    const ref = JSON.parse(run.stdout) as {
+      a: [number, number];
+      b: [number, number];
+      length: number;
+      count: number;
+      border: number;
+      s: number[];
+      d: number[];
+      h: number[];
+      cls: number[];
+    };
+    expect(ref.count).toBeGreaterThan(300);
+    const response = await fetch(
+      `${base}/api/layers/${layer.id}/section?a=${ref.a.join(',')}&b=${ref.b.join(',')}&half=1.5`,
+    );
+    expect(response.status, await response.clone().text()).toBe(200);
+    const section = sectionSchema.parse(await response.json());
+    expect(section.layer_id).toBe(layer.id);
+    expect(section.length_m).toBeCloseTo(ref.length, 1);
+    expect(section.geoid_offset_m).toBe(n);
+    expect(section.count).toBe(section.s.length);
+    // Every sure reference point is in the answer, and nothing else but border points.
+    expect(section.count).toBeGreaterThanOrEqual(ref.count);
+    expect(section.count).toBeLessThanOrEqual(ref.count + ref.border);
+    const used = new Set<number>();
+    const unmatched: string[] = [];
+    let j0 = 0;
+    const byS = ref.s.map((_, i) => i).sort((x, y) => ref.s[x]! - ref.s[y]!);
+    for (const i of byS) {
+      const [s, d, h, cls] = [ref.s[i]!, ref.d[i]!, ref.h[i]!, ref.cls[i]!];
+      while (j0 < section.count && section.s[j0]! < s - 0.02) j0++;
+      // Wall points of the synthetic buildings stack at one spot: take the closest height.
+      let found = -1;
+      for (let j = j0; j < section.count && section.s[j]! <= s + 0.02; j++)
+        if (
+          !used.has(j) &&
+          section.cls[j] === cls &&
+          Math.abs(section.d[j]! - d) <= 0.012 &&
+          Math.abs(section.s[j]! - s) <= 0.012 &&
+          Math.abs(section.h[j]! - h) <= 0.05 &&
+          (found < 0 || Math.abs(section.h[j]! - h) < Math.abs(section.h[found]! - h))
+        )
+          found = j;
+      if (found < 0) unmatched.push(`s=${s} d=${d} h=${h} cls=${cls}`);
+      else used.add(found);
+    }
+    expect(unmatched).toEqual([]);
+    // Sorted by s, within the slab, with colours.
+    expect(section.s).toEqual([...section.s].sort((x, y) => x - y));
+    expect(Math.max(...section.d.map(Math.abs))).toBeLessThanOrEqual(1.5);
+    expect(new Set(section.cls)).toEqual(new Set(ref.cls));
+    expect(section.rgb.every((c) => c >= 0 && c <= 0xffffff)).toBe(true);
+    // Cached, with an ETag and gzip when asked.
+    const etag = response.headers.get('etag')!;
+    const again = await fetch(response.url, { headers: { 'If-None-Match': etag } });
+    expect(again.status).toBe(304);
+    const zipped = await fetch(response.url, { headers: { 'Accept-Encoding': 'gzip' } });
+    expect(zipped.headers.get('content-encoding')).toBe('gzip');
+    expect(sectionSchema.parse(await zipped.json()).count).toBe(section.count);
+  }, 90000);
+
+  it('answers 400, 404, 409 and 413 for a section it cannot cut', async () => {
+    const { created } = await uploadAndWait(laz, 'limites.laz');
+    const url = (id: string, query: string) => `${base}/api/layers/${id}/section?${query}`;
+    // Across both synthetic buildings (the line of the previous test).
+    const line = 'a=-4.717950,41.582649&b=-4.719955,41.583609';
+    for (const query of [
+      'a=foo&b=-4.72,41.58',
+      'b=-4.72,41.58',
+      'a=-4.72,41.58&b=-4.72,95',
+      `${line}&half=0.1`,
+      `${line}&half=6`,
+      'a=-4.70,41.58&b=-4.73,41.58', // 2.5 km
+      'a=-4.72,41.58&b=-4.72,41.58',
+    ]) {
+      const response = await fetch(url(created.id, query));
+      expect(response.status, query).toBe(400);
+      expect((await response.json()).error.code).toBe('VALIDATION_ERROR');
+    }
+    const missing = await fetch(url('00000000-0000-4000-8000-00000000abcd', line));
+    expect(missing.status).toBe(404);
+    await db.query(`UPDATE layers SET status='processing' WHERE id=$1`, [created.id]);
+    const busy = await fetch(url(created.id, line));
+    expect(busy.status).toBe(409);
+    expect((await busy.json()).error.code).toBe('LAYER_NOT_READY');
+    await db.query(`UPDATE layers SET status='ready' WHERE id=$1`, [created.id]);
+    // A small point limit stands in for the 400,000 of production.
+    const small = await buildApp(db, {
+      demo: false,
+      simulator: false,
+      logger: false,
+      storage,
+      sectionMaxPoints: 50,
+    });
+    try {
+      const over = await small.inject({
+        url: `/api/layers/${created.id}/section?${line}&half=5`,
+      });
+      expect(over.statusCode, over.body).toBe(413);
+      expect(over.json().error).toMatchObject({
+        code: 'SECTION_TOO_LARGE',
+        message: expect.stringMatching(/más de 50 puntos/),
+      });
+    } finally {
+      await small.close();
+    }
+    const spec = await (await fetch(`${base}/api/openapi.json`)).json();
+    const get = spec.paths['/api/layers/{id}/section'].get;
+    expect(get.parameters.map((p: { name: string }) => p.name)).toEqual(
+      expect.arrayContaining(['id', 'a', 'b', 'half']),
+    );
+    expect(Object.keys(get.responses)).toEqual(
+      expect.arrayContaining(['200', '400', '404', '409', '413']),
+    );
+    expect(Object.keys(get.responses['200'].content['application/json'].schema.properties)).toEqual(
+      expect.arrayContaining(['s', 'd', 'h', 'cls', 'rgb', 'count', 'geoid_offset_m']),
+    );
   }, 90000);
 
   it('answers 409 for a file that is already a layer and keeps one copy', async () => {

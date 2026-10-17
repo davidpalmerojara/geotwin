@@ -85,6 +85,7 @@ export async function buildApp(
     retentionHours?: number;
     storage?: Storage;
     maxUploadBytes?: number;
+    sectionMaxPoints?: number;
   } = {},
 ) {
   // JSON bodies stay capped at 16 KB; LAS/LAZ uploads are streamed by @fastify/multipart with
@@ -188,6 +189,7 @@ export async function buildApp(
     storage,
     queue,
     maxUploadBytes: options.maxUploadBytes ?? env.LAYER_UPLOAD_MAX_BYTES,
+    sectionMaxPoints: options.sectionMaxPoints,
   });
   // Layer events come from the worker process (or another API replica) through Postgres NOTIFY.
   const layers = new LayerRepository(db);

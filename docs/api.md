@@ -28,6 +28,7 @@ Swagger UI: `/api/docs/`. Contrato OpenAPI: `/api/openapi.json`. Las fechas se t
 | `POST /api/layers/:id/reprocess`    | `{ "geoid_offset_m"?: number \| null }`              | Vuelve a encolar una capa `ready` o `failed`; 202      |
 | `DELETE /api/layers/:id`            | UUID                                                 | Borra la capa, cancela su job y sus objetos; 204       |
 | `GET /api/layers/:id/tiles/*`       | Ruta dentro del tileset                              | `tileset.json`, `.pnts` y el MDT, con caché            |
+| `GET /api/layers/:id/section`       | `a`, `b` (lon,lat), `half?`                          | Puntos de la franja A–B para el perfil                 |
 
 `lat` [-90,90], `lng` [-180,180], `radius` (0,50000] metros, predeterminado 500. `limit` de lecturas [1,500], predeterminado 120, y de alertas [1,500], predeterminado 100. `name` 1–100 caracteres; mensaje manual 5–500. `search` busca texto literal: `%` y `_` no son comodines. `mode`/`severity`: `warning` o `critical`. Estados de activo: `healthy`, `warning`, `critical`; de alerta: `active`, `resolved`. Un activo lleva `mount_height_m`, la altura de su punto de montaje sobre el suelo en metros (0 a ras de suelo; una pasarela en la cubierta de una torre, unos 42 m). Métricas de sensor: `temperature`, `vibration`, `pressure` y `level` (nivel de agua en metros sobre la referencia de la sonda; avisa si sube).
 
@@ -61,6 +62,20 @@ curl -X DELETE http://localhost:3001/api/layers/ID_DEVUELTO
 ```
 
 `scripts/smoke-layer.sh` hace este recorrido completo contra una pila en marcha (la CI lo ejecuta contra Docker Compose).
+
+### Perfil A–B: `GET /api/layers/:id/section`
+
+Devuelve los puntos de una capa lista cuya huella cae a `half` metros o menos del segmento A–B. `a` y `b` van como `lon,lat` en grados; A–B mide como mucho 2 km y `half` va de 0,25 a 5 m (1,5 por defecto). El servidor recorre el `tileset.json`, descarta las teselas cuyo volumen no toca la franja y lee los `.pnts` de **todos los niveles** (py3dtiles reparte los puntos entre niveles con refinamiento `ADD`; la vista previa de la raíz, que es una copia, no cuenta). Así el perfil no depende de lo que tenga cargado la vista.
+
+Geometría: A, B y cada punto se llevan a su huella sobre el elipsoide WGS 84 y se expresan en el plano tangente en el centro de A–B. `s` es la distancia desde A a lo largo de A→B y `d` la distancia con signo a la línea (positiva a la izquierda de A→B); entra el punto con 0 ≤ `s` ≤ |AB| y |`d`| ≤ `half`. `length_m` es la longitud sobre el elipsoide y `bearing_deg` el rumbo verdadero (no el de la cuadrícula UTM, que en Laguna de Duero difiere en 1,1°).
+
+Respuesta (`sectionSchema`): `count`, `geoid_offset_m` (la N de la capa) y columnas ordenadas por `s`: `s`, `d` y `h` (altura **elipsoidal**) en metros redondeados al centímetro, `cls` (clase ASPRS) y `rgb` (0xRRGGBB). La altitud ortométrica es `h − geoid_offset_m`. El resultado se guarda en una caché LRU en memoria por capa, A, B y `half`; lleva `ETag` (304 con `If-None-Match`) y va en gzip si el cliente lo acepta (unos 70 KB para los 8.287 puntos de la línea de la maqueta sobre la hoja 356-4606).
+
+Errores: 400 si A o B no son válidos, si están a menos de 1 m, si A–B pasa de 2 km o si `half` se sale del rango; 404 si la capa no existe; 409 `LAYER_NOT_READY` si todavía no está lista, y 413 `SECTION_TOO_LARGE` si la franja tiene más de 400.000 puntos.
+
+```bash
+curl 'http://localhost:3001/api/layers/ID/section?a=-4.7231281,41.5901638&b=-4.7269410,41.5891789&half=1.5'
+```
 
 ## Ejemplo reproducible
 
