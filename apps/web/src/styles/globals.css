@@ -604,6 +604,10 @@ textarea {
 .scene-tag.tag-healthy[data-lod='full'] .tag-name {
   font-weight: 500;
 }
+.scene-tags[data-passive] .scene-mark,
+.scene-tags[data-passive] .scene-tag {
+  pointer-events: none;
+}
 .scene-tag.occluded {
   opacity: 0.55;
   box-shadow: none;

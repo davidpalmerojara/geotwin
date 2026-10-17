@@ -71,6 +71,9 @@ export default function AssetTags({
 }: Props) {
   const infos = useTagInfos(assets);
   const hits = useTool((s) => s.radius?.ids);
+  // While measuring (and with the later tools that pick on the map) a click on a mark or a tag
+  // goes through to the scene: it adds a point instead of selecting the asset.
+  const passive = useTool((s) => s.tool !== 'orbit' && s.tool !== 'radius');
   const layer = useRef<HTMLDivElement>(null);
   const [fonts, setFonts] = useState(0);
   // Heights of the assets on the Google mesh (sampled after the camera stops), by id.
@@ -415,7 +418,12 @@ export default function AssetTags({
   }, [meshHeights]);
 
   return (
-    <div className="scene-tags" ref={layer} data-testid="scene-tags">
+    <div
+      className="scene-tags"
+      ref={layer}
+      data-testid="scene-tags"
+      data-passive={passive || undefined}
+    >
       <svg className="scene-tags-lines" aria-hidden="true">
         {infos.map((info) => (
           <g key={info.id} className={`tag-lines tag-${info.status}`}>

@@ -20,6 +20,7 @@ import {
   PolylineGlowMaterialProperty,
   Primitive,
   ArcType,
+  BlendingState,
   type Viewer,
 } from 'cesium';
 import { reducedMotion } from '../../lib/motion';
@@ -66,8 +67,8 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
   float alpha = 0.0;
   for (int i = 0; i < 2; i++) {
     float p = fract(u_time + float(i) * 0.5);
-    float ring = 1.0 - smoothstep(0.0, 0.07, abs(r - p));
-    alpha = max(alpha, ring * (1.0 - p * 0.85));
+    float ring = 1.0 - smoothstep(0.02, 0.1, abs(r - p));
+    alpha = max(alpha, ring * (1.0 - p * 0.7));
   }
   alpha *= step(r, 1.0);
   material.diffuse = color.rgb;
@@ -192,7 +193,7 @@ export class AlertBeams {
   private addPulse(id: string, anchor: Cartesian3, at: Cartographic, color: Color) {
     const material = new Material({
       fabric: {
-        uniforms: { color: color.withAlpha(0.9), u_time: STILL_PHASE },
+        uniforms: { color: color.withAlpha(1), u_time: STILL_PHASE },
         source: PULSE_SOURCE,
       },
       translucent: true,
@@ -209,7 +210,16 @@ export class AlertBeams {
         }),
         id: `pulso:${id}`,
       }),
-      appearance: new EllipsoidSurfaceAppearance({ material, aboveGround: true }),
+      // Drawn over the cloud, like the mark: a parapet or a tree must not hide the alarm.
+      appearance: new EllipsoidSurfaceAppearance({
+        material,
+        aboveGround: true,
+        renderState: {
+          depthTest: { enabled: false },
+          depthMask: false,
+          blending: BlendingState.ALPHA_BLEND,
+        },
+      }),
       asynchronous: false,
     });
     this.viewer.scene.primitives.add(primitive);
