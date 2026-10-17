@@ -505,3 +505,19 @@ _Accesibilidad._ Las etiquetas se reflejan en la lista oculta de B2: Tab las rec
 - `data-testid` útiles: `place-plate`, `annunciator-counts`, `annunciator-alarm`, `heading-plate`, `scale`, `readout` y `readout-<celda>`, `credits`, `map-base`, `section-sheet`, `asset-card`, `meter`, `edge-chip`.
 - El móvil solo tiene una adaptación mínima (placas apiladas arriba, ficha y paneles a todo el ancho, sin lectura ni escala): el diseño de `A/phone.png` y `C/phone.png` es de B2.
 - Los marcadores de los activos siguen siendo cajas y puntos de Cesium con los colores nuevos; los glifos, las etiquetas y los haces son de B3.
+
+## 9. Estado tras B2
+
+**Hecho.**
+
+- **Móvil** (menos de 640 px): placa superior flotante (instalación como título, «n activos», `demo`, «Tiempo real», «Ir a» y Menú, con la fila del anunciador si hay una alarma), escala y rumbo en dos placas pequeñas, barra de herramientas flotante abajo (Orbitar, Medir, Perfil, Corte y Capas, 44 px o más, sin Radio) y hojas inferiores con alturas de 25, 45 y 90 % (`bottom-sheet.tsx` y `sheet.ts`): se arrastran, se mueven con las flechas, Inicio y Fin, y solo al 90 % son un diálogo modal con el foco atrapado. La ficha va al 45 % con Lecturas, Histórico, Incidencias, Cercanos y radio (abre Radio) y Laboratorio; Capas, al 90 %; Medir y Radio, al 45 %; las secciones, al 90 % (no a pantalla entera, para que los créditos sigan a la vista). Los créditos van siempre justo encima de la hoja o de la barra.
+- **Secciones** en el lenguaje A: cifras como celdas de lectura, tablas monoespaciadas con el nombre como botón de la fila (en el móvil, un bloque por fila), estados con forma, color y palabra, gráficos de Recharts con los tokens (`styles/tokens.ts`) y coma decimal, sin titulares.
+- **Ajustes**: interruptor de los atajos (`role="switch"`) con la lista de teclas, la nota de coordenadas y alturas (SRID 4326, UTM 30N ETRS89, alturas ortométricas) y el enlace a la documentación de la API.
+- **Accesibilidad**: lista oculta de los activos de la escena en orden de pantalla (aparece al recibir el foco, tras la barra de herramientas), anillo de foco amarillo en todo lo enfocable, vuelos de cámara sin animación y hojas sin transición con `prefers-reduced-motion`. `contrast.unit.test.ts` comprueba los pares de tokens; `accessibility.spec.ts`, axe a 1440 × 900 y 390 × 844, el recorrido con teclado y los atajos; `phone.spec.ts`, el móvil.
+
+**Decisiones que conviene saber en los pasos siguientes.**
+
+- Con una hoja al 90 % la placa superior, los avisos y los chips de borde se ocultan (`.hud[data-modal]`): los créditos ocupan su sitio. Para volver al menú hay que bajar o cerrar la hoja.
+- Una placa ancha apilada sobre una franja ya tapada (los créditos encima de la hoja) cuenta también como tapada para el encuadre y los chips (`coveredEdges`).
+- El perfil de B4 en el móvil puede usar `PhoneSheet` con `snaps={[50]}`.
+- La lista oculta (`scene-asset-list.tsx`) es el sitio donde B3 puede reflejar las etiquetas de la escena.
