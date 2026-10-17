@@ -163,7 +163,7 @@ interface DevViewer {
     requestRender(): void;
     pickPosition(p: { x: number; y: number }): unknown;
   };
-  camera: { setView(options: object): void };
+  camera: { setView(options: object): void; cancelFlight(): void };
   entities: {
     values: { id: string; point?: { heightReference?: { getValue(t: unknown): number } } }[];
   };
@@ -195,6 +195,9 @@ async function pickedHeightAtCentre(page: Page) {
       const r = Math.PI / 180;
       const scene = v.scene;
       const ellipsoid = scene.globe.ellipsoid;
+      // A framing flight still running (slow frames under a software renderer) would carry the
+      // camera away from the view set here.
+      v.camera.cancelFlight();
       v.camera.setView({
         destination: ellipsoid.cartographicToCartesian({
           longitude: lng * r,
@@ -203,14 +206,21 @@ async function pickedHeightAtCentre(page: Page) {
         }),
         orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
       });
-      for (let i = 0; i < 40; i++) {
+      // The depth under the centre is read from the last rendered frame: wait for frames drawn
+      // with this view, and for two reads in a row that agree (the first frames after a jump
+      // can still hold the previous view's depth).
+      let previous: number | null = null;
+      for (let i = 0; i < 60; i++) {
         scene.requestRender();
         await new Promise((done) => setTimeout(done, 250));
         const picked = scene.pickPosition({
           x: scene.canvas.clientWidth / 2,
           y: scene.canvas.clientHeight / 2,
         });
-        if (picked) return ellipsoid.cartesianToCartographic(picked).height;
+        const height = picked ? ellipsoid.cartesianToCartographic(picked).height : null;
+        if (height !== null && previous !== null && Math.abs(height - previous) < 0.01)
+          return height;
+        previous = height;
       }
       return null;
     },
