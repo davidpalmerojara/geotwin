@@ -11,11 +11,13 @@ import {
   Cartographic,
   ClassificationType,
   Color,
+  ConstantPositionProperty,
   CustomDataSource,
   HorizontalOrigin,
   LabelStyle,
   Math as CesiumMath,
   PolylineDashMaterialProperty,
+  SceneTransforms,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   VerticalOrigin,
@@ -24,6 +26,7 @@ import {
 import { number } from '../../lib/format';
 import { metresPerDegree } from './section-math';
 import { renderUntil } from '../measure/render-until';
+import { overlayBoxes } from '../hud/dom';
 
 const SIG = Color.fromCssColorString('#FFD21A'),
   INK = Color.fromCssColorString('#0E0E0D'),
@@ -49,6 +52,54 @@ export function circle(center: { lng: number; lat: number }, metres: number, n =
   return out;
 }
 
+interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+/**
+ * Where the radius label goes on the ring: of the candidate points (screen positions, or null
+ * when behind the camera), the one nearest the bottom of the view (towards the viewer) whose label
+ * box stays inside the view and clear of the plates; if none is clear, the lowest one inside the
+ * view. Returns the index, or -1 when no point is on screen.
+ */
+export function labelSpot(
+  points: ({ x: number; y: number } | null)[],
+  label: { width: number; height: number },
+  view: { width: number; height: number },
+  plates: Box[],
+  margin = 8,
+) {
+  let best = -1,
+    fallback = -1;
+  points.forEach((p, i) => {
+    if (!p) return;
+    const box = {
+      left: p.x - label.width / 2,
+      right: p.x + label.width / 2,
+      top: p.y - label.height / 2,
+      bottom: p.y + label.height / 2,
+    };
+    const inside =
+      box.left >= margin &&
+      box.top >= margin &&
+      box.right <= view.width - margin &&
+      box.bottom <= view.height - margin;
+    if (!inside) return;
+    if (fallback < 0 || p.y > points[fallback]!.y) fallback = i;
+    const clear = plates.every(
+      (r) =>
+        box.right + margin <= r.left ||
+        box.left - margin >= r.right ||
+        box.bottom + margin <= r.top ||
+        box.top - margin >= r.bottom,
+    );
+    if (clear && (best < 0 || p.y > points[best]!.y)) best = i;
+  });
+  return best >= 0 ? best : fallback;
+}
+
 export const radiusText = (metres: number, count: number) =>
   `r = ${metres >= 1000 ? `${number(metres / 1000, 0)} km` : `${number(metres, 0)} m`} · ${count} ${count === 1 ? 'activo dentro' : 'activos dentro'}`;
 
@@ -57,6 +108,8 @@ export class RadiusRing {
   private readonly added: Promise<unknown>;
   private readonly handler: ScreenSpaceEventHandler;
   private stopRendering: (() => void) | undefined;
+  private view: RingView | null = null;
+  private readonly removeMoveEnd: () => void;
 
   constructor(
     private readonly viewer: Viewer,
@@ -81,6 +134,42 @@ export class RadiusRing {
       const c = Cartographic.fromCartesian(hit);
       onPoint({ lng: CesiumMath.toDegrees(c.longitude), lat: CesiumMath.toDegrees(c.latitude) });
     }, ScreenSpaceEventType.LEFT_CLICK);
+    // The label moves along the ring to a visible spot whenever the camera stops.
+    this.removeMoveEnd = viewer.camera.moveEnd.addEventListener(() => this.placeLabel());
+  }
+
+  /** Puts the radius label on the ring where it is on screen and clear of the plates. */
+  private placeLabel() {
+    const view = this.view,
+      viewer = this.viewer;
+    const label = this.source.entities.getById('radio:etiqueta');
+    if (!view || !label || viewer.isDestroyed()) return;
+    const ring = circle(view.center, view.metres, 36).slice(0, -1);
+    const positions = ring.map((p) =>
+      Cartesian3.fromDegrees(p.lng, p.lat, this.ground(p.lng, p.lat) + 1),
+    );
+    const canvas = viewer.scene.canvas;
+    const frame = canvas.getBoundingClientRect();
+    const points = positions.map((p) => {
+      const w = SceneTransforms.worldToWindowCoordinates(viewer.scene, p);
+      return w ? { x: w.x, y: w.y } : null;
+    });
+    const text = radiusText(view.metres, view.items.length);
+    const plates = overlayBoxes(document).map((r) => ({
+      left: r.left - frame.left,
+      right: r.right - frame.left,
+      top: r.top - frame.top,
+      bottom: r.bottom - frame.top,
+    }));
+    const i = labelSpot(
+      points,
+      { width: text.length * 7.3 + 14, height: 24 },
+      { width: canvas.clientWidth, height: canvas.clientHeight },
+      plates,
+    );
+    if (i < 0) return;
+    label.position = new ConstantPositionProperty(positions[i]);
+    viewer.scene.requestRender();
   }
 
   update(view: RingView | null) {
@@ -114,7 +203,8 @@ export class RadiusRing {
           material: SIG.withAlpha(0.05),
         },
       });
-      // The radius and count, on the ring towards the viewer (south-west).
+      // The radius and count, on the ring: south-west at first, then wherever it is on screen and
+      // clear of the plates (placeLabel).
       const at = circle(view.center, view.metres, 8)[5]!;
       entities.add({
         id: 'radio:etiqueta',
@@ -178,6 +268,8 @@ export class RadiusRing {
       delete this.host.dataset.radiusCount;
     }
     entities.resumeEvents();
+    this.view = view;
+    this.placeLabel();
     this.viewer.scene.requestRender();
     this.stopRendering?.();
     this.stopRendering = renderUntil(
@@ -188,6 +280,7 @@ export class RadiusRing {
 
   destroy() {
     this.stopRendering?.();
+    this.removeMoveEnd();
     this.handler.destroy();
     delete this.host.dataset.radius;
     delete this.host.dataset.radiusCount;
