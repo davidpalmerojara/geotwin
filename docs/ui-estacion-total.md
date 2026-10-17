@@ -492,3 +492,16 @@ _Accesibilidad._ Las etiquetas se reflejan en la lista oculta de B2: Tab las rec
   - móvil con `A/phone.png` y `C/phone.png`.
 - En el registro de verificación se anotan las diferencias que queden.
 - Ningún texto de la documentación afirma algo que no se haya comprobado. Lo que no se pudo probar (Google, servidores del IGN) se sigue diciendo.
+
+## 8. Estado tras B1
+
+**Hecho.** La escena ocupa toda la pantalla y no se desmonta (`features/hud/stage.tsx`); las placas de escritorio, Capas con Fondo (Ortofoto PNOA, Neutro, Natural Earth), Edificios 3D, Fotorrealista y la leyenda; la ficha flotante o anclada; Radio como placa; las hojas; «Ir a»; los chips de borde; la lectura del cursor con UTM 30N y cotas; las rutas nuevas; los atajos con su interruptor en Ajustes. Pruebas: unitarias de UTM, lectura, escala, colocación, chips, atajos, rutas, zona tapada en los cuatro bordes, fondo Neutro y búsqueda de «Ir a»; `tests/e2e/hud.spec.ts` y todas las E2E anteriores adaptadas.
+
+**Decisiones que conviene saber en los pasos siguientes.**
+
+- Los paneles (Capas, Medir, Radio) se abren alineados con el borde izquierdo de la barra de herramientas, no bajo su botón: así los colocan las maquetas A y C, y `coveredEdges` puede contarlos como zona tapada a la izquierda. El foco sigue volviendo al botón que los abrió.
+- Las placas no importan Cesium. `cesium-view.tsx` publica en `stores/viewer.ts` (`useScene`) una API mínima creada en `digital-twin/scene-api.ts`: proyectar un punto, leer el suelo y la profundidad, eventos de cámara y de render, zoom, norte arriba, encuadre inicial y los interruptores de Google y de ion. B3 puede añadir ahí lo que necesiten las etiquetas y los haces.
+- Toda placa lleva `data-map-overlay`; `features/hud/dom.ts` (`overlayBoxes`) las mide para el encuadre, los chips, las etiquetas de instalación y la ficha.
+- `data-testid` útiles: `place-plate`, `annunciator-counts`, `annunciator-alarm`, `heading-plate`, `scale`, `readout` y `readout-<celda>`, `credits`, `map-base`, `section-sheet`, `asset-card`, `meter`, `edge-chip`.
+- El móvil solo tiene una adaptación mínima (placas apiladas arriba, ficha y paneles a todo el ancho, sin lectura ni escala): el diseño de `A/phone.png` y `C/phone.png` es de B2.
+- Los marcadores de los activos siguen siendo cajas y puntos de Cesium con los colores nuevos; los glifos, las etiquetas y los haces son de B3.
