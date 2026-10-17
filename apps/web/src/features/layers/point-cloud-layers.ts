@@ -58,6 +58,20 @@ const escapeHtml = (text: string) =>
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
 
+/**
+ * The LiDAR tilesets on the map, by layer id, for the tools that act on them (Corte clips and
+ * shades them). Listeners hear about tilesets added and removed.
+ */
+export const cloudTilesets = new Map<string, Cesium3DTileset>();
+const cloudListeners = new Set<() => void>();
+export function onCloudTilesets(listener: () => void) {
+  cloudListeners.add(listener);
+  return () => void cloudListeners.delete(listener);
+}
+function cloudsChanged() {
+  for (const listener of cloudListeners) listener();
+}
+
 export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTerrain: boolean) {
   const layers = useLayers().data;
   const hidden = useLayerView((s) => s.hidden),
@@ -84,6 +98,10 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
     for (const [id, entry] of current) {
       const layer = wanted.get(id);
       if (!layer || layer.tileset_url !== entry.url) {
+        if (entry.tileset && cloudTilesets.get(id) === entry.tileset) {
+          cloudTilesets.delete(id);
+          cloudsChanged();
+        }
         dispose(viewer, entry);
         current.delete(id);
         setRender(id, null);
@@ -118,6 +136,8 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
             tileset.show = !useLayerView.getState().hidden[id];
             if (layer.attribution) target.attribution = layer.attribution;
             viewer.scene.primitives.add(tileset);
+            cloudTilesets.set(id, tileset);
+            cloudsChanged();
             tileset.tileFailed.addEventListener(() => setRender(id, 'error'));
             setRender(id, 'shown');
             apply(viewer, layer, target, useLayerView.getState(), onTerrain);
@@ -197,11 +217,13 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
     const current = loaded.current;
     return () => {
       for (const [id, entry] of current) {
+        if (entry.tileset && cloudTilesets.get(id) === entry.tileset) cloudTilesets.delete(id);
         if (viewer) dispose(viewer, entry);
         // A new viewer starts from scratch: do not report this one's tilesets as shown.
         useLayerView.getState().setRender(id, null);
       }
       current.clear();
+      cloudsChanged();
     };
   }, [viewer]);
 }

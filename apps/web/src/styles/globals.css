@@ -2963,3 +2963,240 @@ table.data {
   gap: 6px;
   justify-self: end;
 }
+
+/* ---------- Perfil A–B (tool 3) and Corte (tool 4) ---------- */
+.profile-hint {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  color: var(--fg-1);
+  pointer-events: auto;
+}
+.profile-hint b {
+  color: var(--fg-0);
+  font-weight: 600;
+}
+.profile-hint kbd + kbd {
+  margin-left: 2px;
+}
+.profile-drawer {
+  left: var(--m);
+  right: var(--m);
+  bottom: var(--hud-bottom, 72px);
+  height: min(320px, calc(100% - var(--hud-top, 104px) - var(--hud-bottom, 72px)));
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  background: var(--ink-1);
+  border-radius: 3px;
+  white-space: normal;
+}
+.pd-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 40px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--rule);
+  flex: none;
+}
+.pd-head h2 {
+  font: 600 14.5px var(--sans);
+  white-space: nowrap;
+}
+.pd-meta {
+  color: var(--fg-1);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.pd-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 14px;
+  margin-left: auto;
+  font-size: 12.5px;
+}
+.pd-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.pd-k {
+  color: var(--fg-1);
+}
+.pd-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-1);
+}
+.pd-head .close {
+  margin-left: 0;
+}
+.pd-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.pd-plot-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.pd-plot {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-2) transparent;
+}
+.pd-plot canvas {
+  display: block;
+  cursor: crosshair;
+}
+.pd-state {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 6px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--ink-0);
+  color: var(--fg-1);
+  font-size: 12.5px;
+}
+.pd-state.warn {
+  color: var(--warn);
+}
+.pd-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-height: 24px;
+  padding: 0 10px 2px 12px;
+  color: var(--fg-1);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.pd-key-line {
+  display: inline-block;
+  width: 16px;
+  height: 0;
+  margin-left: 6px;
+  border-top: 1.5px solid var(--fg-0);
+}
+.pd-key-dots {
+  display: inline-block;
+  width: 14px;
+  height: 4px;
+  margin-left: 10px;
+  background: radial-gradient(circle, #d8c8b0 1.5px, transparent 2px) 0 0 / 5px 4px repeat-x;
+}
+.pd-scale {
+  margin-left: auto;
+}
+.pd-side {
+  flex: none;
+  width: 268px;
+  padding: 10px 14px;
+  border-left: 1px solid var(--rule);
+  overflow: auto;
+  font-size: 12.5px;
+}
+.pd-side h3 {
+  font: 600 12.5px var(--sans);
+  margin-bottom: 6px;
+}
+.pd-side h3 + * + h3,
+.pd-read + h3 {
+  margin-top: 12px;
+}
+.pd-read {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 10px;
+}
+.pd-read dt {
+  color: var(--fg-1);
+}
+.pd-read dd {
+  text-align: right;
+}
+.pd-read dd.sig {
+  color: var(--sig);
+}
+.pd-heights {
+  display: grid;
+  gap: 3px;
+}
+.pd-heights li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+.pd-heights .f1 {
+  color: var(--fg-1);
+}
+.pd-note {
+  margin-top: 8px;
+  color: var(--fg-1);
+  font-size: 11.5px;
+  white-space: normal;
+}
+@media (max-width: 1359px) {
+  .pd-meta {
+    display: none;
+  }
+}
+@media (max-width: 1023px) {
+  .pd-side {
+    width: 210px;
+  }
+  .pd-legend .pd-key-dots,
+  .pd-legend .pd-key-line {
+    display: none;
+  }
+}
+/* On a phone the profile is a sheet at 50 %: the plot first, the readings under it. */
+.profile-sheet .pd-phone-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 12px 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.profile-sheet .pd-meta {
+  display: block;
+}
+.profile-sheet .pd-controls {
+  justify-content: flex-start;
+  margin-left: 0;
+}
+.profile-sheet .pd-body {
+  flex-direction: column;
+}
+.profile-sheet .pd-plot {
+  min-height: 190px;
+}
+.profile-sheet .pd-side {
+  width: auto;
+  border-left: 0;
+  border-top: 1px solid var(--rule);
+}
+.profile-sheet .pd-legend {
+  flex-wrap: wrap;
+  white-space: normal;
+}

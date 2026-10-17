@@ -25,10 +25,13 @@ import { useShortcuts } from './use-shortcuts';
 import { PhoneSheet } from './bottom-sheet';
 import { SceneAssetList } from './scene-asset-list';
 import { usePhone } from '../../hooks/media';
+import { ProfileDrawer, ProfileHint } from '../section/profile-drawer';
 
 const CesiumView = lazy(() => import('../digital-twin/cesium-view'));
 // The measuring tool is only downloaded when it is first opened.
 const MeasureTool = lazy(() => import('../measure/measure-tool'));
+// Perfil, Corte and Radio in the scene (Cesium), on demand too.
+const SectionScene = lazy(() => import('../section/section-scene'));
 // Stable empty arrays so the viewer's effects do not re-run on every render while loading.
 const noAssets: Asset[] = [];
 const noInstallations: Installation[] = [];
@@ -50,7 +53,9 @@ export function Stage() {
     select = useUI((s) => s.selectAsset),
     setInstallation = useUI((s) => s.setInstallation);
   const panel = useTool((s) => s.panel),
-    closePanel = useTool((s) => s.closePanel);
+    closePanel = useTool((s) => s.closePanel),
+    tool = useTool((s) => s.tool);
+  const profiling = tool === 'profile';
   const api = useScene((s) => s.api),
     lidarOn = useScene((s) => s.terrain === 'lidar'),
     lidar = useScene((s) => s.lidar);
@@ -95,6 +100,11 @@ export function Stage() {
   ) : (
     <Loading label="Esperando al visor…" />
   );
+  const sectionScene = api && (profiling || tool === 'radius') && (
+    <Suspense fallback={null}>
+      <SectionScene viewer={api.viewer} ground={api.groundAt} />
+    </Suspense>
+  );
   const error = failed && (
     <div className="plate hud-error" data-map-overlay>
       <ErrorState
@@ -118,6 +128,7 @@ export function Stage() {
           onInstallation={setInstallation}
         />
       </Suspense>
+      {sectionScene}
       {phone ? (
         <div className="hud hud-phone">
           <div className="phone-top">
@@ -126,12 +137,14 @@ export function Stage() {
               <ScalePlate info={camera} />
               <PhoneHeading info={camera} />
             </div>
+            {profiling && <ProfileHint />}
           </div>
+          {profiling && panel !== 'layers' && page === 'twin' && <ProfileDrawer />}
           <SceneAssetList />
           {error}
           {page !== 'twin' ? (
             <SectionSheet sheet={page} />
-          ) : panel === 'layers' ? (
+          ) : profiling && panel !== 'layers' ? null : panel === 'layers' ? (
             <PhoneSheet
               key="layers"
               id="panel-layers"
@@ -184,6 +197,7 @@ export function Stage() {
           <div className="hud-tl">
             <PlacePlate />
             <ToolBar />
+            {profiling && <ProfileHint />}
           </div>
           <SceneAssetList />
           {error}
@@ -226,6 +240,7 @@ export function Stage() {
             </FloatingPanel>
           ) : null}
           <HeadingPlate info={camera} />
+          {profiling && <ProfileDrawer />}
           <AssetCard />
           <EdgeChips />
           <div className="hud-bottom">
