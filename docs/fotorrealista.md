@@ -9,7 +9,7 @@ El visor puede poner debajo de los activos la malla 3D fotorrealista de **Google
 - El botón **Fotorrealista (Google)** (icono de edificio, en la columna de controles del mapa) **solo aparece si la web se ha construido con `VITE_CESIUM_ION_TOKEN`**. Sin token no se ofrece.
 - Al activarlo se carga el tileset con `createGooglePhotorealistic3DTileset` de CesiumJS, que, sin clave propia de Google, lo pide a Cesium ion. Se carga **una sola vez**: apagarlo y encenderlo después solo lo oculta y lo muestra, para no volver a pedir la tesela raíz (cuenta para la cuota).
 - Con la capa activa:
-  - Se **oculta el globo**: las teselas de Google ya incluyen el suelo. Con él se ocultan el relieve del LiDAR y la cartografía de fondo (ortofoto PNOA o atlas); el botón **Alternar cartografía** queda desactivado («Oculto con Fotorrealista») y conserva su valor. El modo **Híbrido (sin suelo)** se puede usar: la malla hace de suelo. Si estaban cargados los edificios OSM de ion, también se ocultan (serían los mismos edificios dos veces).
+  - Se **oculta el globo**: las teselas de Google ya incluyen el suelo. Con él se ocultan el relieve del LiDAR y la cartografía de fondo (ortofoto PNOA o atlas); el control **Fondo** de Capas queda desactivado («Oculto con Fotorrealista») y conserva su valor. El modo **Híbrido (sin suelo)** se puede usar: la malla hace de suelo. Si estaban cargados los edificios OSM de ion, también se ocultan (serían los mismos edificios dos veces).
   - Los **activos** se apoyan en la malla, en su posición (`HeightReference.RELATIVE_TO_3D_TILE`): la pasarela de una cubierta queda sobre la cubierta de la malla, sin sumar su altura de montaje, porque la malla ya tiene el edificio. Las áreas de las instalaciones se dibujan sobre la malla y sus etiquetas se pegan a ella.
   - Las **nubes PNOA** se siguen pudiendo mostrar encima, a su altura real, desde el panel Capas. Donde la nube y la malla coinciden, se tapan una a otra según cuál quede delante en cada píxel.
   - **Medir** funciona igual: el clic toma la profundidad de lo dibujado, ahora la malla. «Al suelo (MDT)» sigue usando el modelo del terreno del LiDAR si hay hojas cargadas.
@@ -45,14 +45,14 @@ Hace falta una cuenta propia de Cesium ion. Unos 10 minutos.
 1. En [ion.cesium.com](https://ion.cesium.com/), en **Asset Depot**, busca «Google Photorealistic 3D Tiles» y pulsa **Add to my assets**. Comprueba en **My Assets** que aparece con el id **2275207**.
 2. En **Access Tokens**, crea un token nuevo con el ámbito `assets:read`, limitado a los assets 2275207, 1 (Cesium World Terrain) y 96188 (OSM Buildings), y a la URL `http://localhost:5173` (o `http://localhost:8080` con Docker).
 3. Pon el token en `.env` como `VITE_CESIUM_ION_TOKEN=…` y arranca la web (`npm run dev`, o `docker compose up -d --build --wait`: la imagen web lo toma al construirse).
-4. Abre **Gemelo digital** con las hojas de Laguna de Duero cargadas. Comprueba que la etiqueta superior dice «ION LISTO» y que en la columna de controles hay un botón con un edificio cuyo título es «Fotorrealista (Google)».
-5. Púlsalo. En unos segundos deberías ver la malla de Google; la etiqueta superior cambia a «FOTORREALISTA (GOOGLE)» y el botón queda marcado. Comprueba:
-   - abajo, en el mapa, el logotipo o el texto de Google y sus proveedores de datos, sin abrir ningún desplegable;
+4. Abre la escena con las hojas de Laguna de Duero cargadas y el panel **Capas** (tecla `C`). Comprueba que el interruptor «Fotorrealista (Google)» está activo (sin token aparece desactivado con el motivo).
+5. Púlsalo. En unos segundos deberías ver la malla de Google; la placa de créditos dice «Fotorrealista (Google)» y el interruptor queda marcado. Comprueba:
+   - abajo a la derecha, en la placa de créditos, el logotipo o el texto de Google y sus proveedores de datos, sin abrir ningún desplegable;
    - que no se ve el mapa de fondo ni el relieve del LiDAR (solo la malla);
    - que los marcadores de Torrelago están sobre las cubiertas de las torres y los de la laguna en la orilla;
    - que con **Medir**, dos clics en el suelo dan una distancia razonable y uno en una cubierta y otro al pie de su torre dan unos 42 m de desnivel;
    - que en Capas se pueden ocultar y mostrar las nubes PNOA encima de la malla.
-6. Vuelve a pulsar el botón: regresan el mapa de fondo y el relieve del LiDAR. Púlsalo otra vez: la malla vuelve sin esperar (no se vuelve a cargar).
+6. Vuelve a pulsar el interruptor: regresan el mapa de fondo y el relieve del LiDAR. Púlsalo otra vez: la malla vuelve sin esperar (no se vuelve a cargar).
 7. Errores (opcional): con un token sin el asset 2275207 el mapa debe decir «El token de Cesium ion no da acceso…» y seguir con la vista LiDAR; con la red cortada (modo sin conexión de las herramientas del navegador) antes de pulsar, «Sin conexión…».
 8. En la página de la cuenta de Cesium ion, mira el consumo de Google 3D Tiles: cada carga de la capa cuenta una sesión de tesela raíz.
 

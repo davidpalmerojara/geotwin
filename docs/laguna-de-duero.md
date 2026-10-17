@@ -83,7 +83,7 @@ Las dos capturas se hicieron con un renderizador por software, que en una vista 
 
 La nube aérea tiene unos 40 cm entre puntos: de cerca, el suelo se ve como manchas de color. La ortofoto PNOA (25 cm por píxel) drapeada sobre el relieve del LiDAR da un suelo nítido, y el modo **Híbrido (sin suelo)** del panel Capas quita los puntos de suelo (clase 2) y de agua (9) para que se vea solo la foto, con los edificios, la vegetación y el resto como puntos encima.
 
-**De dónde sale la foto.** El visor prueba, en este orden, una copia descargada en `apps/web/public/ortho/`, el TMS de IDEE y el WMTS del IGN, y usa la primera que devuelve una imagen (detalle en el [README](../README.md#cesium-sin-token)). Si ninguna responde, sigue con el atlas Natural Earth y lo avisa. Para tener la foto sin depender de esos servidores:
+**De dónde sale la foto.** El visor prueba, en este orden, una copia descargada en `apps/web/public/ortho/`, el TMS de IDEE y el WMTS del IGN, y usa la primera que devuelve una imagen (detalle en el [README](../README.md#cesium-sin-token)). Si ninguna responde, pasa al fondo neutro (el suelo oscuro) y lo avisa. Para tener la foto sin depender de esos servidores:
 
 1. Con Python 3 (sin instalar nada más), ejecuta `python3 scripts/descargar_pnoa_laguna.py` (en Windows, `py scripts\descargar_pnoa_laguna.py`). Baja unas 4.850 teselas JPEG sin modificar (z13 a z19, las ocho hojas con 150 m de margen), primero del TMS de IDEE y, si falla, del WMTS del IGN, con reintentos; si se corta, se vuelve a ejecutar y sigue. Al final deja `pnoa-laguna-z13-19.zip` con `LEEME.txt` (atribución y fecha de descarga).
 2. Sube el zip a la release `data-laguna` (o guárdalo donde quieras).
