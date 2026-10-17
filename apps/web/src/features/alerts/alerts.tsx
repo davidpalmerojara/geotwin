@@ -6,7 +6,9 @@ import { useAlerts, useAssets, useSync } from '../../hooks/data';
 import { useUI } from '../../stores/ui';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../components/ui/dialog';
-import { SectionHeading, Loading, ErrorState, Empty } from '../../components/common';
+import { Loading, ErrorState, Empty } from '../../components/common';
+import { Glyph, Sim } from '../hud/glyphs';
+import { count } from '../../lib/format';
 import { AlertDialog } from './alert-dialog';
 import { date } from '../../lib/utils';
 import { api } from '../../lib/api';
@@ -29,9 +31,38 @@ export function Alerts() {
       void sync();
     },
   });
+  const total = alerts.data?.length;
   return (
     <div className="page">
-      <SectionHeading description="Incidencias registradas en PostgreSQL, con su historial. La telemetría es simulada.">
+      <p className="sheet-lede">
+        Incidencias guardadas en PostgreSQL, con su historial. Las de telemetría vienen del
+        simulador de la demo.
+      </p>
+      <div className="sheet-tools">
+        <div className="segmented" role="group" aria-label="Incidencias">
+          <button
+            type="button"
+            aria-pressed={status === 'active'}
+            onClick={() => setStatus('active')}
+          >
+            Activas
+          </button>
+          <button
+            type="button"
+            aria-pressed={status === 'resolved'}
+            onClick={() => setStatus('resolved')}
+          >
+            Resueltas
+          </button>
+        </div>
+        <span className="f1" role="status">
+          {total === undefined
+            ? '—'
+            : status === 'active'
+              ? count(total, 'activa', 'activas')
+              : count(total, 'resuelta', 'resueltas')}
+        </span>
+        <span className="spacer" />
         <Button
           onClick={() => {
             setAssetId(selected ?? assets.data?.[0]?.id ?? '');
@@ -43,59 +74,56 @@ export function Alerts() {
           <Plus size={15} aria-hidden="true" />
           Crear incidencia
         </Button>
-      </SectionHeading>
-      <div className="alert-tabs">
-        <button className={status === 'active' ? 'active' : ''} onClick={() => setStatus('active')}>
-          Activas
-        </button>
-        <button
-          className={status === 'resolved' ? 'active' : ''}
-          onClick={() => setStatus('resolved')}
-        >
-          Resueltas
-        </button>
-        <span>Telemetría simulada · resolución persistente</span>
       </div>
       {alerts.isPending ? (
         <Loading />
       ) : alerts.isError ? (
         <ErrorState error={alerts.error} retry={() => void alerts.refetch()} />
       ) : !alerts.data.length ? (
-        <section className="panel">
-          <Empty
-            text={
-              status === 'active'
-                ? 'No hay incidencias activas. Puedes simular una desde el gemelo digital.'
-                : 'No hay incidencias resueltas todavía.'
-            }
-          />
-        </section>
+        <Empty
+          text={
+            status === 'active'
+              ? 'Ninguna incidencia activa. Puedes simular una desde la ficha de un activo.'
+              : 'Todavía no hay incidencias resueltas.'
+          }
+        />
       ) : (
-        <div className="alerts-grid">
-          {alerts.data.map((al) => (
-            <button
-              className={`incident-card incident-${al.severity}`}
-              key={al.id}
-              onClick={() => setIncident(al)}
-            >
-              <div className="incident-card-top">
-                <span className={`status status-${al.severity}`}>
-                  <i className={`glyph glyph-${al.severity}`} aria-hidden="true" />
-                  {al.severity === 'critical' ? 'Crítica' : 'Advertencia'}
-                </span>
-                <span className="pill">{al.status === 'active' ? 'Activa' : 'Resuelta'}</span>
-              </div>
-              <h3>{al.asset_name}</h3>
-              <p>{al.message}</p>
-              <footer>
-                <span>{date(al.triggered_at)}</span>
-                <span>
-                  {al.source === 'telemetry' ? <span className="sim">simulado</span> : 'Manual'}
-                </span>
-              </footer>
-            </button>
-          ))}
-        </div>
+        <table className="data data-stack alerts-table">
+          <thead>
+            <tr>
+              <th scope="col">Severidad</th>
+              <th scope="col">Activo e incidencia</th>
+              <th scope="col">{status === 'active' ? 'Desde' : 'Resuelta'}</th>
+              <th scope="col">Origen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {alerts.data.map((al) => (
+              <tr key={al.id} className={`alert-row alert-${al.severity}`}>
+                <td>
+                  <span className={`status status-${al.severity}`}>
+                    <Glyph status={al.severity} />
+                    {al.severity === 'critical' ? 'Crítica' : 'Advertencia'}
+                  </span>
+                </td>
+                <td>
+                  <button type="button" className="row-link" onClick={() => setIncident(al)}>
+                    {al.asset_name}
+                  </button>
+                  <small className="f1">{al.message}</small>
+                </td>
+                <td className="num" data-label={status === 'active' ? 'Desde' : 'Resuelta'}>
+                  {date(
+                    status === 'active' ? al.triggered_at : (al.resolved_at ?? al.triggered_at),
+                  )}
+                </td>
+                <td data-label="Origen">
+                  {al.source === 'telemetry' ? <Sim /> : <Sim text="manual" />}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
       <AlertDialog alert={incident} onClose={() => setIncident(null)} />
       <Dialog open={creating} onOpenChange={setCreating}>

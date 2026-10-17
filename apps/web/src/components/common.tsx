@@ -41,18 +41,3 @@ export function Empty({ text = 'Sin resultados para este filtro.' }: { text?: st
     </div>
   );
 }
-/** The line under a sheet's title: what the section shows, and its actions. */
-export function SectionHeading({
-  description,
-  children,
-}: {
-  description: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="section-intro">
-      <p>{description}</p>
-      {children}
-    </div>
-  );
-}

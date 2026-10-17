@@ -1,14 +1,15 @@
 // Trend points come from SQL aggregates; the client does not synthesize sensor data.
 import { ArrowUpRight } from 'lucide-react';
 import {
-  Area,
-  AreaChart,
   CartesianGrid,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import type { AssetStatus } from '@geotwin/shared';
 import {
   useAssets,
   useSummary,
@@ -16,11 +17,21 @@ import {
   useInstallations,
   useOrganization,
 } from '../../hooks/data';
-import { assetTypeLabel, axisTick, coordinates, count, number } from '../../lib/format';
-import { Loading, ErrorState, SectionHeading, Status, Empty } from '../../components/common';
+import { assetTypeLabel, axisTick, count, number } from '../../lib/format';
+import { Loading, ErrorState, Status, Empty } from '../../components/common';
 import { useUI } from '../../stores/ui';
-import { Button } from '../../components/ui/button';
 import { time } from '../../lib/utils';
+import { CHART } from '../../styles/tokens';
+import { Glyph, Sim } from '../hud/glyphs';
+import { formatLatLon } from '../hud/readout';
+
+const SEVERITY: Record<AssetStatus, number> = { critical: 0, warning: 1, healthy: 2 };
+
+/**
+ * Resumen: the state of the network in figures, the telemetry of the last 30 minutes, the
+ * installations, the assets that need looking at first and the active alerts. Plain labels,
+ * tabular numbers with a decimal comma, and every state as shape, colour and word.
+ */
 export function Dashboard() {
   const summary = useSummary(),
     assets = useAssets(),
@@ -34,250 +45,270 @@ export function Dashboard() {
   if (summary.isError)
     return <ErrorState error={summary.error} retry={() => void summary.refetch()} />;
   const d = summary.data;
-  const cards = [
-    {
-      label: 'Activos monitorizados',
-      value: d.total_assets,
-      sub: count(d.installations, 'instalación conectada', 'instalaciones conectadas'),
-      tone: 'neutral',
-    },
-    {
-      label: 'Activos operativos',
-      value: d.operational_assets,
-      sub: `${d.total_assets ? Math.round((d.operational_assets / d.total_assets) * 100) : 0}% de disponibilidad actual`,
-      tone: 'neutral',
-    },
-    {
-      label: 'Alertas activas',
-      value: d.active_alerts,
-      sub: 'Incidencias pendientes de resolución',
-      tone: 'neutral',
-    },
-    {
-      label: 'Incidencias críticas',
-      value: d.critical_incidents,
-      sub: 'Requieren intervención',
-      tone: 'critical',
-    },
-  ];
+  const available = d.total_assets ? Math.round((d.operational_assets / d.total_assets) * 100) : 0;
+  const worst = [...(assets.data ?? [])]
+    .sort((a, b) => SEVERITY[a.status] - SEVERITY[b.status] || a.name.localeCompare(b.name, 'es'))
+    .slice(0, 6);
   return (
     <div className="page dashboard">
-      <SectionHeading
-        description={`Estado de la red${region ? ` de ${region}` : ''}: activos, lecturas e incidencias. Telemetría simulada.`}
-      />
-      <div className="metric-grid">
-        {cards.map((c) => (
-          <div className={`metric-card tone-${c.tone}`} key={c.label}>
-            <div className="metric-label">
-              {c.tone === 'critical' && <i className="glyph glyph-critical" aria-hidden="true" />}
-              {c.label}
-            </div>
-            <strong data-testid={c.label === 'Alertas activas' ? 'active-alerts' : undefined}>
-              {c.value.toString().padStart(2, '0')}
-            </strong>
-            <p>{c.sub}</p>
-          </div>
-        ))}
-      </div>
-      <div className="dashboard-grid">
-        <section className="panel chart-panel">
-          <div className="panel-heading">
-            <div>
-              <h3>Telemetría de la red</h3>
-              <p>Media por minuto · últimos 30 minutos · datos simulados</p>
-            </div>
-            <span className="sim">simulado</span>
-          </div>
-          <div className="chart-legend">
-            <span>
-              <i className="key-line key-temp" />
-              Temperatura °C
-            </span>
-            <span>
-              <i className="key-line key-vib" />
-              Vibración mm/s
-            </span>
-          </div>
-          <div className="overview-chart">
-            {d.trend.length ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={d.trend}>
-                  <CartesianGrid stroke="#363531" vertical={false} />
-                  <XAxis
-                    dataKey="recorded_at"
-                    tickFormatter={(v) => time(String(v)).slice(0, 5)}
-                    minTickGap={50}
-                    tick={{ fill: '#BAB6AC', fontSize: 11, fontFamily: 'IBM Plex Mono' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    yAxisId="temp"
-                    tickFormatter={axisTick}
-                    tick={{ fill: '#BAB6AC', fontSize: 11, fontFamily: 'IBM Plex Mono' }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={30}
-                  />
-                  <YAxis
-                    yAxisId="vib"
-                    tickFormatter={axisTick}
-                    orientation="right"
-                    tick={{ fill: '#BAB6AC', fontSize: 11, fontFamily: 'IBM Plex Mono' }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={30}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: '#0E0E0D',
-                      border: '1px solid #706D64',
-                      borderRadius: 2,
-                      color: '#EEECE6',
-                    }}
-                    labelFormatter={(v) => time(String(v))}
-                    formatter={(v, name) => [
-                      number(Number(v), 2),
-                      name === 'temperature' ? 'Temperatura °C' : 'Vibración mm/s',
-                    ]}
-                  />
-                  <Area
-                    isAnimationActive={false}
-                    yAxisId="temp"
-                    type="monotone"
-                    dataKey="temperature"
-                    stroke="#EEECE6"
-                    strokeWidth={1.5}
-                    fill="transparent"
-                  />
-                  <Area
-                    isAnimationActive={false}
-                    yAxisId="vib"
-                    type="monotone"
-                    dataKey="vibration"
-                    stroke="#BAB6AC"
-                    strokeWidth={1.5}
-                    strokeDasharray="5 3"
-                    fill="transparent"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <Empty text="Todavía no hay lecturas." />
-            )}
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h3>Instalaciones</h3>
-              <p>Red de demostración{region ? ` · ${region}` : ''}</p>
-            </div>
-            <span className="pill">
-              {installations.data
-                ? count(installations.data.length, 'instalación', 'instalaciones')
-                : '—'}
-            </span>
-          </div>
-          {installations.isError ? (
-            <ErrorState error={installations.error} />
+      <p className="sheet-lede">
+        {region ?? 'Red de demostración'} · instalaciones ficticias ·{' '}
+        <Sim text="telemetría simulada" />
+      </p>
+      <dl className="figures">
+        <div>
+          <dt>Activos</dt>
+          <dd className="figure-v num">{d.total_assets}</dd>
+          <dd className="figure-sub">
+            {count(d.installations, 'instalación', 'instalaciones')} ·{' '}
+            {count(d.active_sensors, 'sensor activo', 'sensores activos')}
+          </dd>
+        </div>
+        <div>
+          <dt>Operativos</dt>
+          <dd className="figure-v num">{d.operational_assets}</dd>
+          <dd className="figure-sub">{available} % disponibles</dd>
+        </div>
+        <div>
+          <dt>Alertas activas</dt>
+          <dd className="figure-v num" data-testid="active-alerts">
+            {d.active_alerts.toString().padStart(2, '0')}
+          </dd>
+          <dd className="figure-sub">sin resolver</dd>
+        </div>
+        <div className={d.critical_incidents ? 'figure-critical' : undefined}>
+          <dt>
+            {d.critical_incidents > 0 && <Glyph status="critical" />}
+            Críticas
+          </dt>
+          <dd className="figure-v num">{d.critical_incidents.toString().padStart(2, '0')}</dd>
+          <dd className="figure-sub">
+            {d.critical_incidents ? 'requieren intervención' : 'ninguna'}
+          </dd>
+        </div>
+      </dl>
+
+      <section className="sheet-sec" aria-labelledby="sum-telemetry">
+        <h3 id="sum-telemetry">
+          Telemetría de la red
+          <span className="r">media por minuto · últimos 30 min</span>
+          <Sim />
+        </h3>
+        <div className="chart-legend" aria-hidden="true">
+          <span>
+            <i className="key-line" />
+            Temperatura (°C, eje izquierdo)
+          </span>
+          <span>
+            <i className="key-line key-vib" />
+            Vibración (mm/s, eje derecho)
+          </span>
+        </div>
+        <div className="overview-chart">
+          {d.trend.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={d.trend} margin={{ top: 6, right: 0, bottom: 0, left: 0 }}>
+                <CartesianGrid stroke={CHART.grid} vertical={false} />
+                <XAxis
+                  dataKey="recorded_at"
+                  tickFormatter={(v) => time(String(v)).slice(0, 5)}
+                  minTickGap={50}
+                  tick={CHART.tick}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  yAxisId="temp"
+                  tickFormatter={axisTick}
+                  tick={CHART.tick}
+                  axisLine={false}
+                  tickLine={false}
+                  width={34}
+                />
+                <YAxis
+                  yAxisId="vib"
+                  tickFormatter={axisTick}
+                  orientation="right"
+                  tick={CHART.tick}
+                  axisLine={false}
+                  tickLine={false}
+                  width={34}
+                />
+                <Tooltip
+                  contentStyle={CHART.tooltip}
+                  labelFormatter={(v) => time(String(v))}
+                  formatter={(v, name) => [
+                    number(Number(v), 2),
+                    name === 'temperature'
+                      ? 'Temperatura °C (simulada)'
+                      : 'Vibración mm/s (simulada)',
+                  ]}
+                />
+                <Line
+                  isAnimationActive={false}
+                  yAxisId="temp"
+                  type="monotone"
+                  dataKey="temperature"
+                  stroke={CHART.line}
+                  strokeWidth={1.5}
+                  dot={false}
+                />
+                <Line
+                  isAnimationActive={false}
+                  yAxisId="vib"
+                  type="monotone"
+                  dataKey="vibration"
+                  stroke={CHART.line2}
+                  strokeWidth={1.5}
+                  strokeDasharray="5 3"
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           ) : (
-            installations.data?.map((i, index) => (
-              <button
-                className="installation-row"
-                key={i.id}
-                onClick={() => {
-                  setInstallation(i.id);
-                  setPage('twin');
-                }}
-              >
-                <div className="install-icon num">0{index + 1}</div>
-                <div>
-                  <strong>{i.name}</strong>
-                  <p>
-                    {count(i.asset_count, 'activo', 'activos')} ·{' '}
-                    {coordinates(i.location.lat, i.location.lng, 4)}
-                  </p>
-                </div>
-                <ArrowUpRight size={14} aria-hidden="true" />
-              </button>
-            ))
+            <Empty text="Todavía no hay lecturas." />
           )}
-          <p className="network-note">Ubicaciones reales. Instalaciones y operación simuladas.</p>
-        </section>
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h3>Estado de los activos</h3>
-              <p>Selecciona un activo para explorar su gemelo</p>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => setPage('assets')}>
-              Ver todos
-              <ArrowUpRight size={14} aria-hidden="true" />
-            </Button>
-          </div>
-          {assets.isError ? (
-            <ErrorState error={assets.error} />
-          ) : (
-            assets.data?.slice(0, 6).map((a) => (
-              <button
-                className="asset-row"
-                key={a.id}
-                onClick={() => {
-                  selectAsset(a.id);
-                  setPage('twin');
-                }}
-              >
-                <div>
-                  <strong>{a.name}</strong>
-                  <p>
-                    {assetTypeLabel[a.type]} · {a.id.slice(-4)}
-                  </p>
-                </div>
-                <Status status={a.status} />
-              </button>
-            ))
-          )}
-        </section>
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h3>Centro de alertas</h3>
-              <p>Incidencias persistidas en PostgreSQL</p>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => setPage('alerts')}>
-              Ver todas
-              <ArrowUpRight size={14} aria-hidden="true" />
-            </Button>
-          </div>
-          {alerts.isError ? (
-            <ErrorState error={alerts.error} />
-          ) : alerts.data?.length ? (
-            alerts.data.slice(0, 4).map((a) => (
-              <button
-                key={a.id}
-                className="alert-preview"
-                onClick={() => {
-                  selectAsset(a.asset_id);
-                  setPage('alerts');
-                }}
-              >
-                <i className={`glyph glyph-${a.severity}`} aria-hidden="true" />
-                <div>
-                  <strong>{a.asset_name}</strong>
-                  <p>{a.message}</p>
-                  <small>{time(a.triggered_at)}</small>
-                </div>
-              </button>
-            ))
-          ) : (
-            <div className="all-clear">
-              <i className="glyph glyph-healthy" aria-hidden="true" />
-              <p>No hay incidencias activas en este momento.</p>
-            </div>
-          )}
-        </section>
-      </div>
+        </div>
+      </section>
+
+      <section className="sheet-sec" aria-labelledby="sum-installations">
+        <h3 id="sum-installations">
+          Instalaciones
+          <span className="r num">{installations.data?.length ?? '—'}</span>
+        </h3>
+        {installations.isError ? (
+          <ErrorState error={installations.error} />
+        ) : (
+          <table className="data">
+            <thead>
+              <tr>
+                <th scope="col" className="c-n">
+                  Nº
+                </th>
+                <th scope="col">Instalación</th>
+                <th scope="col" className="c-r">
+                  Activos
+                </th>
+                <th scope="col" className="hide-phone">
+                  Posición
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {installations.data?.map((i, index) => (
+                <tr key={i.id}>
+                  <td className="num c-n f2">{String(index + 1).padStart(2, '0')}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="row-link"
+                      onClick={() => {
+                        setInstallation(i.id);
+                        setPage('twin');
+                      }}
+                    >
+                      {i.name}
+                      <ArrowUpRight size={12} aria-hidden="true" />
+                    </button>
+                  </td>
+                  <td className="num c-r">{i.asset_count}</td>
+                  <td className="num hide-phone">{formatLatLon(i.location.lat, i.location.lng)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="sheet-note">Ubicaciones reales; instalaciones y operación simuladas.</p>
+      </section>
+
+      <section className="sheet-sec" aria-labelledby="sum-assets">
+        <h3 id="sum-assets">
+          Activos, primero los que piden atención
+          <button type="button" className="r link-plain" onClick={() => setPage('assets')}>
+            Ver los {d.total_assets}
+          </button>
+        </h3>
+        {assets.isError ? (
+          <ErrorState error={assets.error} />
+        ) : (
+          <table className="data">
+            <thead>
+              <tr>
+                <th scope="col">Activo</th>
+                <th scope="col" className="hide-phone">
+                  Tipo
+                </th>
+                <th scope="col">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {worst.map((a) => (
+                <tr key={a.id}>
+                  <td>
+                    <button
+                      type="button"
+                      className="row-link"
+                      onClick={() => {
+                        selectAsset(a.id);
+                        setPage('twin');
+                      }}
+                    >
+                      {a.name}
+                    </button>
+                  </td>
+                  <td className="f1 hide-phone">{assetTypeLabel[a.type]}</td>
+                  <td>
+                    <Status status={a.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="sheet-sec" aria-labelledby="sum-alerts">
+        <h3 id="sum-alerts">
+          Alertas activas
+          <button type="button" className="r link-plain" onClick={() => setPage('alerts')}>
+            Abrir Alertas
+          </button>
+        </h3>
+        {alerts.isError ? (
+          <ErrorState error={alerts.error} />
+        ) : alerts.data?.length ? (
+          <ul className="alert-lines">
+            {alerts.data.slice(0, 4).map((a) => (
+              <li key={a.id}>
+                <button
+                  type="button"
+                  className={`alert-line alert-${a.severity}`}
+                  onClick={() => {
+                    selectAsset(a.asset_id);
+                    setPage('alerts');
+                  }}
+                >
+                  <span className={`status status-${a.severity}`}>
+                    <Glyph status={a.severity} />
+                    {a.severity === 'critical' ? 'Crítica' : 'Advertencia'}
+                  </span>
+                  <span className="alert-line-what">
+                    <strong>{a.asset_name}</strong>
+                    <span className="f1">{a.message}</span>
+                  </span>
+                  <span className="num f1">{time(a.triggered_at).slice(0, 5)}</span>
+                  {a.source === 'telemetry' ? <Sim /> : <Sim text="manual" />}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="all-clear">
+            <Glyph status="healthy" />
+            Ninguna incidencia activa.
+          </p>
+        )}
+      </section>
     </div>
   );
 }
