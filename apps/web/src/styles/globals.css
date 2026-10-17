@@ -1449,6 +1449,9 @@ progress::-moz-progress-bar {
 .credits-line {
   color: var(--fg-0);
 }
+.credits-line > span {
+  white-space: nowrap;
+}
 .credits-line .honesty {
   color: var(--fg-1);
 }
