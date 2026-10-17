@@ -60,6 +60,8 @@ export const alertSchema = z.object({
   triggered_at: z.string(),
   resolved_at: z.string().nullable(),
   resolved_by: z.enum(['operator', 'auto_recovery']).nullable(),
+  /** When an operator acknowledged it («Reconocer»); null until then and after an escalation. */
+  acknowledged_at: z.string().nullable(),
   asset_name: z.string(),
 });
 export const summarySchema = z.object({

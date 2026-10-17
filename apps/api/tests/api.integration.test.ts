@@ -375,6 +375,99 @@ describe('Real API and PostgreSQL/PostGIS', () => {
       },
     ]);
   });
+  it('acknowledges an alert once, announces it and keeps it active until resolved', async () => {
+    const events: RealtimeEvent[] = [];
+    const address = app.server.address();
+    if (!address || typeof address === 'string') throw new Error('No listening port');
+    const socket = new WebSocket(`ws://127.0.0.1:${address.port}/api/ws`);
+    socket.on('message', (data) =>
+      events.push(realtimeEventSchema.parse(JSON.parse(data.toString()))),
+    );
+    try {
+      await new Promise<void>((resolve, reject) => {
+        socket.once('open', resolve);
+        socket.once('error', reject);
+      });
+      const alert = alertSchema.parse(
+        (
+          await app.inject({
+            method: 'POST',
+            url: '/api/demo/anomalies',
+            payload: { sensor_id: sensorId, mode: 'critical' },
+          })
+        ).json(),
+      );
+      expect(alert.acknowledged_at).toBeNull();
+      const first = await app.inject({
+        method: 'PATCH',
+        url: `/api/alerts/${alert.id}/acknowledge`,
+      });
+      expect(first.statusCode).toBe(200);
+      const acknowledged = alertSchema.parse(first.json());
+      expect(acknowledged.acknowledged_at).toBeTruthy();
+      expect(acknowledged.status).toBe('active');
+      await expect
+        .poll(
+          () =>
+            events.find(
+              (e) => e.type === 'alert:updated' && e.data.id === alert.id && e.data.acknowledged_at,
+            ),
+          { timeout: 4000 },
+        )
+        .toBeTruthy();
+      // Idempotent: the same date and no second event.
+      const again = await app.inject({
+        method: 'PATCH',
+        url: `/api/alerts/${alert.id}/acknowledge`,
+      });
+      expect(again.statusCode).toBe(200);
+      expect(again.json().acknowledged_at).toBe(acknowledged.acknowledged_at);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(
+        events.filter((e) => e.type === 'alert:updated' && e.data.id === alert.id),
+      ).toHaveLength(1);
+      // Still critical and active: acknowledging is not resolving.
+      expect((await app.inject(`/api/assets/${assetId}`)).json().status).toBe('critical');
+      expect(
+        summarySchema.parse((await app.inject('/api/dashboard/summary')).json()).active_alerts,
+      ).toBe(1);
+      const missing = await app.inject({
+        method: 'PATCH',
+        url: '/api/alerts/00000000-0000-4000-8000-000000000999/acknowledge',
+      });
+      expect(missing.statusCode).toBe(404);
+      expect(
+        (await app.inject({ method: 'PATCH', url: '/api/alerts/no-es-un-id/acknowledge' }))
+          .statusCode,
+      ).toBe(400);
+      const resolved = (
+        await app.inject({ method: 'PATCH', url: `/api/alerts/${alert.id}/resolve` })
+      ).json();
+      // A resolved alert is returned as it is.
+      const late = await app.inject({
+        method: 'PATCH',
+        url: `/api/alerts/${alert.id}/acknowledge`,
+      });
+      expect(late.statusCode).toBe(200);
+      expect(late.json()).toEqual(resolved);
+    } finally {
+      socket.close();
+    }
+  });
+  it('clears the acknowledgement when a warning escalates', async () => {
+    const service = new TelemetryService(db, () => {});
+    const warning = await service.simulate(sensorId, 'warning');
+    expect((await service.acknowledge(warning.id)).acknowledged_at).toBeTruthy();
+    const critical = await service.simulate(sensorId, 'critical');
+    expect(critical.severity).toBe('critical');
+    expect(critical.acknowledged_at).toBeNull();
+  });
+  it('documents the acknowledge operation in OpenAPI', async () => {
+    const docs = (await app.inject('/api/openapi.json')).json();
+    const operation = docs.paths['/api/alerts/{id}/acknowledge'].patch;
+    expect(operation.tags).toEqual(['Alerts']);
+    expect(Object.keys(operation.responses)).toEqual(expect.arrayContaining(['200', '404']));
+  });
   it('keeps the asset critical until all its incidents are resolved', async () => {
     const a = (
       await app.inject({

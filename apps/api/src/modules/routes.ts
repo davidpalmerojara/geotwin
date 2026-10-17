@@ -198,6 +198,19 @@ export function registerRoutes(
     { schema: { tags: ['Alerts'], params: idParams, response: { 200: alertSchema, ...errors } } },
     async (req) => telemetry.resolve(req.params.id),
   );
+  api.patch(
+    '/api/alerts/:id/acknowledge',
+    {
+      schema: {
+        tags: ['Alerts'],
+        description:
+          'Marks an active alert as seen by an operator. Idempotent; the alert stays active until resolved.',
+        params: idParams,
+        response: { 200: alertSchema, ...errors },
+      },
+    },
+    async (req) => telemetry.acknowledge(req.params.id),
+  );
   if (demo)
     api.post(
       '/api/demo/anomalies',

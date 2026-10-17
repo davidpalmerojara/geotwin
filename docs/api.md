@@ -2,31 +2,32 @@
 
 Swagger UI: `/api/docs/`. Contrato OpenAPI: `/api/openapi.json`. Las fechas se transportan en ISO 8601, con zona horaria. La API de esta demo usa una organización fija y no requiere login.
 
-| Método / ruta                    | Entrada                                              | Resultado                                              |
-| -------------------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
-| `GET /api/health`                | —                                                    | PostgreSQL real, versión PostGIS, modos demo/simulador |
-| `GET /api/dashboard/summary`     | `installation_id?` UUID                              | Conteos y tendencia de 30 min                          |
-| `GET /api/organization`          | —                                                    | Organización de la demo y su región (nombre de lugar)  |
-| `GET /api/installations`         | —                                                    | Instalaciones, coordenadas y número de activos         |
-| `GET /api/assets`                | `installation_id?`, `status?`, `search?` (literal)   | Lista de activos                                       |
-| `GET /api/assets/nearby`         | `lat`, `lng`, `radius?`                              | Activos y `distance_m`, ordenados por distancia        |
-| `GET /api/assets/:id`            | UUID                                                 | Detalle del activo                                     |
-| `PATCH /api/assets/:id`          | `{ "name": "Bomba de reserva · revisada" }`          | Activo actualizado; emite `asset:updated`              |
-| `GET /api/assets/:id/readings`   | `sensor_id?`, `limit?`                               | Últimas `limit` lecturas, orden temporal ascendente    |
-| `GET /api/sensors`               | `asset_id?`                                          | Sensores, umbrales y última lectura                    |
-| `GET /api/alerts`                | `asset_id?`, `installation_id?`, `status?`, `limit?` | Incidencias activas/resueltas                          |
-| `GET /api/alerts/:id`            | UUID                                                 | Detalle sincronizado de una incidencia                 |
-| `POST /api/alerts`               | `asset_id`, `severity`, `message`                    | Incidencia manual persistida; 201                      |
-| `PATCH /api/alerts/:id/resolve`  | Sin cuerpo                                           | Incidencia resuelta, idempotente                       |
-| `POST /api/demo/anomalies`       | `sensor_id`, `mode`                                  | Lectura inmediata e incidencia; 201; solo demo         |
-| `GET /api/docs`                  | —                                                    | Swagger UI (redirección a `/api/docs/`)                |
-| `GET /api/layers`                | —                                                    | Capas LiDAR, de la más reciente a la más antigua       |
-| `POST /api/layers`               | multipart `file` (LAS/LAZ) + opciones en la query    | Capa en cola; 201. 409, 413 o 415 si no se acepta      |
-| `GET /api/layers/limits`         | —                                                    | Formatos aceptados y límite de subida en bytes         |
-| `GET /api/layers/:id`            | UUID                                                 | Estado, progreso y metadatos de la capa                |
-| `POST /api/layers/:id/reprocess` | `{ "geoid_offset_m"?: number \| null }`              | Vuelve a encolar una capa `ready` o `failed`; 202      |
-| `DELETE /api/layers/:id`         | UUID                                                 | Borra la capa, cancela su job y sus objetos; 204       |
-| `GET /api/layers/:id/tiles/*`    | Ruta dentro del tileset                              | `tileset.json`, `.pnts` y el MDT, con caché            |
+| Método / ruta                       | Entrada                                              | Resultado                                              |
+| ----------------------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
+| `GET /api/health`                   | —                                                    | PostgreSQL real, versión PostGIS, modos demo/simulador |
+| `GET /api/dashboard/summary`        | `installation_id?` UUID                              | Conteos y tendencia de 30 min                          |
+| `GET /api/organization`             | —                                                    | Organización de la demo y su región (nombre de lugar)  |
+| `GET /api/installations`            | —                                                    | Instalaciones, coordenadas y número de activos         |
+| `GET /api/assets`                   | `installation_id?`, `status?`, `search?` (literal)   | Lista de activos                                       |
+| `GET /api/assets/nearby`            | `lat`, `lng`, `radius?`                              | Activos y `distance_m`, ordenados por distancia        |
+| `GET /api/assets/:id`               | UUID                                                 | Detalle del activo                                     |
+| `PATCH /api/assets/:id`             | `{ "name": "Bomba de reserva · revisada" }`          | Activo actualizado; emite `asset:updated`              |
+| `GET /api/assets/:id/readings`      | `sensor_id?`, `limit?`                               | Últimas `limit` lecturas, orden temporal ascendente    |
+| `GET /api/sensors`                  | `asset_id?`                                          | Sensores, umbrales y última lectura                    |
+| `GET /api/alerts`                   | `asset_id?`, `installation_id?`, `status?`, `limit?` | Incidencias activas/resueltas                          |
+| `GET /api/alerts/:id`               | UUID                                                 | Detalle sincronizado de una incidencia                 |
+| `POST /api/alerts`                  | `asset_id`, `severity`, `message`                    | Incidencia manual persistida; 201                      |
+| `PATCH /api/alerts/:id/resolve`     | Sin cuerpo                                           | Incidencia resuelta, idempotente                       |
+| `PATCH /api/alerts/:id/acknowledge` | Sin cuerpo                                           | Incidencia reconocida (`acknowledged_at`), idempotente |
+| `POST /api/demo/anomalies`          | `sensor_id`, `mode`                                  | Lectura inmediata e incidencia; 201; solo demo         |
+| `GET /api/docs`                     | —                                                    | Swagger UI (redirección a `/api/docs/`)                |
+| `GET /api/layers`                   | —                                                    | Capas LiDAR, de la más reciente a la más antigua       |
+| `POST /api/layers`                  | multipart `file` (LAS/LAZ) + opciones en la query    | Capa en cola; 201. 409, 413 o 415 si no se acepta      |
+| `GET /api/layers/limits`            | —                                                    | Formatos aceptados y límite de subida en bytes         |
+| `GET /api/layers/:id`               | UUID                                                 | Estado, progreso y metadatos de la capa                |
+| `POST /api/layers/:id/reprocess`    | `{ "geoid_offset_m"?: number \| null }`              | Vuelve a encolar una capa `ready` o `failed`; 202      |
+| `DELETE /api/layers/:id`            | UUID                                                 | Borra la capa, cancela su job y sus objetos; 204       |
+| `GET /api/layers/:id/tiles/*`       | Ruta dentro del tileset                              | `tileset.json`, `.pnts` y el MDT, con caché            |
 
 `lat` [-90,90], `lng` [-180,180], `radius` (0,50000] metros, predeterminado 500. `limit` de lecturas [1,500], predeterminado 120, y de alertas [1,500], predeterminado 100. `name` 1–100 caracteres; mensaje manual 5–500. `search` busca texto literal: `%` y `_` no son comodines. `mode`/`severity`: `warning` o `critical`. Estados de activo: `healthy`, `warning`, `critical`; de alerta: `active`, `resolved`. Un activo lleva `mount_height_m`, la altura de su punto de montaje sobre el suelo en metros (0 a ras de suelo; una pasarela en la cubierta de una torre, unos 42 m). Métricas de sensor: `temperature`, `vibration`, `pressure` y `level` (nivel de agua en metros sobre la referencia de la sonda; avisa si sube).
 
@@ -84,21 +85,21 @@ Validación o JSON mal formado devuelve 400, recurso inexistente 404, conflicto 
 
 Mensaje JSON: `{ "type": "...", "data": { ... } }`, validado con `realtimeEventSchema`.
 
-| Evento                 | Datos                                                            |
-| ---------------------- | ---------------------------------------------------------------- |
-| `sync:required`        | `connected_at`; se emite al conectar y pide sincronización REST  |
-| `sensor:reading`       | sensor, activo, métrica, unidad, valor, fecha, simulated         |
-| `asset:status_changed` | `asset_id`, `status`                                             |
-| `asset:updated`        | Activo completo tras un cambio de nombre                         |
-| `alert:created`        | Alerta nueva completa                                            |
-| `alert:updated`        | Alerta completa tras escalar de warning a critical (mismo ID)    |
-| `alert:resolved`       | Alerta completa, con `resolved_at` y `resolved_by`               |
-| `layer:created`        | Capa completa recién subida                                      |
-| `layer:progress`       | `id`, `status`, `stage`, `progress` (como mucho uno por segundo) |
-| `layer:ready`          | Capa completa con `tileset_url`                                  |
-| `layer:failed`         | Capa completa con `error`                                        |
-| `layer:deleted`        | `id`                                                             |
+| Evento                 | Datos                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| `sync:required`        | `connected_at`; se emite al conectar y pide sincronización REST                |
+| `sensor:reading`       | sensor, activo, métrica, unidad, valor, fecha, simulated                       |
+| `asset:status_changed` | `asset_id`, `status`                                                           |
+| `asset:updated`        | Activo completo tras un cambio de nombre                                       |
+| `alert:created`        | Alerta nueva completa                                                          |
+| `alert:updated`        | Alerta completa tras escalar de warning a critical (mismo ID) o al reconocerla |
+| `alert:resolved`       | Alerta completa, con `resolved_at` y `resolved_by`                             |
+| `layer:created`        | Capa completa recién subida                                                    |
+| `layer:progress`       | `id`, `status`, `stage`, `progress` (como mucho uno por segundo)               |
+| `layer:ready`          | Capa completa con `tileset_url`                                                |
+| `layer:failed`         | Capa completa con `error`                                                      |
+| `layer:deleted`        | `id`                                                                           |
 
 Los eventos `layer:*` los produce el worker, otro proceso: llegan por `LISTEN/NOTIFY` de PostgreSQL a todas las réplicas de la API y de ahí a sus WebSockets. Si la conexión de escucha se corta, al recuperarla se envía `sync:required`.
 
-Las alertas incluyen `resolved_by`: `operator` cuando alguien la resuelve y `auto_recovery` cuando una anomalía natural del simulador vuelve al rango normal. Solo se publican cambios confirmados en PostgreSQL. Los eventos no sustituyen la fuente de verdad REST. No existe replay por cursor ni outbox en este MVP.
+Las alertas incluyen `acknowledged_at`, la fecha en que alguien la reconoció («Reconocer»; sigue activa hasta que se resuelve, y un escalado la vuelve a dejar sin reconocer), y `resolved_by`: `operator` cuando alguien la resuelve y `auto_recovery` cuando una anomalía natural del simulador vuelve al rango normal. Solo se publican cambios confirmados en PostgreSQL. Los eventos no sustituyen la fuente de verdad REST. No existe replay por cursor ni outbox en este MVP.

@@ -114,6 +114,7 @@ describe('Realtime cache updates', () => {
       triggered_at: '2026-10-12T08:00:05.000Z',
       resolved_at: null,
       resolved_by: null,
+      acknowledged_at: null,
       asset_name: 'Pump 01',
     };
     for (const type of ['alert:created', 'alert:updated', 'alert:resolved'] as const) {

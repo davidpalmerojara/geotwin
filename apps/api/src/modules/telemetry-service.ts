@@ -106,7 +106,7 @@ export class TelemetryService {
             ON CONFLICT(sensor_id) WHERE status='active' AND sensor_id IS NOT NULL DO NOTHING
             RETURNING id
           ), escalated AS (
-            UPDATE alerts al SET severity='critical', message=i.message FROM input i
+            UPDATE alerts al SET severity='critical', message=i.message, acknowledged_at=NULL FROM input i
             WHERE al.sensor_id=i.sensor_id AND al.status='active'
               AND al.severity='warning' AND i.severity='critical'
             RETURNING al.id
@@ -232,6 +232,28 @@ export class TelemetryService {
       const resolved = (await this.repository.alert(alertId, client))!;
       events.push({ type: 'alert:resolved', data: resolved });
       return { alert: resolved, events };
+    });
+    this.publish(result.events);
+    return result.alert;
+  }
+  /**
+   * «Reconocer»: an operator has seen the alert. Idempotent: an acknowledged or resolved alert is
+   * returned as it is, without an event.
+   */
+  async acknowledge(alertId: string): Promise<Alert> {
+    const result = await transaction(this.db, async (client) => {
+      const at = await this.lockedAt(client);
+      const alert = await this.repository.alert(alertId, client);
+      if (!alert) notFound('Incidencia', 'f');
+      const events: RealtimeEvent[] = [];
+      if (alert.status === 'resolved' || alert.acknowledged_at) return { alert, events };
+      await client.query('UPDATE alerts SET acknowledged_at=$2::timestamptz WHERE id=$1', [
+        alertId,
+        at,
+      ]);
+      const acknowledged = (await this.repository.alert(alertId, client))!;
+      events.push({ type: 'alert:updated', data: acknowledged });
+      return { alert: acknowledged, events };
     });
     this.publish(result.events);
     return result.alert;
