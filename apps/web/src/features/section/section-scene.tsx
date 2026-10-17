@@ -29,6 +29,9 @@ function ProfileLayer({ viewer, ground }: { viewer: Viewer; ground: Ground }) {
       },
     });
     scene.current = instance;
+    // Picking is on: checks and tests wait for this before clicking A and B.
+    const host = viewer.container as HTMLElement;
+    host.dataset.profile = 'on';
     const draw = () => {
       const { a, b, summary, cursor } = useSection.getState();
       instance.update({ a, b, summary, cursor });
@@ -47,6 +50,7 @@ function ProfileLayer({ viewer, ground }: { viewer: Viewer; ground: Ground }) {
       off();
       instance.destroy();
       scene.current = null;
+      delete host.dataset.profile;
     };
   }, [viewer, ground]);
   return null;
