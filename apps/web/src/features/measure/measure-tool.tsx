@@ -76,7 +76,9 @@ export default function MeasureTool({
   useEffect(() => {
     const ds = new CustomDataSource('medicion');
     source.current = ds;
-    void viewer.dataSources.add(ds);
+    // DataSourceCollection.add resolves later: the removal waits for it, or a source removed
+    // before it was in (a remount) would stay behind.
+    const added = viewer.dataSources.add(ds);
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
     handler.setInputAction(
       (event: { position: Cartesian2 }) => add(event.position),
@@ -87,9 +89,12 @@ export default function MeasureTool({
       stopRendering.current?.();
       handler.destroy();
       if (!viewer.isDestroyed()) {
-        viewer.dataSources.remove(ds, true);
         viewer.scene.canvas.style.cursor = '';
-        viewer.scene.requestRender();
+        void added.then(() => {
+          if (viewer.isDestroyed()) return;
+          viewer.dataSources.remove(ds, true);
+          viewer.scene.requestRender();
+        });
       }
       source.current = null;
     };

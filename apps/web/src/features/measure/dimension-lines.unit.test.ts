@@ -56,7 +56,7 @@ describe('distance dimensions', () => {
     const dims = measureDimensions([foot, north], 'distance');
     const height = dims.find((d) => d.kind === 'height')!;
     expect(height.labels[0]!.text).toBe('desnivel +10,0 m');
-    expect(height.labels[0]!.side).toBe('left');
+    expect(height.labels[0]!.side).toBe('right');
     const [bottom, top] = height.line;
     expect(carto(top!).height).toBeCloseTo(760, 2);
     expect(carto(bottom!).height).toBeCloseTo(750, 6);
@@ -68,6 +68,10 @@ describe('distance dimensions', () => {
     const down = measureDimensions([north, foot], 'distance').find((d) => d.kind === 'height')!;
     expect(down.labels[0]!.text).toBe('desnivel −10,0 m');
     expect(carto(down.line[1]!).height).toBeCloseTo(760, 2);
+  });
+  it('skip a height difference under a metre', () => {
+    const flat = local(100, 0, 0.6);
+    expect(measureDimensions([foot, flat], 'distance').map((d) => d.kind)).toEqual(['distance']);
   });
   it('skip the vertical dimension when the line already is one (the tower)', () => {
     const dims = measureDimensions([foot, roof], 'distance');

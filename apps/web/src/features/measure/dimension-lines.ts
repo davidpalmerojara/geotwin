@@ -25,11 +25,11 @@ import { formatArea, formatHeight, formatLength, groundDistance, horizontalArea 
 const ellipsoid = Ellipsoid.WGS84;
 /** Below this horizontal spread (m) a height difference is already the line itself. */
 const VERTICAL_SPREAD_M = 2;
-/** Height differences below this (m) get no vertical dimension. */
-const MIN_HEIGHT_M = 0.1;
+/** Height differences below this (m) get no vertical dimension: it would be a speck. */
+const MIN_HEIGHT_M = 1;
 
-/** Where a label sits next to its point: centred on it, or to its left (vertical dimensions). */
-export type LabelSide = 'center' | 'left';
+/** Where a label sits next to its point: centred on it, or beside it (vertical dimensions). */
+export type LabelSide = 'center' | 'left' | 'right';
 export interface DimensionLabel {
   at: Cartesian3;
   text: string;
@@ -52,7 +52,13 @@ const direction = (a: Cartesian3, b: Cartesian3) => {
 const up = (p: Cartesian3) => ellipsoid.geodeticSurfaceNormal(p, new Cartesian3());
 
 /** A vertical dimension from `top` straight down to `height` (ellipsoidal metres). */
-function vertical(top: Cartesian3, height: number, kind: 'height' | 'mount', text: string) {
+function vertical(
+  top: Cartesian3,
+  height: number,
+  kind: 'height' | 'mount',
+  text: string,
+  side: LabelSide = 'left',
+) {
   const c = ellipsoid.cartesianToCartographic(top, new Cartographic());
   const foot = Cartesian3.fromRadians(c.longitude, c.latitude, height, ellipsoid);
   const axis = up(top);
@@ -63,7 +69,7 @@ function vertical(top: Cartesian3, height: number, kind: 'height' | 'mount', tex
       { at: foot, along: axis },
       { at: Cartesian3.clone(top), along: axis },
     ],
-    labels: [{ at: midpoint(foot, top), text, side: 'left' as const }],
+    labels: [{ at: midpoint(foot, top), text, side }],
   };
 }
 
@@ -125,7 +131,8 @@ export function measureDimensions(points: Cartesian3[], mode: 'distance' | 'area
     groundDistance([points[0]!, points.at(-1)!]) >= VERTICAL_SPREAD_M
   ) {
     const [high, low] = dh > 0 ? [points.at(-1)!, first] : [points[0]!, last];
-    dimensions.push(vertical(high, low.height, 'height', `desnivel ${formatHeight(dh)}`));
+    // Its value goes to the right: the segment's value sits at the middle of the line.
+    dimensions.push(vertical(high, low.height, 'height', `desnivel ${formatHeight(dh)}`, 'right'));
   }
   return dimensions;
 }
@@ -228,9 +235,16 @@ export function drawDimensions(source: CustomDataSource, dimensions: Dimension[]
             backgroundColor: SIG,
             backgroundPadding: new Cartesian2(5, 3),
             horizontalOrigin:
-              label.side === 'left' ? HorizontalOrigin.RIGHT : HorizontalOrigin.CENTER,
+              label.side === 'left'
+                ? HorizontalOrigin.RIGHT
+                : label.side === 'right'
+                  ? HorizontalOrigin.LEFT
+                  : HorizontalOrigin.CENTER,
             verticalOrigin: VerticalOrigin.CENTER,
-            pixelOffset: new Cartesian2(label.side === 'left' ? -10 : 0, 0),
+            pixelOffset: new Cartesian2(
+              label.side === 'left' ? -10 : label.side === 'right' ? 10 : 0,
+              0,
+            ),
             disableDepthTestDistance: Number.POSITIVE_INFINITY,
           },
         }),
