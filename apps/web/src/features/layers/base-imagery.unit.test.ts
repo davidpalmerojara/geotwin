@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   baseImageryLabel,
+  effectiveBase,
+  PNOA_UNAVAILABLE,
+  sceneLabel,
   classifyPnoaError,
   expandTemplate,
   IDEE_TEMPLATE,
@@ -144,13 +147,31 @@ describe('Probing and failover', () => {
     expect(watch.failed({ statusCode: 504 })).toBe(true);
     expect(new ImageryFailureWatch().failed({ statusCode: 403 })).toBe(true);
   });
-  it('labels the base map without calling the atlas «local»', () => {
-    expect(baseImageryLabel('pnoa', 'on', 'idee')).toBe('ORTOFOTO PNOA');
-    expect(baseImageryLabel('pnoa', 'on', 'local')).toBe('ORTOFOTO PNOA (DESCARGADA)');
-    expect(baseImageryLabel('pnoa', 'probing', undefined)).toBe('ORTOFOTO PNOA (CARGANDO)');
-    expect(baseImageryLabel('pnoa', 'error', undefined)).toBe(
-      'ATLAS NATURAL EARTH (PNOA NO DISPONIBLE)',
+  it('labels the base map in plain words, without calling the atlas «local»', () => {
+    expect(baseImageryLabel('pnoa', 'on', 'idee')).toBe('Ortofoto PNOA');
+    expect(baseImageryLabel('pnoa', 'on', 'local')).toBe('Ortofoto PNOA (descargada)');
+    expect(baseImageryLabel('pnoa', 'probing', undefined)).toBe('Ortofoto PNOA (cargando)');
+    expect(baseImageryLabel('pnoa', 'error', undefined)).toBe('Fondo neutro (PNOA no disponible)');
+    expect(baseImageryLabel('neutral', 'on', 'idee')).toBe('Fondo neutro');
+    expect(baseImageryLabel('natural-earth', 'on', 'idee')).toBe('Atlas Natural Earth');
+    expect(sceneLabel('pnoa', 'on', 'local', 'lidar', false)).toBe(
+      'Ortofoto PNOA (descargada) · relieve LiDAR',
     );
-    expect(baseImageryLabel('natural-earth', 'on', 'idee')).toBe('ATLAS NATURAL EARTH');
+    expect(sceneLabel('pnoa', 'error', undefined, 'lidar', false)).toBe(
+      'Fondo neutro (PNOA no disponible) · relieve LiDAR',
+    );
+    expect(sceneLabel('natural-earth', 'off', undefined, 'ellipsoid', false)).toBe(
+      'Atlas Natural Earth · globo básico',
+    );
+    expect(sceneLabel('pnoa', 'on', 'idee', 'lidar', true)).toBe('Fotorrealista (Google)');
+  });
+  it('falls back to the neutral ground when the orthophoto fails, never to the atlas', () => {
+    expect(effectiveBase('pnoa', 'error')).toBe('neutral');
+    expect(effectiveBase('pnoa', 'on')).toBe('pnoa');
+    expect(effectiveBase('pnoa', 'probing')).toBe('pnoa');
+    expect(effectiveBase('natural-earth', 'error')).toBe('natural-earth');
+    expect(effectiveBase('neutral', 'error')).toBe('neutral');
+    expect(PNOA_UNAVAILABLE).toContain('fondo neutro');
+    expect(PNOA_UNAVAILABLE).not.toContain('atlas');
   });
 });

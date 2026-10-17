@@ -8,10 +8,12 @@
  *  - idee:  the TMS mirror of the PNOA at tms-pnoa-ma.idee.es (rows counted from the south).
  *  - ign:   the IGN WMTS (KVP GetTile), the service the viewer used before.
  * Each source is probed with one tile at Torrelago before it is added: the first that answers
- * with an image is used; Natural Earth (shipped with Cesium) always stays underneath.
+ * with an image is used. Under it there is only the dark ground of the globe («Neutro»): when no
+ * source works the base falls back to it. The Natural Earth atlas (shipped with Cesium, no network)
+ * is an option of its own, never the fallback.
  */
 export type PnoaSourceId = 'local' | 'idee' | 'ign';
-export type BaseImagery = 'pnoa' | 'natural-earth';
+export type BaseImagery = 'pnoa' | 'neutral' | 'natural-earth';
 export type PnoaState = 'off' | 'probing' | 'on' | 'error';
 
 /** West, south, east, north in degrees. */
@@ -53,7 +55,7 @@ export const PNOA_CREDIT_HTML =
   'Ortofoto PNOA máxima actualidad CC-BY 4.0 <a href="https://www.scne.es/" target="_blank" rel="noopener">scne.es</a> · cedido por © Instituto Geográfico Nacional';
 
 export const PNOA_UNAVAILABLE =
-  'No se pudo cargar la ortofoto PNOA (sin conexión o bloqueada por el navegador). Se muestra el atlas local.';
+  'No se pudo cargar la ortofoto PNOA (sin conexión o bloqueada por el navegador). Se muestra el fondo neutro.';
 
 /** TMS row (counted from the south) of an XYZ row (counted from the north). */
 export const tmsY = (z: number, y: number) => 2 ** z - 1 - y;
@@ -237,14 +239,41 @@ export class ImageryFailureWatch {
   }
 }
 
-/** Label of the base map in the tag over the map. */
+/**
+ * The base actually drawn: the chosen one, except that a failed orthophoto (every source refused
+ * or unreachable) falls back to the neutral dark ground.
+ */
+export function effectiveBase(base: BaseImagery, state: PnoaState): BaseImagery {
+  return base === 'pnoa' && state === 'error' ? 'neutral' : base;
+}
+
+/** Name of the base map, for the credits plate («map-base»). */
 export function baseImageryLabel(
   base: BaseImagery,
   state: PnoaState,
   source: PnoaSourceId | undefined,
 ) {
-  if (base === 'natural-earth') return 'ATLAS NATURAL EARTH';
-  if (state === 'error') return 'ATLAS NATURAL EARTH (PNOA NO DISPONIBLE)';
-  if (state !== 'on') return 'ORTOFOTO PNOA (CARGANDO)';
-  return source === 'local' ? 'ORTOFOTO PNOA (DESCARGADA)' : 'ORTOFOTO PNOA';
+  if (base === 'natural-earth') return 'Atlas Natural Earth';
+  if (base === 'neutral') return 'Fondo neutro';
+  if (state === 'error') return 'Fondo neutro (PNOA no disponible)';
+  if (state !== 'on') return 'Ortofoto PNOA (cargando)';
+  return source === 'local' ? 'Ortofoto PNOA (descargada)' : 'Ortofoto PNOA';
+}
+
+/** What the ground of the scene is made of, after the base map in the credits plate. */
+export function sceneLabel(
+  base: BaseImagery,
+  state: PnoaState,
+  source: PnoaSourceId | undefined,
+  terrain: 'lidar' | 'world' | 'ellipsoid',
+  photoreal: boolean,
+) {
+  if (photoreal) return 'Fotorrealista (Google)';
+  const relief =
+    terrain === 'lidar'
+      ? 'relieve LiDAR'
+      : terrain === 'world'
+        ? 'relieve 3D (Cesium ion)'
+        : 'globo básico';
+  return `${baseImageryLabel(base, state, source)} · ${relief}`;
 }

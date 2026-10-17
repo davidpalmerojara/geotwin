@@ -20,8 +20,13 @@ import {
 import type { Layer } from '@geotwin/shared';
 import { useLayers } from '../../hooks/data';
 import { useLayerView } from '../../stores/layers';
-import { aimShift } from '../digital-twin/camera';
-import { coveredByOverlays, shiftedRight, viewerFov } from '../digital-twin/overlays';
+import { aimOffsets } from '../digital-twin/camera';
+import {
+  coveredByOverlays,
+  liftToGround,
+  shiftedOnGround,
+  viewerFov,
+} from '../digital-twin/overlays';
 import {
   buildPointCloudStyle,
   effectiveClasses,
@@ -175,11 +180,11 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
         );
     if (!sphere) return;
     const heading = CesiumMath.toRadians(20),
+      pitch = CesiumMath.toRadians(-38),
       range = Math.max(sphere.radius * 2.6, 120);
-    revealMap(viewer.container);
-    viewer.camera.flyToBoundingSphere(clearOfOverlays(viewer, sphere, heading, range), {
+    viewer.camera.flyToBoundingSphere(clearOfOverlays(viewer, sphere, heading, pitch, range), {
       duration: 1.2,
-      offset: new HeadingPitchRange(heading, CesiumMath.toRadians(-38), range),
+      offset: new HeadingPitchRange(heading, pitch, range),
     });
     viewer.scene.requestRender();
     // Only a new request flies; layer updates do not move the camera.
@@ -278,25 +283,23 @@ function dispose(viewer: Viewer, entry: Loaded) {
   if (entry.tileset) viewer.scene.primitives.remove(entry.tileset); // remove() destroys it
 }
 
-/** On a phone the panel sits below the map: bring the map back into view for the flight. */
-function revealMap(element: Element) {
-  const box = element.getBoundingClientRect();
-  if (box.top >= 0 && box.bottom <= window.innerHeight) return;
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  element.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
-}
-
-/** Aim to the right of the layer so it lands in the part of the map that panels leave visible. */
-function clearOfOverlays(viewer: Viewer, sphere: BoundingSphere, heading: number, range: number) {
+/** Aim beside and beyond the layer so it lands in the part of the scene the HUD leaves visible. */
+function clearOfOverlays(
+  viewer: Viewer,
+  sphere: BoundingSphere,
+  heading: number,
+  pitch: number,
+  range: number,
+) {
   const canvas = viewer.scene.canvas;
-  const shift = aimShift(
+  const { shift, lift } = aimOffsets(
     range,
     viewerFov(viewer),
     canvas.clientWidth,
     canvas.clientHeight,
     coveredByOverlays(viewer),
   );
-  return shiftedRight(sphere, heading, shift);
+  return shiftedOnGround(sphere, heading, shift, liftToGround(lift, pitch));
 }
 
 function footprintSphere(layer: Layer, shift: number) {

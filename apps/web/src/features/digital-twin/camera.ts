@@ -51,6 +51,33 @@ function halfTangents(fov: number, width: number, height: number) {
 }
 
 /**
+ * Pixels of the canvas hidden by plates and panels along each edge. The scene runs to every edge
+ * of the screen and the HUD floats over it, so a framing aims at the middle of what is left.
+ */
+export interface Edges {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+const toEdges = (covered: number | Partial<Edges>): Edges =>
+  typeof covered === 'number'
+    ? { top: 0, right: covered, bottom: 0, left: 0 }
+    : { top: 0, right: 0, bottom: 0, left: 0, ...covered };
+/** Never trust more than half of either axis to the HUD: scale both sides down together. */
+function clampEdges(edges: Edges, width: number, height: number): Edges {
+  const fit = (a: number, b: number, max: number) => {
+    a = Math.max(0, a);
+    b = Math.max(0, b);
+    const k = a + b > max ? max / (a + b) : 1;
+    return [a * k, b * k] as const;
+  };
+  const [left, right] = fit(edges.left, edges.right, width / 2);
+  const [top, bottom] = fit(edges.top, edges.bottom, height / 2);
+  return { top, right, bottom, left };
+}
+
+/**
  * Metres to aim the camera to the right of a target `distance` away so the target lands in the
  * middle of the part of the canvas that a panel `covered` px wide on the right leaves visible.
  */
@@ -66,23 +93,47 @@ export function aimShift(
 }
 
 /**
- * Fits a sphere in the visible part of a `width` x `height` canvas whose right `covered` px are
- * hidden by a floating panel: the camera distance for the narrower visible angle and how far to
- * aim to the right of the sphere so it sits centred in what is left.
+ * Fits a sphere in the visible part of a `width` x `height` canvas whose edges are partly hidden
+ * by floating plates (`covered`: px per edge, or px on the right): the camera distance for the
+ * narrower visible angle, how far to aim to the right of the sphere (`shift`, metres) and how far
+ * above it on screen (`lift`, metres across the line of sight) so it sits centred in what is left.
  */
 export function fitInView(
   radius: number,
   fov: number,
   width: number,
   height: number,
-  covered = 0,
+  covered: number | Partial<Edges> = 0,
   margin = 1.15,
 ) {
-  const hidden = Math.max(0, Math.min(covered, width / 2));
+  const edges = clampEdges(toEdges(covered), width, height);
   const half = halfTangents(fov, width, height);
-  const narrow = Math.min(Math.atan((half.x * (width - hidden)) / width), Math.atan(half.y));
+  const narrow = Math.min(
+    Math.atan((half.x * (width - edges.left - edges.right)) / width),
+    Math.atan((half.y * (height - edges.top - edges.bottom)) / height),
+  );
   const distance = (radius / Math.sin(narrow)) * margin;
-  return { distance, shift: aimShift(distance, fov, width, height, hidden) };
+  return { distance, ...aimOffsets(distance, fov, width, height, edges) };
+}
+
+/**
+ * For a camera `distance` from its target: metres to aim to the right of it (`shift`) and above
+ * it across the line of sight (`lift`) so it lands in the middle of what the HUD leaves visible.
+ */
+export function aimOffsets(
+  distance: number,
+  fov: number,
+  width: number,
+  height: number,
+  covered: number | Partial<Edges>,
+) {
+  if (!width || !height) return { shift: 0, lift: 0 };
+  const edges = clampEdges(toEdges(covered), width, height);
+  const half = halfTangents(fov, width, height);
+  return {
+    shift: aimShift(distance, fov, width, height, edges.right - edges.left),
+    lift: (distance * half.y * (edges.top - edges.bottom)) / height,
+  };
 }
 
 export interface ScreenBox {
@@ -107,6 +158,39 @@ export function coveredRight(canvas: ScreenBox, overlays: ScreenBox[]) {
     covered = Math.max(covered, canvas.right - box.left);
   }
   return covered;
+}
+
+/**
+ * Pixels of each edge of the canvas hidden by the HUD. A wide box (a strip of plates) counts for
+ * the top or the bottom when it lies in that quarter of the canvas; a tall one (a panel, a sheet,
+ * a docked card) for the left or the right edge when it hugs it. Anything else floats over the
+ * scene (a card beside its asset) and is left out.
+ */
+export function coveredEdges(canvas: ScreenBox, overlays: ScreenBox[]): Edges {
+  const height = canvas.bottom - canvas.top;
+  const edges: Edges = { top: 0, right: 0, bottom: 0, left: 0 };
+  const near = 40;
+  for (const raw of overlays) {
+    const box = {
+      left: Math.max(raw.left, canvas.left),
+      right: Math.min(raw.right, canvas.right),
+      top: Math.max(raw.top, canvas.top),
+      bottom: Math.min(raw.bottom, canvas.bottom),
+    };
+    const w = box.right - box.left,
+      h = box.bottom - box.top;
+    if (w <= 0 || h <= 0) continue;
+    if (w >= h) {
+      if (box.top - canvas.top <= height / 4)
+        edges.top = Math.max(edges.top, box.bottom - canvas.top);
+      else if (canvas.bottom - box.bottom <= height / 4)
+        edges.bottom = Math.max(edges.bottom, canvas.bottom - box.top);
+    } else if (box.left - canvas.left <= near)
+      edges.left = Math.max(edges.left, box.right - canvas.left);
+    else if (canvas.right - box.right <= near)
+      edges.right = Math.max(edges.right, canvas.right - box.left);
+  }
+  return edges;
 }
 
 /**

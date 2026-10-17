@@ -4,6 +4,7 @@ import {
   type AutoFlight,
   type Pose,
   aimShift,
+  coveredEdges,
   coveredRight,
   distanceM,
   fitDistance,
@@ -134,6 +135,53 @@ describe('Framing beside a floating panel', () => {
     expect(coveredRight(canvas, [leftTool])).toBe(0);
     expect(coveredRight(canvas, [leftTool, open, collapsed])).toBe(318);
     expect(coveredRight(canvas, [])).toBe(0);
+  });
+  it('finds what the HUD hides along all four edges of a full-screen scene', () => {
+    const canvas = { left: 0, top: 0, right: 1440, bottom: 900 };
+    const plates = {
+      place: { left: 12, top: 12, right: 620, bottom: 52 },
+      tools: { left: 12, top: 60, right: 540, bottom: 96 },
+      heading: { left: 1138, top: 12, right: 1428, bottom: 66 },
+      capas: { left: 12, top: 104, right: 330, bottom: 780 },
+      card: { left: 1056, top: 108, right: 1428, bottom: 800 },
+      readout: { left: 12, top: 858, right: 760, bottom: 888 },
+      credits: { left: 868, top: 830, right: 1428, bottom: 888 },
+      // A card floating beside its asset, in the middle of the scene: not an edge.
+      floating: { left: 600, top: 300, right: 972, bottom: 820 },
+    };
+    expect(coveredEdges(canvas, Object.values(plates))).toEqual({
+      top: 96,
+      right: 384,
+      bottom: 70,
+      left: 330,
+    });
+    expect(coveredEdges(canvas, [plates.floating])).toEqual({
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+    });
+    expect(coveredEdges(canvas, [])).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
+    // Clipped to the canvas.
+    expect(coveredEdges(canvas, [{ left: -50, top: 100, right: 300, bottom: 900 }]).left).toBe(300);
+  });
+  it('frames a sphere in the middle of what the plates leave on every edge', () => {
+    const fov = Math.PI / 3;
+    const edges = { top: 96, right: 0, bottom: 70, left: 330 };
+    const view = fitInView(500, fov, 1440, 900, edges);
+    // Covered on the left: aim left of the target, so it lands right of the centre.
+    expect(view.shift).toBeLessThan(0);
+    // More covered at the top: aim above it, so it lands lower.
+    expect(view.lift).toBeGreaterThan(0);
+    expect(view.distance).toBeGreaterThan(fitInView(500, fov, 1440, 900).distance);
+    // Mirrored plates give mirrored offsets.
+    const mirror = fitInView(500, fov, 1440, 900, { top: 70, bottom: 96, right: 330, left: 0 });
+    expect(mirror.shift).toBeCloseTo(-view.shift, 9);
+    expect(mirror.lift).toBeCloseTo(-view.lift, 9);
+    // A number still means the right edge.
+    expect(fitInView(500, fov, 1440, 900, 318)).toEqual(
+      fitInView(500, fov, 1440, 900, { right: 318 }),
+    );
   });
   it('tells a camera the user has moved from one only lifted above the terrain', () => {
     const landed = [-0.0824, 0.7258, 0, -0.785];

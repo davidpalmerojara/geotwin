@@ -240,6 +240,19 @@ export function terrainHeight(terrain: LidarTerrain, lng: number, lat: number) {
   return terrain.base * (1 - smoothstep((distance - FAR_START_M) / (FAR_END_M - FAR_START_M)));
 }
 
+/**
+ * The measured ground (DTM, ellipsoidal metres) at (lng, lat): only inside a sheet's footprint,
+ * where there is data; null elsewhere, where terrainHeight is a placeholder, not a measurement.
+ */
+export function measuredGround(terrain: LidarTerrain, lng: number, lat: number) {
+  for (const grid of terrain.grids) {
+    if (distanceToGrid(grid, lng, lat) > 0 || !insidePolygon(lng, lat, grid.footprint)) continue;
+    const v = sampleGrid(grid, lng, lat);
+    if (Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
 /** The closest point (lng, lat) of a grid's footprint outline and its distance in metres. */
 export function nearestOnFootprint(grid: DtmGrid, lng: number, lat: number) {
   const mLng = M_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);

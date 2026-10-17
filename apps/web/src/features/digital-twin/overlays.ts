@@ -1,6 +1,6 @@
 /**
- * Panels that float over the right of the map (marked `data-map-overlay`, like «Capas») hide
- * part of the view. Every camera framing aims so its target lands in the part left visible.
+ * The HUD floats over the scene: plates and panels marked `data-map-overlay` hide parts of it
+ * along every edge. Every camera framing aims so its target lands in the part left visible.
  */
 import {
   BoundingSphere,
@@ -11,15 +11,24 @@ import {
   Transforms,
   type Viewer,
 } from 'cesium';
-import { coveredRight } from './camera';
+import { coveredEdges, type Edges } from './camera';
 
-/** Pixels on the right of the canvas hidden by floating panels; 0 when they flow below it. */
-export function coveredByOverlays(viewer: Viewer) {
-  const canvas = viewer.scene.canvas.getBoundingClientRect();
-  const boxes = [...document.querySelectorAll('[data-map-overlay]')]
-    .filter((overlay) => getComputedStyle(overlay).position === 'absolute')
-    .map((overlay) => overlay.getBoundingClientRect());
-  return coveredRight(canvas, boxes);
+/** Boxes of the plates floating over the scene (visible ones only). */
+export function overlayBoxes() {
+  return [...document.querySelectorAll('[data-map-overlay]')]
+    .filter((overlay) => {
+      const style = getComputedStyle(overlay);
+      return (
+        (style.position === 'absolute' || style.position === 'fixed') && style.display !== 'none'
+      );
+    })
+    .map((overlay) => overlay.getBoundingClientRect())
+    .filter((box) => box.width > 0 && box.height > 0);
+}
+
+/** Pixels of each edge of the canvas hidden by the HUD. */
+export function coveredByOverlays(viewer: Viewer): Edges {
+  return coveredEdges(viewer.scene.canvas.getBoundingClientRect(), overlayBoxes());
 }
 
 /** Cesium's field of view (the wider screen axis), with its default as a fallback. */
@@ -28,23 +37,40 @@ export function viewerFov(viewer: Viewer) {
   return frustum instanceof PerspectiveFrustum && frustum.fov ? frustum.fov : Math.PI / 3;
 }
 
-/** The sphere moved `metres` towards the right of a camera looking with this heading. */
-export function shiftedRight(sphere: BoundingSphere, heading: number, metres: number) {
-  if (!metres) return sphere;
+/**
+ * The sphere moved `right` metres towards the right of a camera looking with this heading and
+ * `forward` metres along the ground away from it.
+ */
+export function shiftedOnGround(
+  sphere: BoundingSphere,
+  heading: number,
+  right: number,
+  forward = 0,
+) {
+  if (!right && !forward) return sphere;
   const enu = Transforms.eastNorthUpToFixedFrame(sphere.center);
   const east = Matrix4.getColumn(enu, 0, new Cartesian4()),
     north = Matrix4.getColumn(enu, 1, new Cartesian4());
-  const right = new Cartesian3(
-    Math.cos(heading) * east.x - Math.sin(heading) * north.x,
-    Math.cos(heading) * east.y - Math.sin(heading) * north.y,
-    Math.cos(heading) * east.z - Math.sin(heading) * north.z,
+  const c = Math.cos(heading),
+    s = Math.sin(heading);
+  // Right of the camera: (cos h, −sin h) in east-north; ahead of it: (sin h, cos h).
+  const e = c * right + s * forward,
+    n = -s * right + c * forward;
+  const offset = new Cartesian3(
+    e * east.x + n * north.x,
+    e * east.y + n * north.y,
+    e * east.z + n * north.z,
   );
-  return new BoundingSphere(
-    Cartesian3.add(
-      sphere.center,
-      Cartesian3.multiplyByScalar(right, metres, new Cartesian3()),
-      new Cartesian3(),
-    ),
-    sphere.radius,
-  );
+  return new BoundingSphere(Cartesian3.add(sphere.center, offset, new Cartesian3()), sphere.radius);
 }
+
+/** The sphere moved `metres` towards the right of a camera looking with this heading. */
+export const shiftedRight = (sphere: BoundingSphere, heading: number, metres: number) =>
+  shiftedOnGround(sphere, heading, metres);
+
+/**
+ * A target `lift` metres above the line of sight on screen is that far divided by the sine of
+ * the pitch further along the ground (pitch −90° looks straight down).
+ */
+export const liftToGround = (lift: number, pitch: number) =>
+  lift / Math.max(0.2, Math.abs(Math.sin(pitch)));

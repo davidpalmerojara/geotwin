@@ -8,6 +8,7 @@ import {
   fillNearest,
   FAR_START_M,
   insidePolygon,
+  measuredGround,
   sampleGrid,
   terrainHeight,
   TERRAIN_SINK_M,
@@ -66,6 +67,14 @@ describe('LiDAR ground model as terrain', () => {
     // The filled copy used at the edges has no gaps.
     expect(dtm.filled[0]).toBeCloseTo(751, 5);
     expect(() => decodeDtm(meta, new ArrayBuffer(10))).toThrow(/bytes/);
+  });
+
+  it('reports a measured ground only inside a footprint (the readout never shows the blend)', () => {
+    const { meta, buffer } = grid();
+    const terrain = buildTerrain([decodeDtm(meta, buffer)])!;
+    expect(measuredGround(terrain, -4.725, 41.575)).toBeCloseTo(755, 4);
+    expect(measuredGround(terrain, -4.72 + 50 / metresPerDegLng, 41.575)).toBeNull();
+    expect(measuredGround(terrain, -4.8, 41.6)).toBeNull();
   });
 
   it('samples bilinearly between nodes, with row 0 at the north edge', () => {
