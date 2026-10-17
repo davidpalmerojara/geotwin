@@ -337,7 +337,7 @@ export function LayersPanel() {
                   )}
                   {group.label}
                   {group.codes.length > 0 && (
-                    <span className="f2 num class-codes">
+                    <span className="f2 num class-codes" aria-hidden="true">
                       {group.codes.length > 1
                         ? `${group.codes[0]}–${group.codes.at(-1)}`
                         : group.codes[0]}
