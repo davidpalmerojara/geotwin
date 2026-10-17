@@ -91,8 +91,11 @@ test('scene → Resumen → asset card → persisted anomaly → resolved incide
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
-  // On a phone the GeoTwin menu still reaches every section by name.
-  await page.getByRole('button', { name: 'GeoTwin', exact: true }).click();
+  // On a phone the section is a sheet over 90 % of the screen; closed, Menú reaches every
+  // section by name.
+  await expect(page.getByTestId('section-sheet')).toHaveAttribute('aria-modal', 'true');
+  await page.getByRole('button', { name: 'Cerrar Resumen' }).click();
+  await page.getByRole('button', { name: 'Menú', exact: true }).click();
   const sections = page.getByRole('navigation', { name: 'Secciones' });
   for (const name of ['Gemelo', 'Resumen', 'Activos', 'Alertas', 'Ajustes'])
     await expect(sections.getByRole('button', { name, exact: true })).toBeVisible();

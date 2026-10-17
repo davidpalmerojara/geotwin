@@ -58,17 +58,20 @@ export function BottomSheet({
     if (modal) hud.dataset.modal = 'true';
     else delete hud.dataset.modal;
   }, [snap, drag, modal]);
-  useLayoutEffect(
-    () => () => {
-      const hud = document.querySelector<HTMLElement>('.hud');
-      // Another sheet may already have taken over (they replace each other in one render).
-      if (hud && !hud.querySelector('.bottom-sheet')) {
+  useLayoutEffect(() => {
+    const element = sheet.current;
+    return () => {
+      const hud =
+        element?.closest<HTMLElement>('.hud') ?? document.querySelector<HTMLElement>('.hud');
+      // React runs this before it takes the sheet out of the page; another sheet may already be
+      // there (they replace each other in one render) and keeps its own values.
+      const other = [...(hud?.querySelectorAll('.bottom-sheet') ?? [])].some((s) => s !== element);
+      if (hud && !other) {
         hud.style.removeProperty('--sheet-top');
         delete hud.dataset.modal;
       }
-    },
-    [],
-  );
+    };
+  }, []);
 
   // Going modal moves the focus inside; closing gives it back to the button that opened it.
   useEffect(() => {
@@ -88,21 +91,26 @@ export function BottomSheet({
   }, [anchorId]);
 
   // Dragging: the top edge follows the finger; on release it rests at a snap (or closes).
-  const start = useRef<{ y: number; top: number; t: number; lastY: number; lastT: number }>(null);
+  const start = useRef<{
+    y: number;
+    top: number;
+    lastY: number;
+    lastT: number;
+    prevY: number;
+    prevT: number;
+  }>(null);
+  // A drag ends with a click on the handle: that click is not a tap.
+  const dragged = useRef(false);
   const onPointerDown = (event: React.PointerEvent) => {
     if (event.button !== 0) return;
+    dragged.current = false;
     const target = event.target as HTMLElement;
     // Buttons and fields in the header keep their own clicks.
     if (target.closest('button, a, input, select, textarea') && !target.closest('.sheet-grab'))
       return;
     const top = sheet.current?.getBoundingClientRect().top ?? 0;
-    start.current = {
-      y: event.clientY,
-      top,
-      t: event.timeStamp,
-      lastY: event.clientY,
-      lastT: event.timeStamp,
-    };
+    const { clientY: y, timeStamp: t } = event;
+    start.current = { y, top, lastY: y, lastT: t, prevY: y, prevT: t };
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   };
   const onPointerMove = (event: React.PointerEvent) => {
@@ -110,18 +118,21 @@ export function BottomSheet({
     if (!s) return;
     const dy = event.clientY - s.y;
     if (drag === null && Math.abs(dy) < 4) return;
+    dragged.current = true;
     const height = window.innerHeight;
     const highest = sheetTop(max, height);
     setDrag(Math.max(highest - 20, Math.min(height - 40, s.top + dy)));
+    s.prevY = s.lastY;
+    s.prevT = s.lastT;
     s.lastY = event.clientY;
     s.lastT = event.timeStamp;
   };
-  const onPointerUp = (event: React.PointerEvent) => {
+  const onPointerUp = () => {
     const s = start.current;
     start.current = null;
     if (!s || drag === null) return;
-    const dt = Math.max(1, event.timeStamp - s.lastT);
-    const velocity = (event.clientY - s.lastY) / dt;
+    // The speed of the last stretch of the drag (a flick), in px/ms.
+    const velocity = (s.lastY - s.prevY) / Math.max(1, s.lastT - s.prevT);
     const next = releaseSnap(snaps, snap, drag, window.innerHeight, velocity, !!onClose);
     setDrag(null);
     if (next === null) onClose?.();
@@ -136,7 +147,10 @@ export function BottomSheet({
   };
   const onHandleClick = () => {
     // A tap on the handle goes one snap up, and from the top back to the lowest.
-    if (drag !== null) return;
+    if (drag !== null || dragged.current) {
+      dragged.current = false;
+      return;
+    }
     onSnap(snap === max ? min : (snaps.find((s) => s > snap) ?? max));
   };
 

@@ -158,7 +158,7 @@ for (const width of [1280, 1440])
     expect(hidden({ ...one, markers: own })).toEqual([]);
   });
 
-test('on a phone the measuring panel leaves the credits readable', async ({ page }) => {
+test('on a phone the measuring sheet keeps the credits readable above it', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/gemelo');
   await expect(page.getByTestId('cesium-view')).toHaveAttribute('data-ready', 'true', {
@@ -169,13 +169,16 @@ test('on a phone the measuring panel leaves the credits readable', async ({ page
   await expect(tool).toBeVisible();
   const credits = page.getByTestId('credits');
   await expect(credits).toContainText('telemetría simulada');
-  // The panel docks once the credits are laid out; compare their boxes after it settles.
+  // The sheet rests at 45 %: compare the boxes once it has settled, credits above the sheet.
   await expect
     .poll(async () => {
       const [a, b] = [await tool.boundingBox(), await credits.boundingBox()];
-      return !!a && !!b && a.y + a.height <= b.y;
+      return !!a && !!b && b.y + b.height <= a.y;
     })
     .toBe(true);
+  const { shown, covered } = await coveredCredits(page);
+  expect(shown).toBeGreaterThan(60);
+  expect(covered).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
@@ -194,10 +197,10 @@ test('on a phone the installation labels keep clear of each other and of the pla
     page.evaluate(() => {
       const w = window as Window & { __geotwinLabels?: Labels };
       const canvas = document.querySelector('.cesium-widget canvas')!.getBoundingClientRect();
-      const c = document.querySelector('.tool-bar')!.getBoundingClientRect();
+      const c = document.querySelector('.phone-tools')!.getBoundingClientRect();
       return {
         ...(w.__geotwinLabels ?? { boxes: [], blocked: [] }),
-        // The tool bar measured here, independently of the viewer's own list.
+        // The phone's tool bar measured here, independently of the viewer's own list.
         controls: {
           left: c.left - canvas.left,
           right: c.right - canvas.left,

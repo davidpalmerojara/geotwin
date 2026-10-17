@@ -165,6 +165,27 @@ describe('Framing beside a floating panel', () => {
     // Clipped to the canvas.
     expect(coveredEdges(canvas, [{ left: -50, top: 100, right: 300, bottom: 900 }]).left).toBe(300);
   });
+  it('counts the plates stacked on a phone sheet as part of the bottom edge', () => {
+    const canvas = { left: 0, top: 0, right: 390, bottom: 844 };
+    const plates = {
+      top: { left: 10, top: 10, right: 380, bottom: 106 },
+      scale: { left: 10, top: 114, right: 150, bottom: 158 },
+      tools: { left: 10, top: 776, right: 380, bottom: 834 },
+      sheet: { left: 10, top: 464, right: 380, bottom: 768 },
+      credits: { left: 10, top: 404, right: 380, bottom: 456 },
+      note: { left: 10, top: 352, right: 380, bottom: 396 },
+    };
+    expect(coveredEdges(canvas, Object.values(plates))).toEqual({
+      top: 158,
+      right: 0,
+      bottom: 844 - 352,
+      left: 0,
+    });
+    // A plate far above the strip is not stacked on it.
+    expect(
+      coveredEdges(canvas, [plates.sheet, { left: 10, top: 200, right: 380, bottom: 240 }]).bottom,
+    ).toBe(844 - 464);
+  });
   it('frames a sphere in the middle of what the plates leave on every edge', () => {
     const fov = Math.PI / 3;
     const edges = { top: 96, right: 0, bottom: 70, left: 330 };

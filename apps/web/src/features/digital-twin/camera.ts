@@ -163,8 +163,9 @@ export function coveredRight(canvas: ScreenBox, overlays: ScreenBox[]) {
 /**
  * Pixels of each edge of the canvas hidden by the HUD. A wide box (a strip of plates) counts for
  * the top or the bottom when it lies in that quarter of the canvas; a tall one (a panel, a sheet,
- * a docked card) for the left or the right edge when it hugs it. Anything else floats over the
- * scene (a card beside its asset) and is left out.
+ * a docked card) for the left or the right edge when it hugs it. A wide plate stacked within
+ * 40 px of a covered strip covers that edge too (the phone's credits above its bottom sheet).
+ * Anything else floats over the scene (a card beside its asset) and is left out.
  */
 export function coveredEdges(canvas: ScreenBox, overlays: ScreenBox[]): Edges {
   const height = canvas.bottom - canvas.top;
@@ -189,6 +190,29 @@ export function coveredEdges(canvas: ScreenBox, overlays: ScreenBox[]): Edges {
       edges.left = Math.max(edges.left, box.right - canvas.left);
     else if (canvas.right - box.right <= near)
       edges.right = Math.max(edges.right, canvas.right - box.left);
+  }
+  // Wide plates stacked on a covered top or bottom strip extend it, one layer at a time.
+  for (let grown = true; grown; ) {
+    grown = false;
+    for (const raw of overlays) {
+      const left = Math.max(raw.left, canvas.left),
+        right = Math.min(raw.right, canvas.right);
+      const top = Math.max(raw.top, canvas.top),
+        bottom = Math.min(raw.bottom, canvas.bottom);
+      if (right - left <= 0 || bottom - top <= 0 || right - left < bottom - top) continue;
+      const fromBottom = canvas.bottom - bottom,
+        reach = canvas.bottom - top;
+      if (edges.bottom && fromBottom <= edges.bottom + near && reach > edges.bottom) {
+        edges.bottom = reach;
+        grown = true;
+      }
+      const fromTop = top - canvas.top,
+        down = bottom - canvas.top;
+      if (edges.top && fromTop <= edges.top + near && down > edges.top) {
+        edges.top = down;
+        grown = true;
+      }
+    }
   }
   return edges;
 }

@@ -13,12 +13,15 @@ export async function openScene(page: Page, path = '/gemelo') {
   return map(page);
 }
 
+/** The menu's button: «GeoTwin» on desktop, «Menú» on a phone. */
+export const menuButton = (page: Page) => page.getByRole('button', { name: /^(GeoTwin|Menú)$/ });
+
 /** Opens a section sheet from the GeoTwin menu (as a user would). */
 export async function openSheet(
   page: Page,
   name: 'Gemelo' | 'Resumen' | 'Activos' | 'Alertas' | 'Ajustes',
 ) {
-  await page.getByRole('button', { name: 'GeoTwin', exact: true }).click();
+  await menuButton(page).click();
   await page
     .getByRole('navigation', { name: 'Secciones' })
     .getByRole('button', { name, exact: true })
@@ -29,12 +32,21 @@ export async function openSheet(
     ).toBeVisible();
 }
 
+/**
+ * A panel (Capas, Medir, Radio) by name: a region beside the scene, or on a phone a sheet, which
+ * is a modal dialog while it covers 90 % of the screen.
+ */
+export const panel = (page: Page, name: string) =>
+  page
+    .getByRole('region', { name, exact: true })
+    .or(page.getByRole('dialog', { name, exact: true }));
+
 /** The Capas panel, opened with its button if it is closed. */
 export async function openCapas(page: Page) {
   const button = page.getByRole('button', { name: 'Capas', exact: true });
   if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click();
   await expect(button).toHaveAttribute('aria-expanded', 'true');
-  return page.getByRole('region', { name: 'Capas', exact: true });
+  return panel(page, 'Capas');
 }
 
 /** Chooses the base under the clouds in Capas › Fondo. */
@@ -78,8 +90,10 @@ export async function coveredCredits(page: Page) {
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null))));
   return page.evaluate(() => {
     const plate = document.querySelector('[data-testid="credits"]')!;
+    // Plates hidden behind a modal sheet (visibility: hidden) cover nothing.
     const boxes = [...document.querySelectorAll('[data-map-overlay], .edge-chip, .menu')]
       .filter((el) => el !== plate && !plate.contains(el) && !el.contains(plate))
+      .filter((el) => el.checkVisibility({ visibilityProperty: true }))
       .map((el) => ({ s: el.className || el.tagName, r: el.getBoundingClientRect() }))
       .filter(({ r }) => r.width > 0 && r.height > 0);
     const walker = document.createTreeWalker(plate, NodeFilter.SHOW_TEXT);
