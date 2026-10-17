@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { isModal, releaseSnap, sheetTop, snapForKey, trapTarget, type Snap } from './sheet';
+import { focusBack } from './dom';
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -85,8 +86,7 @@ export function BottomSheet({
     return () => {
       if (!anchorId || element?.isConnected) return;
       const active = document.activeElement;
-      if (!active || active === document.body || element?.contains(active))
-        requestAnimationFrame(() => document.getElementById(anchorId)?.focus());
+      if (!active || active === document.body || element?.contains(active)) focusBack(anchorId);
     };
   }, [anchorId]);
 

@@ -13,3 +13,20 @@ export function overlayBoxes(root: ParentNode = document, except?: Element | nul
     .map((overlay) => overlay.getBoundingClientRect())
     .filter((box) => box.width > 0 && box.height > 0);
 }
+
+/**
+ * Gives the focus back to the button that opened a panel or sheet that has just closed. It is
+ * moved at once: waiting for the next animation frame is not enough under a slow renderer, where
+ * the frame that redraws the uncovered scene can take seconds and the focus would sit on the page
+ * body meanwhile. Only if the button cannot take it yet (still hidden behind a modal sheet that is
+ * going away) does it try again on the next frame.
+ */
+export function focusBack(anchorId: string, doc: Pick<Document, 'getElementById'> = document) {
+  const give = () => {
+    const button = doc.getElementById(anchorId);
+    if (!button) return true;
+    button.focus();
+    return button.ownerDocument.activeElement === button;
+  };
+  if (!give()) requestAnimationFrame(() => void give());
+}

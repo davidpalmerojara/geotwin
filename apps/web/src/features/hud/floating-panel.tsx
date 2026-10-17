@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { Kbd } from './glyphs';
+import { focusBack } from './dom';
 
 /**
  * A panel that opens under the tool bar, aligned with its left edge (where the A and C mockups
@@ -38,8 +39,7 @@ export function FloatingPanel({
       // A remount in development (StrictMode) keeps the element on the page: not a close.
       if (element?.isConnected) return;
       const active = document.activeElement;
-      if (!active || active === document.body || element?.contains(active))
-        requestAnimationFrame(() => document.getElementById(anchorId)?.focus());
+      if (!active || active === document.body || element?.contains(active)) focusBack(anchorId);
     };
   }, [anchorId]);
   return (
