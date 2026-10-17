@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAssets, useInstallations } from '../../hooks/data';
 import { useScene } from '../../stores/viewer';
 import { useUI } from '../../stores/ui';
+import { useTool } from '../../stores/tool';
 import { coveredEdges, distanceM } from '../digital-twin/camera';
 import { formatMetres } from './readout';
 import { Glyph } from './glyphs';
@@ -42,7 +43,7 @@ const widthOf = (name: string) => Math.min(300, Math.round(name.length * 6.3 + 1
 const km = (m: number) => (m >= 1000 ? `${number(m / 1000, 1)} km` : formatMetres(m, 0));
 
 /**
- * Installations (and assets in alert) outside the free part of the scene become chips on its
+ * Installations (assets in alert, and Radio's results) outside the free part of the scene become chips on its
  * edge, pointing at them, with the compass bearing and the distance from the centre of the view.
  * A click flies there.
  */
@@ -53,9 +54,12 @@ export function EdgeChips() {
     assets = useAssets().data;
   const setInstallation = useUI((s) => s.setInstallation),
     select = useUI((s) => s.selectAsset);
+  // Radio's results get a chip too when they are out of sight or behind a plate.
+  const hits = useTool((s) => s.radius?.ids.join(','));
   const [chips, setChips] = useState<Chip[]>([]);
   useEffect(() => {
     if (!api) return;
+    const inRadius = new Set(hits ? hits.split(',') : []);
     const targets: Target[] = [
       ...(installations ?? []).map((i) => ({
         key: `i:${i.id}`,
@@ -67,7 +71,7 @@ export function EdgeChips() {
         mount: 0,
       })),
       ...(assets ?? [])
-        .filter((a) => a.status !== 'healthy')
+        .filter((a) => a.status !== 'healthy' || inRadius.has(a.id))
         .map((a) => ({
           key: `a:${a.id}`,
           kind: 'asset' as const,
@@ -135,7 +139,7 @@ export function EdgeChips() {
       window.removeEventListener('resize', schedule);
       cancelAnimationFrame(frame);
     };
-  }, [api, installations, assets, relief]);
+  }, [api, installations, assets, relief, hits]);
   return (
     <div className="edge-chips">
       {chips.map((c) => (
