@@ -240,6 +240,21 @@ El relieve se refina igual con foto y sin ella (mismo nivel máximo y número de
 | 14/10/2026 | `856eaac` | Local, bash sin `gh` ni `GITHUB_TOKEN`                                            | `scripts/fetch-ortho.sh` con el array de cabeceras vacío: termina con su propio mensaje (y la pista de iniciar sesión) en vez de «unbound variable»; bash 3.2 no está disponible aquí, así que solo se ha probado con bash 5                                                                            | Correcto  |
 | 14/10/2026 | `726e8dd` | Local, el mismo entorno                                                           | Lint, formato, tipos, unitarias 144/144 (23 ficheros), integración 41/41 (la de S3 se omite sin MinIO), pytest 20/20, build y E2E 23/23                                                                                                                                                                 | Correcto  |
 
+## Perfil A–B, corte y radio (paso B4, 17/10/2026)
+
+**Comprobación con la hoja real 356-4606** sobre la línea de `A/desktop-signature.png`. La maqueta no guardaba sus extremos: se recuperaron ajustando una homografía entre las posiciones UTM de los 12 activos de Torrelago y la laguna y su posición en la vista general de la maqueta (error medio de 0,6 px) y llevando a UTM las marcas de 0 y 300 m de la línea. Salen A = (356 380, 4 605 708) y B = (356 060, 4 605 605) en ETRS89 / UTM 30N, cuya distancia en la cuadrícula es 336,168 m, la longitud `L` de la maqueta; en grados, A = −4,7231281, 41,5901638 y B = −4,7269410, 41,5891789. La referencia es `apps/worker/tests/section_reference.py`, que lee el LAZ original con laspy y pyproj (no las teselas), quita las clases excluidas (7 y 12) y aplica la misma definición de franja (huellas sobre el elipsoide, plano tangente en el centro de A–B, ±1,5 m).
+
+| Magnitud                                      | API (`/section`, teselas)  | Referencia (laspy + pyproj, LAZ)                                    | Maqueta      |
+| --------------------------------------------- | -------------------------- | ------------------------------------------------------------------- | ------------ |
+| Longitud de A–B                               | 336,22 m (elipsoide)       | 336,215 m                                                           | 336,2 m      |
+| Rumbo                                         | 251,0° (verdadero)         | —                                                                   | 252° (UTM)   |
+| Puntos en la franja                           | 8.287                      | 8.283 seguros y 8 a menos de 1 mm del borde                         | 8.282        |
+| Torre E4 (235–258 m): cubierta, p95 clase 6   | 742,32 m                   | 742,32 m                                                            | 742,32 m     |
+| Torre E4: suelo y altura                      | 701,26 m (MDT) · 41,1 m    | 701,26 m (mediana de la clase 2 a ±6 m) · 41,06 m                   | 41,1 m       |
+| E1 · E2 · E3                                  | 29,5 · 37,9 · 38,0 m       | 29,67 · 37,93 · 38,05 m                                             | 29,7 · 38,0 · 38,1 m |
+
+La diferencia de 4 puntos cae dentro de los 8 que están a menos de 1 mm del borde de la franja (en las teselas las posiciones van en float32); por clases, la API da 3.390 de edificación y 3.297 de suelo frente a 3.389 y 3.294. La lectura tarda unos 95 ms sin caché y 4 ms con ella; la respuesta ocupa 242 KB, 68 KB con gzip.
+
 ## Límites del entorno
 
 - No hay despliegue público ni recursos en AWS; [aws.md](aws.md) es un plan.
