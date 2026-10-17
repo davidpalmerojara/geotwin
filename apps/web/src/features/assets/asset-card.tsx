@@ -267,7 +267,9 @@ function AssetCardBody({ id }: { id: string }) {
                         <Sim />
                       </div>
                       <div className="meter-value num">
-                        {s.latest_value === null ? '—' : number(s.latest_value, 1)}
+                        {s.latest_value === null
+                          ? '—'
+                          : number(s.latest_value, Math.abs(s.latest_value) < 10 ? 2 : 1)}
                         <small>{s.unit}</small>
                       </div>
                       <div className="meter-th num">
