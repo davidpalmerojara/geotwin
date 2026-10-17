@@ -2987,7 +2987,7 @@ table.data {
   left: var(--m);
   right: var(--m);
   bottom: var(--hud-bottom, 72px);
-  height: min(304px, calc(100% - var(--hud-top, 104px) - var(--hud-bottom, 72px)));
+  height: min(320px, calc(100% - var(--hud-top, 104px) - var(--hud-bottom, 72px)));
   z-index: 3;
   display: flex;
   flex-direction: column;
