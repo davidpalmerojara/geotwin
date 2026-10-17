@@ -2237,6 +2237,10 @@ td.num {
   .credits-plate {
     font-size: 10.5px;
   }
+  .credits-line [data-testid='map-base'],
+  .credits-line .honesty {
+    white-space: normal;
+  }
   .notes-stack {
     max-width: 100%;
   }
