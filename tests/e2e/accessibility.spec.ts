@@ -2,10 +2,11 @@ import { test, expect } from './fixtures';
 import type { Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-// WCAG 2.1 A/AA checks with axe on every page, on desktop and on a phone, with an active
-// incident (alert cards) and with an asset open in the inspector. Cesium's own widget (the WebGL
-// canvas and its credit logo) is third-party and left out.
-const pages = ['/', '/gemelo', '/activos', '/alertas', '/ajustes'];
+// WCAG 2.1 A/AA checks with axe on the scene and every section sheet, on desktop and on a phone,
+// with an active incident (alert cards), with Capas open and with an asset card open. Cesium's own
+// widget (the WebGL canvas) is third-party and left out; its credits, now in the credits plate,
+// are checked.
+const pages = ['/gemelo', '/resumen', '/activos', '/alertas', '/ajustes'];
 const sizes = [
   { name: 'escritorio', width: 1280, height: 900 },
   { name: 'móvil', width: 390, height: 844 },
@@ -39,16 +40,21 @@ for (const size of sizes)
       for (const path of pages) {
         await page.goto(path);
         await expect(page.getByTestId('connection')).toContainText('Tiempo real');
-        if (path === '/gemelo')
-          await expect(page.getByTestId('cesium-view')).toHaveAttribute('data-ready', 'true', {
-            timeout: 30000,
-          });
+        await expect(page.getByTestId('cesium-view')).toHaveAttribute('data-ready', 'true', {
+          timeout: 30000,
+        });
+        if (path !== '/gemelo') await expect(page.getByTestId('section-sheet')).toBeVisible();
         found.push(...(await violations(page, path)));
       }
-      // The asset inspector with its sensors, readings and the open incident.
+      // The Capas panel.
+      await page.goto('/gemelo');
+      await page.getByRole('button', { name: 'Capas', exact: true }).click();
+      await expect(page.getByRole('region', { name: 'Capas', exact: true })).toBeVisible();
+      found.push(...(await violations(page, 'capas')));
+      // The asset card with its sensors, readings and the open incident.
       await page.goto(`/gemelo?activo=${assetId}`);
-      await expect(page.getByRole('heading', { name: 'Sensores del activo' })).toBeVisible();
-      found.push(...(await violations(page, 'inspector')));
+      await expect(page.getByTestId('asset-card').getByTestId('meter').first()).toBeVisible();
+      found.push(...(await violations(page, 'ficha')));
       expect(found).toEqual([]);
     } finally {
       await request.patch(`/api/alerts/${alert.id}/resolve`);

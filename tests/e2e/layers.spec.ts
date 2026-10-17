@@ -2,6 +2,7 @@ import { test, expect } from './fixtures';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
+import { chooseBase, mapBase, openCapas } from './hud';
 
 // The SYNTHETIC fixture (not measured data): 5,540 points near Laguna de Duero, EPSG:25830.
 const fixture = 'apps/worker/tests/fixtures/synthetic-laguna-duero.laz';
@@ -31,11 +32,11 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   await expect(page.getByTestId('connection')).toContainText('Tiempo real');
   const map = page.getByTestId('cesium-view');
   await expect(map).toHaveAttribute('data-ready', 'true', { timeout: 30000 });
-  await page.getByRole('button', { name: 'Alternar cartografía', exact: true }).click();
+  await chooseBase(page, 'Natural Earth');
   await expect(map).toHaveAttribute('data-base-imagery', 'natural-earth');
-  await expect(page.locator('.map-top')).toContainText('ATLAS NATURAL EARTH');
+  await expect(mapBase(page)).toContainText('Atlas Natural Earth');
 
-  const panel = page.getByRole('region', { name: 'Capas LiDAR' });
+  const panel = await openCapas(page);
   await expect(panel.getByText(/hasta 150 MiB/)).toBeVisible();
   await panel.getByText('Nombre y atribución (opcional)').click();
   await panel.getByLabel('Nombre', { exact: true }).fill(name);
@@ -46,6 +47,9 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   const row = panel.locator('.layer-row', { hasText: name });
   await expect(row).toBeVisible();
   await expect(row).toHaveAttribute('data-status', 'ready', { timeout: 120000 });
+  // The row shows the sheet's name and size; its details unfold below it.
+  await row.getByRole('button', { name: `Detalles de ${name}` }).click();
+  await expect(row.locator('.layer-details')).toBeVisible();
   await expect(row).toContainText('5540 puntos');
   expect(listRequests, 'the layer list was polled instead of updated by events').toBe(before);
 
@@ -56,7 +60,7 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
 
   // Its ground (class 2) became the globe's terrain; switching it off goes back to the ellipsoid.
   await expect(map).toHaveAttribute('data-terrain', 'lidar', { timeout: 30000 });
-  await expect(page.locator('.map-top')).toContainText('RELIEVE LIDAR');
+  await expect(mapBase(page)).toContainText('relieve LiDAR');
   const relief = panel.getByRole('checkbox', { name: 'Relieve del LiDAR', exact: true });
   await relief.uncheck();
   await expect(map).toHaveAttribute('data-terrain', 'ellipsoid');
@@ -114,12 +118,12 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   // On the atlas the hint says the ground has no photo; with the orthophoto it says it has.
   const hint = panel.getByTestId('hybrid-hint');
   await expect(hint).toContainText('Sin la ortofoto PNOA');
-  await page.getByRole('button', { name: 'Alternar cartografía', exact: true }).click();
+  await chooseBase(page, 'Ortofoto PNOA');
   await expect(map).toHaveAttribute('data-base-imagery', 'pnoa');
   await expect(hint).toContainText('El suelo es la ortofoto PNOA');
   const axe = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'])
-    .include('.layers-panel')
+    .include('#panel-layers')
     .analyze();
   expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' ')}`)).toEqual(
     [],
@@ -133,8 +137,10 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   await expect.poll(showExpression).toBe('');
 
   // Measure a distance: one point from the keyboard (the crosshair at the centre), then the map
-  // is panned with an arrow key and the second point is picked with the mouse.
+  // is panned with an arrow key and the second point is picked with the mouse. Medir takes the
+  // place of Capas next to the tool bar.
   await page.getByRole('button', { name: 'Medir', exact: true }).click();
+  await expect(panel).toBeHidden();
   const results = page.getByTestId('measure-results');
   await expect(results).toBeVisible();
   await page.getByRole('button', { name: 'Añadir punto en el centro' }).click();
@@ -158,10 +164,16 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   await expect(distance).toHaveText('—');
   await page.keyboard.press('Escape');
   await expect(results).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Orbitar', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
 
   // A rejected file while the panel is scrolled down to the style controls: the message is
   // scrolled into view instead of appearing out of sight above the list.
-  const body = panel.locator('#layers-body');
+  await page.keyboard.press('c');
+  await expect(panel).toBeVisible();
+  const body = panel.locator('#panel-layers-body');
   await body.evaluate((element) => element.scrollTo(0, element.scrollHeight));
   await expect(panel.getByText('Relieve del LiDAR')).toBeInViewport();
   await panel

@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import type { Page, Route } from '@playwright/test';
+import { mapBase, openCapas } from './hud';
 
 /*
  * The «Fotorrealista (Google)» layer without Google: Cesium ion's endpoint for the Google
@@ -174,11 +175,16 @@ const map = (page: Page) => page.getByTestId('cesium-view');
 const toggle = (page: Page) =>
   page.getByRole('button', { name: 'Fotorrealista (Google)', exact: true });
 
+/** Opens the scene and Capas, where the option lives. */
 async function open(page: Page) {
   await page.goto('/gemelo');
   await expect(map(page)).toHaveAttribute('data-ready', 'true', { timeout: 60000 });
-  // Without a token the option is not offered (a Compose build without one, for instance).
-  if (!(await toggle(page).count())) test.skip(true, 'Built without VITE_CESIUM_ION_TOKEN');
+  await openCapas(page);
+  // Without a token the option is shown disabled, with the reason (a Compose build without one).
+  if (await toggle(page).isDisabled()) {
+    await expect(page.locator('#photoreal-help')).toContainText('token de Cesium ion');
+    test.skip(true, 'Built without VITE_CESIUM_ION_TOKEN');
+  }
 }
 
 /** Looks straight down at the mesh from 600 m and returns the ellipsoidal height picked there. */
@@ -230,11 +236,12 @@ test('Fotorrealista (Google) replaces the globe and keeps assets and measuring o
   // The provider's attribution is shown on the map, not only behind the credits link, once the
   // mesh has loaded (several seconds under a software renderer).
   await expect(page.locator('.cesium-widget-credits')).toContainText(CREDIT, { timeout: 30000 });
-  await expect(page.locator('.map-top')).toContainText('FOTORREALISTA');
+  await expect(mapBase(page)).toContainText('Fotorrealista (Google)');
   // The mesh hides the base map: its control is disabled (and keeps its value) meanwhile.
-  const base = page.getByRole('button', { name: 'Alternar cartografía', exact: true });
+  const fondo = page.getByRole('group', { name: 'Fondo' });
+  const base = fondo.getByRole('button', { name: 'Ortofoto PNOA', exact: true });
   await expect(base).toBeDisabled();
-  await expect(base).toHaveAttribute('title', /Oculto con Fotorrealista/);
+  await expect(fondo).toHaveAttribute('title', /Oculto con Fotorrealista/);
   await expect(base).toHaveAttribute('aria-pressed', 'true');
 
   // Assets stand on the mesh: their height is taken from the 3D tiles, not from the terrain.
@@ -254,7 +261,7 @@ test('Fotorrealista (Google) replaces the globe and keeps assets and measuring o
   expect(Math.abs(picked! - MESH_HEIGHT)).toBeLessThan(1.5);
 
   // Measuring still works on top: two clicks on the flat mesh give a distance and no height
-  // difference. The clicks stay clear of the «Capas» panel and of the tool's own panel.
+  // difference. The clicks stay clear of the plates and of the tool's own panel.
   await page.getByRole('button', { name: 'Medir', exact: true }).click();
   await expect(page.getByText('0/2 puntos')).toBeVisible({ timeout: 20000 });
   const box = (await page.locator('.cesium-widget canvas').boundingBox())!;
@@ -265,8 +272,10 @@ test('Fotorrealista (Google) replaces the globe and keeps assets and measuring o
   await expect(results).toContainText(/Horizontal\s*\d+(,\d+)?\s*m/i, { timeout: 20000 });
   await expect(results).toContainText(/Desnivel\s*[±+−-]0,0\d\s*m/i);
   await page.getByRole('button', { name: 'Medir', exact: true }).click();
+  await expect(results).toBeHidden();
 
-  // Switching it off brings the globe and the LiDAR view back.
+  // Switching it off (in Capas again) brings the globe and the LiDAR view back.
+  await openCapas(page);
   await toggle(page).click();
   await expect(map(page)).toHaveAttribute('data-photoreal', 'off');
   expect(await page.evaluate(() => (window as DevWindow).__geotwinViewer!.scene.globe.show)).toBe(
@@ -286,8 +295,8 @@ for (const [status, text] of [
     await open(page);
     await toggle(page).click();
     await expect(map(page)).toHaveAttribute('data-photoreal', 'error', { timeout: 30000 });
-    await expect(page.locator('.map-message')).toContainText(text);
-    await expect(page.locator('.map-message')).toContainText('Sigue la vista LiDAR');
+    await expect(page.getByTestId('map-message')).toContainText(text);
+    await expect(page.getByTestId('map-message')).toContainText('Sigue la vista LiDAR');
     expect(await page.evaluate(() => (window as DevWindow).__geotwinViewer!.scene.globe.show)).toBe(
       true,
     );
@@ -305,7 +314,7 @@ test('Fotorrealista (Google) can be tried again after a failure, without reloadi
   await open(page);
   await toggle(page).click();
   await expect(map(page)).toHaveAttribute('data-photoreal', 'error', { timeout: 30000 });
-  await expect(page.locator('.map-message')).toContainText('Sin conexión');
+  await expect(page.getByTestId('map-message')).toContainText('Sin conexión');
   const asked = endpoint().length;
   expect(asked).toBeGreaterThan(0);
   // The connection is back: the next click asks ion again and the layer loads.
@@ -313,5 +322,5 @@ test('Fotorrealista (Google) can be tried again after a failure, without reloadi
   await toggle(page).click();
   await expect(map(page)).toHaveAttribute('data-photoreal', 'on', { timeout: 60000 });
   expect(endpoint().length).toBeGreaterThan(asked);
-  await expect(page.locator('.map-message')).toHaveCount(0);
+  await expect(page.getByTestId('map-message')).toHaveCount(0);
 });

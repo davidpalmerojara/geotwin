@@ -54,7 +54,7 @@ test('a shared link to an asset opened on a fresh page ends above the LiDAR grou
     await page.goto(`/gemelo?instalacion=${installationId}&activo=${assetId}`);
     const map = page.getByTestId('cesium-view');
     await expect(map).toHaveAttribute('data-terrain', 'lidar', { timeout: 60000 });
-    await expect(page.getByRole('heading', { name: 'Sensores del activo' })).toBeVisible();
+    await expect(page.getByTestId('asset-card').getByRole('heading', { level: 2 })).toBeVisible();
     // The close-up is 650 m from the asset at 45°: about 460 m above its ground. Before the
     // terrain was taken into account the camera stayed ~300 m under the ground (h ≈ 460 m).
     const height = () =>

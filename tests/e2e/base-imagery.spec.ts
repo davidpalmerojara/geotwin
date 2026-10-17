@@ -1,10 +1,12 @@
 import { test, expect, type PnoaRequest } from './fixtures';
 import type { Page } from '@playwright/test';
+import { chooseBase, mapBase } from './hud';
 
 /*
  * The PNOA orthophoto under the clouds, with every PNOA server answered by the fixture (MOCK
- * checkerboard tiles, never the real imagery): the source probe, the on-screen credit, the
- * toggle to the offline atlas, and the fallbacks when a source is blocked, down or missing.
+ * checkerboard tiles, never the real imagery): the source probe, the on-screen credit, Capas ›
+ * Fondo (the offline atlas, the neutral ground), and the fallbacks when a source is blocked, down
+ * or missing: the next source, and the neutral ground when none is left.
  */
 // Torrelago, where the probe tile is.
 const TORRELAGO = { lng: -4.7252, lat: 41.589 };
@@ -50,10 +52,14 @@ async function frameTorrelago(page: Page, height = 700) {
 }
 
 /**
- * Share of the map's pixels in the mock tiles' magenta and violet (never in real ground). The
- * panels over the map cover part of it.
+ * Share of the scene's pixels in the mock tiles' magenta and violet (never in real ground). The
+ * plates over the scene cover part of it.
  */
 async function mockShare(page: Page) {
+  // Capas closed, so the panel does not hide part of the scene.
+  const capas = page.getByRole('button', { name: 'Capas', exact: true });
+  if ((await capas.getAttribute('aria-expanded')) === 'true') await page.keyboard.press('Escape');
+  await expect(capas).toHaveAttribute('aria-expanded', 'false');
   await page.evaluate(() =>
     (
       window as unknown as { __geotwinViewer: import('cesium').Viewer }
@@ -91,7 +97,7 @@ test('the orthophoto drapes the globe, credits the IGN and gives way to the offl
   await expect(map).toHaveAttribute('data-pnoa', 'on');
   await expect(map).toHaveAttribute('data-pnoa-source', 'idee');
   await expect(map).toHaveAttribute('data-base-imagery', 'pnoa');
-  await expect(page.locator('.map-top')).toContainText('ORTOFOTO PNOA');
+  await expect(mapBase(page)).toContainText('Ortofoto PNOA');
   // /ortho/ (no local copy here) was probed first and refused, then IDEE.
   expect(pnoa[0]).toMatchObject({ source: 'local', status: 404 });
   expect(
@@ -107,18 +113,24 @@ test('the orthophoto drapes the globe, credits the IGN and gives way to the offl
   expect(await mockShare(page)).toBeGreaterThan(0.3);
 
   // Natural Earth: the photo layer is only hidden, its credit goes and no tile is asked for.
-  const toggle = page.getByRole('button', { name: 'Alternar cartografía', exact: true });
-  await toggle.click();
+  await chooseBase(page, 'Natural Earth');
   await expect(map).toHaveAttribute('data-base-imagery', 'natural-earth');
-  await expect(page.locator('.map-top')).toContainText('ATLAS NATURAL EARTH');
+  await expect(mapBase(page)).toContainText('Atlas Natural Earth');
   await page.waitForTimeout(1500);
   const before = pnoa.length;
   await frameTorrelago(page, 450);
   expect(pnoa.length).toBe(before);
   expect(await mockShare(page)).toBeLessThan(0.01);
   await expect(credits).not.toContainText('scne.es');
+  // The neutral ground on purpose: neither the photo nor the atlas, and no tile either.
+  await chooseBase(page, 'Neutro');
+  await expect(map).toHaveAttribute('data-base-imagery', 'neutral');
+  await expect(mapBase(page)).toContainText('Fondo neutro');
+  await frameTorrelago(page, 450);
+  expect(pnoa.length).toBe(before);
+  expect(await mockShare(page)).toBeLessThan(0.01);
   // Back to the photo: the same layer, no new probe.
-  await toggle.click();
+  await chooseBase(page, 'Ortofoto PNOA');
   await expect(map).toHaveAttribute('data-base-imagery', 'pnoa');
   await frameTorrelago(page, 450);
   expect(await mockShare(page)).toBeGreaterThan(0.3);
@@ -145,20 +157,26 @@ test.describe('blocked by the browser (CORS)', () => {
 
 test.describe('every source refused or unreachable', () => {
   test.use({ pnoaMode: 'all-fail' });
-  test('says so and keeps the offline atlas', async ({ page }) => {
+  test('says so and falls back to the neutral ground, not to the atlas', async ({ page }) => {
     const map = await openTwin(page);
     await expect(map).toHaveAttribute('data-pnoa', 'error', { timeout: 30000 });
-    await expect(map).toHaveAttribute('data-base-imagery', 'natural-earth');
+    await expect(map).toHaveAttribute('data-base-imagery', 'neutral');
     await expect(page.getByTestId('map-message')).toHaveText(
-      'No se pudo cargar la ortofoto PNOA (sin conexión o bloqueada por el navegador). Se muestra el atlas local.',
+      'No se pudo cargar la ortofoto PNOA (sin conexión o bloqueada por el navegador). Se muestra el fondo neutro.',
     );
-    await expect(page.locator('.map-top')).toContainText(
-      'ATLAS NATURAL EARTH (PNOA NO DISPONIBLE)',
-    );
+    await expect(mapBase(page)).toContainText('Fondo neutro (PNOA no disponible)');
     await expect(page.locator('.cesium-widget-credits')).not.toContainText('scne.es');
-    // Choosing the atlas on purpose removes the warning.
-    await page.getByRole('button', { name: 'Alternar cartografía', exact: true }).click();
+    // Capas › Fondo says so too, next to the choice.
+    await chooseBase(page, 'Ortofoto PNOA');
+    await expect(page.getByTestId('base-failure')).toContainText('fondo neutro');
+    // Choosing a base on purpose removes the warning: the atlas, or the neutral ground.
+    await chooseBase(page, 'Natural Earth');
+    await expect(map).toHaveAttribute('data-base-imagery', 'natural-earth');
     await expect(page.getByTestId('map-message')).toBeHidden();
+    await chooseBase(page, 'Neutro');
+    await expect(map).toHaveAttribute('data-base-imagery', 'neutral');
+    await expect(page.getByTestId('map-message')).toBeHidden();
+    await expect(page.getByTestId('base-failure')).toBeHidden();
   });
 });
 
@@ -182,7 +200,7 @@ test.describe('downloaded tiles in apps/web/public/ortho', () => {
   test('are used before any server', async ({ page, pnoa }) => {
     const map = await openTwin(page);
     await expect(map).toHaveAttribute('data-pnoa-source', 'local');
-    await expect(page.locator('.map-top')).toContainText('ORTOFOTO PNOA (DESCARGADA)');
+    await expect(mapBase(page)).toContainText('Ortofoto PNOA (descargada)');
     await frameTorrelago(page);
     await expect.poll(() => deep(pnoa, 'local')).toBeGreaterThan(0);
     expect(pnoa.filter((r) => r.source !== 'local')).toEqual([]);
