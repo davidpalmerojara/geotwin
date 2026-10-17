@@ -167,8 +167,10 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
         label: entities.find((e) => e.id === 'cota:etiqueta:0:0')?.label?.text.getValue() ?? '',
       };
     });
-  await expect.poll(async () => (await dimension()).line).toBe(true);
-  await expect.poll(async () => (await dimension()).label).toBe(await distance.textContent());
+  // The label waits for its mono font; a software renderer can hold the page for seconds.
+  await expect.poll(async () => (await dimension()).line, { timeout: 30000 }).toBe(true);
+  const length = await distance.textContent();
+  await expect.poll(async () => (await dimension()).label, { timeout: 30000 }).toBe(length);
   // With the LiDAR relief on, the points can be moved onto the ground model (not a car roof).
   const snap = page.getByRole('checkbox', { name: 'Al suelo (MDT)' });
   await snap.check();
