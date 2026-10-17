@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useUI } from '../../stores/ui';
-import { useTool } from '../../stores/tool';
+import { closeProfile, useTool } from '../../stores/tool';
+import { useSection } from '../../stores/section';
 import { useScene } from '../../stores/viewer';
 import { shortcutFor, shortcutsEnabled } from './shortcuts';
 import { ACKNOWLEDGE_EVENT } from '../alerts/alert-actions';
@@ -10,8 +11,8 @@ const modalOpen = () => !!document.querySelector('[role="dialog"][data-state="op
 
 /**
  * Binds the HUD's keys: 1–5 tools, C Capas, 0 framing, N north up, / and Ctrl/⌘+K «Ir a», R
- * «Reconocer» (the open card's alerts), and
- * Esc, which closes the top-most thing: the panel, then the sheet, then the asset card.
+ * «Reconocer» (the open card's alerts), [ and ] (the profile's slab), and
+ * Esc, which closes the top-most thing: the panel, then the profile, the sheet and the asset card.
  */
 export function useShortcuts() {
   useEffect(() => {
@@ -25,6 +26,7 @@ export function useShortcuts() {
       switch (action) {
         case 'escape':
           if (tool.panel) tool.closePanel();
+          else if (tool.tool === 'profile') closeProfile();
           else if (ui.page !== 'twin') ui.setPage('twin');
           else if (ui.selectedAssetId) ui.selectAsset(null);
           else return;
@@ -45,6 +47,12 @@ export function useShortcuts() {
           break;
         case 'north':
           api?.northUp();
+          break;
+        case 'narrower':
+        case 'wider':
+          // The slab of the profile: only while Perfil is on.
+          if (tool.tool !== 'profile') return;
+          useSection.getState().widen(action === 'wider' ? 1 : -1);
           break;
         default:
           tool.setTool(action);

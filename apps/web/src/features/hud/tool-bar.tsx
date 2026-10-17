@@ -1,6 +1,8 @@
 import { useLayers } from '../../hooks/data';
 import { useLayerView } from '../../stores/layers';
-import { PENDING_TOOLS, useTool, type Tool } from '../../stores/tool';
+import { toolBlock, useTool, RELIEF_REASON, type Tool } from '../../stores/tool';
+import { useSection } from '../../stores/section';
+import { useScene } from '../../stores/viewer';
 import { Kbd } from './glyphs';
 
 const TOOLS: [Tool, string, string][] = [
@@ -12,13 +14,25 @@ const TOOLS: [Tool, string, string][] = [
 ];
 export const toolButtonId = (tool: Tool | 'layers') => `tool-${tool}`;
 
+/** Which tool keys show as on: Corte is a switch over Perfil, so both can be on. */
+function useToolState() {
+  const tool = useTool((s) => s.tool),
+    cut = useSection((s) => s.cut !== 'off'),
+    relief = useScene((s) => s.terrain === 'lidar');
+  return {
+    on: (id: Tool) => (id === 'cut' ? cut : tool === id),
+    block: (id: Tool) => toolBlock(id, relief),
+  };
+}
+
 /**
  * The tool keys (1–5) and Capas (C) under the place plate. The active tool is inverted (light
- * fill, dark text), never yellow. Perfil and Corte are shown but not usable yet, with the reason.
+ * fill, dark text), never yellow. Without the LiDAR relief Perfil and Corte are shown disabled,
+ * with the reason.
  */
 export function ToolBar() {
-  const tool = useTool((s) => s.tool),
-    panel = useTool((s) => s.panel),
+  const { on, block } = useToolState();
+  const panel = useTool((s) => s.panel),
     setTool = useTool((s) => s.setTool),
     togglePanel = useTool((s) => s.togglePanel);
   const layers = (useLayers().data ?? []).filter((l) => l.status === 'ready');
@@ -27,28 +41,28 @@ export function ToolBar() {
   return (
     <nav className="plate tool-bar" aria-label="Herramientas del visor" data-map-overlay>
       {TOOLS.map(([id, key, label]) => {
-        const pending = PENDING_TOOLS[id];
+        const blocked = block(id);
         return (
           <button
             key={id}
             id={toolButtonId(id)}
             type="button"
-            className={`soft-key ${tool === id ? 'on' : ''}`}
+            className={`soft-key ${on(id) ? 'on' : ''}`}
             aria-label={label}
-            aria-pressed={tool === id}
+            aria-pressed={on(id)}
             aria-keyshortcuts={key}
-            aria-disabled={pending ? true : undefined}
-            aria-describedby={pending ? 'pending-tools' : undefined}
-            title={pending ? `${label}: ${pending.toLowerCase()}` : `${label} (tecla ${key})`}
-            onClick={() => !pending && setTool(id)}
+            aria-disabled={blocked ? true : undefined}
+            aria-describedby={blocked ? 'blocked-tools' : undefined}
+            title={blocked ? `${label}: ${blocked}` : `${label} (tecla ${key})`}
+            onClick={() => !blocked && setTool(id)}
           >
             <Kbd>{key}</Kbd>
             <span className="soft-label">{label}</span>
           </button>
         );
       })}
-      <span id="pending-tools" hidden>
-        {PENDING_TOOLS.profile}
+      <span id="blocked-tools" hidden>
+        {RELIEF_REASON}
       </span>
       <i className="soft-sep" aria-hidden="true" />
       <button
@@ -107,15 +121,15 @@ function ToolIcon({ tool }: { tool: Tool | 'layers' }) {
  * (never yellow). There is no Radio key: the asset sheet's «Cercanos y radio» starts it.
  */
 export function PhoneToolBar() {
-  const tool = useTool((s) => s.tool),
-    panel = useTool((s) => s.panel),
+  const { on: isOn, block } = useToolState();
+  const panel = useTool((s) => s.panel),
     setTool = useTool((s) => s.setTool),
     togglePanel = useTool((s) => s.togglePanel);
   return (
     <nav className="plate phone-tools" aria-label="Herramientas del visor" data-map-overlay>
       {TOOLS.filter(([id]) => id !== 'radius').map(([id, , label]) => {
-        const pending = PENDING_TOOLS[id];
-        const on = tool === id && panel !== 'layers';
+        const blocked = block(id);
+        const on = isOn(id) && panel !== 'layers';
         return (
           <button
             key={id}
@@ -123,18 +137,18 @@ export function PhoneToolBar() {
             type="button"
             className={`phone-key ${on ? 'on' : ''}`}
             aria-pressed={on}
-            aria-disabled={pending ? true : undefined}
-            aria-describedby={pending ? 'pending-tools' : undefined}
-            title={pending ? `${label}: ${pending.toLowerCase()}` : label}
-            onClick={() => !pending && setTool(id)}
+            aria-disabled={blocked ? true : undefined}
+            aria-describedby={blocked ? 'blocked-tools' : undefined}
+            title={blocked ? `${label}: ${blocked}` : label}
+            onClick={() => !blocked && setTool(id)}
           >
             <ToolIcon tool={id} />
             {label}
           </button>
         );
       })}
-      <span id="pending-tools" hidden>
-        {PENDING_TOOLS.profile}
+      <span id="blocked-tools" hidden>
+        {RELIEF_REASON}
       </span>
       <button
         id={toolButtonId('layers')}

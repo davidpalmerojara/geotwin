@@ -120,10 +120,10 @@ test('keys 1, 2 and C work, but not while typing; Esc closes Capas and gives the
   await expect(capas).toHaveAttribute('aria-expanded', 'true');
   await page.keyboard.press('C');
   await expect(capas).toHaveAttribute('aria-expanded', 'false');
-  // Perfil and Corte are visible but not usable yet, and say why.
+  // Without LiDAR relief (no layers here) Perfil and Corte are disabled, and say why.
   const profile = page.getByRole('button', { name: 'Perfil', exact: true });
   await expect(profile).toHaveAttribute('aria-disabled', 'true');
-  await expect(profile).toHaveAttribute('title', /paso posterior/);
+  await expect(profile).toHaveAttribute('title', /Relieve del LiDAR/);
   await page.keyboard.press('3');
   await expect(orbit).toHaveAttribute('aria-pressed', 'true');
 

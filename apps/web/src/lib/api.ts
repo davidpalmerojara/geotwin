@@ -10,6 +10,7 @@ import {
   organizationSchema,
   layerSchema,
   layerLimitsSchema,
+  sectionSchema,
   type Layer,
 } from '@geotwin/shared';
 export function queryString(values: Record<string, string | number | undefined>) {
@@ -143,6 +144,23 @@ export const api = {
     }),
   layers: () => request('/layers', z.array(layerSchema)),
   layerLimits: () => request('/layers/limits', layerLimitsSchema),
+  /** Points of a layer within `half` metres of A–B (all levels of its tiles). */
+  section: (
+    id: string,
+    a: { lng: number; lat: number },
+    b: { lng: number; lat: number },
+    half: number,
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/layers/${id}/section${queryString({
+        a: `${a.lng.toFixed(7)},${a.lat.toFixed(7)}`,
+        b: `${b.lng.toFixed(7)},${b.lat.toFixed(7)}`,
+        half,
+      })}`,
+      sectionSchema,
+      { signal },
+    ),
   deleteLayer: async (id: string) => {
     const response = await fetch(`/api/layers/${id}`, { method: 'DELETE' });
     // 204 has no body; errors use the JSON error contract.
