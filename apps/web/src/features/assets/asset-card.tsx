@@ -33,6 +33,7 @@ import { useTool } from '../../stores/tool';
 import { useScene } from '../../stores/viewer';
 import { usePhone } from '../../hooks/media';
 import { BottomSheet, useSnap } from '../hud/bottom-sheet';
+import { RadiusList, RadiusSelect } from '../hud/radius-panel';
 
 /** The asset card: closed when nothing is selected. */
 export function AssetCard() {
@@ -142,6 +143,10 @@ function AssetCardBody({ id }: { id: string }) {
   const select = useUI((s) => s.selectAsset),
     setPage = useUI((s) => s.setPage);
   const setTool = useTool((s) => s.setTool);
+  // Radio around this asset: its result goes under «Cercanos».
+  const nearbyResult = useTool((s) =>
+    s.tool === 'radius' && s.radius && !s.radiusPoint ? s.radius : null,
+  );
   const lidar = useScene((s) => s.lidar);
   const [sensorId, setSensorId] = useState(''),
     [incident, setIncident] = useState<Alert | null>(null),
@@ -499,11 +504,27 @@ function AssetCardBody({ id }: { id: string }) {
         <h3 id="card-nearby">
           {phone ? 'Cercanos y radio' : 'Cercanos'} <span className="r">ST_DWithin · PostGIS</span>
         </h3>
-        <div className="row">
-          <button type="button" className="btn" onClick={() => setTool('radius')}>
-            Activos a menos de… {!phone && <Kbd>5</Kbd>}
-          </button>
-        </div>
+        {nearbyResult ? (
+          <>
+            <div className="row">
+              <label className="field-inline">
+                Activos a menos de
+                <RadiusSelect label="Activos a menos de" />
+              </label>
+            </div>
+            {nearbyResult.items.length ? (
+              <RadiusList items={nearbyResult.items} />
+            ) : (
+              <p className="card-note">Ningún activo dentro del radio.</p>
+            )}
+          </>
+        ) : (
+          <div className="row">
+            <button type="button" className="btn" onClick={() => setTool('radius')}>
+              Activos a menos de… {!phone && <Kbd>5</Kbd>}
+            </button>
+          </div>
+        )}
       </section>
       {health.data?.demo_mode && (
         <section className="card-sec" ref={labRef} aria-labelledby="card-lab">
