@@ -207,6 +207,68 @@ function AssetCardBody({ id }: { id: string }) {
       }),
     );
   };
+  const incidents = (
+    <section className="card-sec" aria-labelledby="card-incidents">
+      <h3 id="card-incidents">
+        Incidencias activas <span className="r num">{alerts.data?.length ?? '—'}</span>
+      </h3>
+      {alerts.isError ? (
+        <ErrorState error={alerts.error} />
+      ) : alerts.data?.length ? (
+        alerts.data.map((al) => (
+          <div className={`incident incident-${al.severity}`} key={al.id}>
+            <button type="button" className="incident-open" onClick={() => setIncident(al)}>
+              <Glyph status={al.severity} />
+              <span>
+                <strong>{al.severity === 'critical' ? 'Alerta crítica' : 'Advertencia'}</strong>
+                <span className="incident-msg">{al.message}</span>
+                <span className="incident-meta">
+                  desde las {time(al.triggered_at)} ·{' '}
+                  {al.source === 'telemetry' ? 'telemetría simulada' : 'registro manual'}
+                </span>
+              </span>
+              <ChevronRight size={14} aria-hidden="true" />
+            </button>
+            <div className="row incident-acts">
+              {al.acknowledged_at ? (
+                <span className="incident-ack num" data-testid="acknowledged">
+                  reconocida a las {time(al.acknowledged_at)}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={acknowledge.isPending}
+                  onClick={() => acknowledge.mutate([al.id])}
+                  title="Marca la alerta como vista: el pulso se apaga y el haz sigue hasta resolverla"
+                >
+                  Reconocer {!phone && <Kbd>R</Kbd>}
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn"
+                disabled={resolve.isPending}
+                onClick={() => resolve.mutate(al.id)}
+              >
+                Resolver
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={() => setPage('alerts')}>
+                Ver en Alertas
+              </button>
+            </div>
+            {(acknowledge.isError || resolve.isError) && (
+              <p role="alert" className="form-error">
+                {(acknowledge.error ?? resolve.error)?.message}
+              </p>
+            )}
+          </div>
+        ))
+      ) : (
+        <p className="quiet">Sin incidencias activas.</p>
+      )}
+    </section>
+  );
   const content = a && (
     <>
       <header className="card-top">
@@ -334,6 +396,8 @@ function AssetCardBody({ id }: { id: string }) {
           </div>
         </>
       )}
+      {/* An active alert goes first, where «Reconocer» and «Resolver» are in reach. */}
+      {alerts.data?.length ? incidents : null}
       <section className="card-sec" ref={historyRef} aria-labelledby="card-history">
         <h3 id="card-history" tabIndex={-1}>
           Histórico
@@ -430,66 +494,7 @@ function AssetCardBody({ id }: { id: string }) {
           </p>
         )}
       </section>
-      <section className="card-sec" aria-labelledby="card-incidents">
-        <h3 id="card-incidents">
-          Incidencias activas <span className="r num">{alerts.data?.length ?? '—'}</span>
-        </h3>
-        {alerts.isError ? (
-          <ErrorState error={alerts.error} />
-        ) : alerts.data?.length ? (
-          alerts.data.map((al) => (
-            <div className={`incident incident-${al.severity}`} key={al.id}>
-              <button type="button" className="incident-open" onClick={() => setIncident(al)}>
-                <Glyph status={al.severity} />
-                <span>
-                  <strong>{al.severity === 'critical' ? 'Alerta crítica' : 'Advertencia'}</strong>
-                  <span className="incident-msg">{al.message}</span>
-                  <span className="incident-meta">
-                    desde las {time(al.triggered_at)} ·{' '}
-                    {al.source === 'telemetry' ? 'telemetría simulada' : 'registro manual'}
-                  </span>
-                </span>
-                <ChevronRight size={14} aria-hidden="true" />
-              </button>
-              <div className="row incident-acts">
-                {al.acknowledged_at ? (
-                  <span className="incident-ack num" data-testid="acknowledged">
-                    reconocida a las {time(al.acknowledged_at)}
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={acknowledge.isPending}
-                    onClick={() => acknowledge.mutate([al.id])}
-                    title="Marca la alerta como vista: el pulso se apaga y el haz sigue hasta resolverla"
-                  >
-                    Reconocer {!phone && <Kbd>R</Kbd>}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={resolve.isPending}
-                  onClick={() => resolve.mutate(al.id)}
-                >
-                  Resolver
-                </button>
-                <button type="button" className="btn btn-ghost" onClick={() => setPage('alerts')}>
-                  Ver en Alertas
-                </button>
-              </div>
-              {(acknowledge.isError || resolve.isError) && (
-                <p role="alert" className="form-error">
-                  {(acknowledge.error ?? resolve.error)?.message}
-                </p>
-              )}
-            </div>
-          ))
-        ) : (
-          <p className="quiet">Sin incidencias activas.</p>
-        )}
-      </section>
+      {alerts.data?.length ? null : incidents}
       <section className="card-sec" aria-labelledby="card-nearby">
         <h3 id="card-nearby">
           {phone ? 'Cercanos y radio' : 'Cercanos'} <span className="r">ST_DWithin · PostGIS</span>
