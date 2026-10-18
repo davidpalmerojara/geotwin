@@ -294,7 +294,11 @@ export class DimensionLabels {
   /** Boxes of the labels as last placed. */
   boxes: Box[] = [];
   private readonly off: () => void;
-  constructor(private readonly scene: Scene) {
+  /** `obstacles`: other things drawn in the scene the labels keep off (canvas px). */
+  constructor(
+    private readonly scene: Scene,
+    private readonly obstacles: () => Box[] = () => [],
+  ) {
     this.off = scene.postRender.addEventListener(() => this.place());
     layouts.add(this);
   }
@@ -335,7 +339,10 @@ export class DimensionLabels {
         },
       });
     }
-    const places = layoutLabels(shown.map((s) => s.item));
+    const places = layoutLabels(
+      shown.map((s) => s.item),
+      this.obstacles(),
+    );
     this.boxes = places.map((place, i) => labelBox(shown[i]!.item, place));
     let changed = false;
     places.forEach((place, i) => {

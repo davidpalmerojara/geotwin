@@ -87,8 +87,9 @@ export function labelBox(item: LabelItem, place: LabelPlace, width?: number): Bo
 }
 
 /** Where each label goes, in the given order (earlier labels keep their place). */
-export function layoutLabels(items: LabelItem[]): LabelPlace[] {
-  const placed: Box[] = [];
+export function layoutLabels(items: LabelItem[], blocked: Box[] = []): LabelPlace[] {
+  // What the labels keep clear of besides each other (Perfil's A and B markers).
+  const placed: Box[] = [...blocked];
   return items.map((item) => {
     const base = (width: number) => {
       if (item.side === 'center' && item.segment)

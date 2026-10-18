@@ -76,7 +76,8 @@ export class ProfileScene {
   ) {
     this.added = viewer.dataSources.add(this.source);
     const scene = viewer.scene;
-    this.labels = new DimensionLabels(scene);
+    // The heights' labels keep off the A and B markers (their point and letter).
+    this.labels = new DimensionLabels(scene, () => this.markerBoxes());
     this.handler = new ScreenSpaceEventHandler(scene.canvas);
     this.handler.setInputAction(
       (e: { position: Cartesian2 }) => this.press(e.position),
@@ -182,6 +183,17 @@ export class ProfileScene {
     this.view = view;
     this.preview = view.a && !view.b ? this.preview : null;
     this.draw();
+  }
+
+  /** Screen boxes (canvas px) of the A and B markers: the dot and the letter on its left. */
+  private markerBoxes() {
+    const { a, b } = this.view;
+    return [a, b].flatMap((p) => {
+      if (!p || this.viewer.isDestroyed()) return [];
+      const at = SceneTransforms.worldToWindowCoordinates(this.viewer.scene, this.position(p, 0.3));
+      // «A» in 12 px mono with 5 px padding, right-aligned 10 px left of the 8 px dot.
+      return at ? [{ left: at.x - 31, right: at.x + 6, top: at.y - 11, bottom: at.y + 11 }] : [];
+    });
   }
 
   private position(p: LngLat, above = 0) {

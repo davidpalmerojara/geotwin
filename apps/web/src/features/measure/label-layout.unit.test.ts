@@ -30,6 +30,17 @@ describe('dimension label layout', () => {
     const [p] = layoutLabels([{ x: 300, y: 400, ...size, side: 'right' }]);
     expect(p).toEqual({ dx: SIDE_GAP, dy: 0, compact: false });
   });
+  it('keeps off the A and B markers (a short profile across the south tower)', () => {
+    // E3 beside a building right next to B: its natural place covers the B marker.
+    const e3 = { x: 600, y: 400, ...labelSize('E3 · 3,5 m'), side: 'right' as const };
+    const item = { ...e3, shortWidth: labelSize('E3').width };
+    const marker = { left: 640, right: 677, top: 389, bottom: 411 };
+    const [free] = layoutLabels([item]);
+    expect(overlap(box(item, free!), marker)).toBe(true);
+    const [p] = layoutLabels([item], [marker]);
+    expect(p!.dy).not.toBe(0);
+    expect(overlap(box(item, p!), marker)).toBe(false);
+  });
   it('steps a label that would land on another (Torrelago: E3 and E4 side by side)', () => {
     const e3 = { x: 600, y: 420, ...labelSize('E3 · 38,0 m'), side: 'right' as const };
     const e4 = { x: 640, y: 424, ...labelSize('E4 · 36,8 m'), side: 'right' as const };
