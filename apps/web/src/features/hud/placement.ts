@@ -57,8 +57,11 @@ export interface CardInput {
   dockTop: number;
   /** Lowest the card's bottom may go (above the credits). */
   bottom: number;
-  /** Points the floating card should leave in sight (Radio's results on screen). */
-  keep?: Point[];
+  /**
+   * What the floating card should leave in sight: points (Radio's results on screen, with
+   * KEEP_PAD around them) and boxes (their distance labels, with GAP around them).
+   */
+  keep?: (Point | Box)[];
 }
 /** Clearance around each point the card keeps in sight (its mark and distance label). */
 const KEEP_PAD = 28;
@@ -106,11 +109,13 @@ export function placeCard({
     for (const top of tops) {
       const box = boxOf(left, top, card);
       if (intersects(box, asset) || obstacles.some((o) => intersects(box, o, GAP - 1))) continue;
-      const covers = (k: Point) =>
-        k.x > box.left - KEEP_PAD &&
-        k.x < box.right + KEEP_PAD &&
-        k.y > box.top - KEEP_PAD &&
-        k.y < box.bottom + KEEP_PAD;
+      const covers = (k: Point | Box) =>
+        'x' in k
+          ? k.x > box.left - KEEP_PAD &&
+            k.x < box.right + KEEP_PAD &&
+            k.y > box.top - KEEP_PAD &&
+            k.y < box.bottom + KEEP_PAD
+          : intersects(box, k, GAP);
       if (keep.some(covers)) continue;
       const edge = side === 'right' ? left : left + card.width;
       return {
@@ -230,6 +235,26 @@ export function outOfSight(at: Point | null, viewport: Size, plates: Box[], pad 
       at.y >= b.top - pad &&
       at.y <= b.bottom + pad,
   );
+}
+
+/**
+ * How much of a box (a tag, a label) can be seen: the share of it, from 0 to 1, that is on screen
+ * and under no plate. Sampled on a grid, so plates that overlap each other are not counted twice.
+ */
+export function shownShare(box: Box, viewport: Size, plates: Box[], columns = 8, rows = 3) {
+  const width = box.right - box.left,
+    height = box.bottom - box.top;
+  if (width <= 0 || height <= 0) return 0;
+  let seen = 0;
+  for (let i = 0; i < columns; i++)
+    for (let j = 0; j < rows; j++) {
+      const x = box.left + ((i + 0.5) * width) / columns,
+        y = box.top + ((j + 0.5) * height) / rows;
+      if (x < 0 || y < 0 || x > viewport.width || y > viewport.height) continue;
+      if (plates.some((b) => x >= b.left && x <= b.right && y >= b.top && y <= b.bottom)) continue;
+      seen++;
+    }
+  return seen / (columns * rows);
 }
 
 /** Most edge chips shown at once; the rest are counted in a «+n» chip that shows them all. */

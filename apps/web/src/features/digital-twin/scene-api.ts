@@ -15,6 +15,7 @@ import {
 } from 'cesium';
 import { flightSeconds } from '../../lib/motion';
 import type { GeoPoint, SceneApi } from '../../stores/viewer';
+import type { ScreenBox } from './camera';
 
 const geo = (c: Cartographic): GeoPoint => ({
   lng: CesiumMath.toDegrees(c.longitude),
@@ -26,6 +27,7 @@ export function createSceneApi(
   v: Viewer,
   actions: {
     ground: (lng: number, lat: number) => number;
+    labelBox: (installationId: string) => ScreenBox | null;
     home: () => void;
     togglePhotoreal: () => void;
     toggleBuildings: () => void;
@@ -120,6 +122,17 @@ export function createSceneApi(
       };
     },
     groundAt: actions.ground,
+    labelBox: (id) => {
+      const box = actions.labelBox(id);
+      if (!box) return null;
+      const rect = scene.canvas.getBoundingClientRect();
+      return {
+        left: rect.left + box.left,
+        right: rect.left + box.right,
+        top: rect.top + box.top,
+        bottom: rect.top + box.bottom,
+      };
+    },
     zoom: (direction) => {
       const amount = camera.positionCartographic.height * 0.4;
       if (direction > 0) camera.zoomIn(amount);

@@ -10,8 +10,10 @@ import {
   placeChips,
   placeCard,
   separate,
+  shownShare,
   type Box,
 } from './placement';
+import { distanceLabelBox } from '../section/radius-label';
 
 const viewport = { width: 1440, height: 900 };
 const card = { width: 372, height: 520 };
@@ -87,6 +89,20 @@ describe('asset card placement', () => {
       ],
     });
     expect(both.mode).toBe('dock');
+  });
+  it('leaves a result’s distance label in sight, not only its point', () => {
+    const free = placeCard({ ...base, anchor: { x: 500, y: 300 } });
+    expect(free.mode).toBe('float');
+    // A result 40 px left of where the card would float: the point alone is clear of the card
+    // with its 28 px, but its label («65 m», to the right of it) would be under the card's edge.
+    const result = { x: free.left - 40, y: free.top + 200 };
+    const label = distanceLabelBox(result, 65);
+    expect(label.right).toBeGreaterThan(free.left);
+    expect(placeCard({ ...base, anchor: { x: 500, y: 300 }, keep: [result] })).toEqual(free);
+    const p = placeCard({ ...base, anchor: { x: 500, y: 300 }, keep: [result, label] });
+    const box = { left: p.left, top: p.top, right: p.left + 372, bottom: p.top + 520 };
+    expect(p).not.toEqual(free);
+    if (p.mode === 'float') expect(intersects(box, label)).toBe(false);
   });
   it('docks to the right when there is no room, off screen or on a narrow screen', () => {
     const tall = placeCard({
@@ -171,6 +187,27 @@ describe('edge chips', () => {
     expect(outOfSight({ x: -20, y: 300 }, viewport, plates)).toBe(true);
     expect(outOfSight({ x: 700, y: 950 }, viewport, plates)).toBe(true);
     expect(outOfSight(null, viewport, plates)).toBe(true);
+  });
+  it('measures how much of a tag or label shows, so one in sight needs no chip', () => {
+    const viewport = { width: 1440, height: 900 };
+    const annunciator: Box = { left: 12, top: 12, right: 900, bottom: 52 };
+    // A tag just below the annunciator: its mark's centre may sit on the plate's edge, but the
+    // tag itself shows whole.
+    expect(
+      shownShare({ left: 600, top: 56, right: 700, bottom: 76 }, viewport, [annunciator]),
+    ).toBe(1);
+    // Half under the plate.
+    expect(
+      shownShare({ left: 600, top: 42, right: 700, bottom: 62 }, viewport, [annunciator]),
+    ).toBeCloseTo(1 / 3, 5);
+    // Under two plates that overlap each other: counted once, nothing shows.
+    const panel: Box = { left: 500, top: 30, right: 800, bottom: 300 };
+    expect(
+      shownShare({ left: 600, top: 20, right: 700, bottom: 40 }, viewport, [annunciator, panel]),
+    ).toBe(0);
+    // Half off the screen.
+    expect(shownShare({ left: 1400, top: 400, right: 1480, bottom: 420 }, viewport, [])).toBe(0.5);
+    expect(shownShare({ left: 10, top: 10, right: 10, bottom: 30 }, viewport, [])).toBe(0);
   });
   it('shows the most urgent chips first and counts the rest', () => {
     const chips = [

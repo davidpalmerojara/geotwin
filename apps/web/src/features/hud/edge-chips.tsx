@@ -17,6 +17,7 @@ import {
   outOfSight,
   pickChips,
   placeChips,
+  shownShare,
   type Box,
   type EdgeChip,
 } from './placement';
@@ -55,16 +56,31 @@ const rankOf = (c: Chip) =>
 const widthOf = (name: string) => Math.min(300, Math.round(name.length * 6.3 + 104));
 const km = (m: number) => (m >= 1000 ? `${number(m / 1000, 1)} km` : formatMetres(m, 0));
 
+/** Share of a tag or label that must show for its target to count as in sight. */
+const SHOWN = 0.5;
+
+/** The box of an asset's tag in the scene, while it is drawn. */
+function tagBox(id: string) {
+  const tag = document.querySelector<HTMLElement>(`.scene-tag[data-asset="${id}"]`);
+  if (!tag || tag.style.display === 'none') return null;
+  const box = tag.getBoundingClientRect();
+  return box.width > 0 && box.height > 0 ? box : null;
+}
+
 /**
  * Installations (assets in alert, and Radio's results) that are out of sight (off the screen,
  * behind the camera or under a plate) become chips on the edge of the free part of the scene,
  * pointing at them, with the compass bearing and the distance from the centre of the view. One
- * that is visible between the plates keeps only its mark and tag. At most MAX_CHIPS show, the
+ * that is visible between the plates keeps only its mark and tag: so does one whose mark is at
+ * a plate's edge while its tag (or the installation's label) shows. At most MAX_CHIPS show, the
  * most urgent first; a «+n» chip shows the rest. A click flies there.
  */
 export function EdgeChips() {
   const api = useScene((s) => s.api),
-    relief = useScene((s) => s.relief);
+    relief = useScene((s) => s.relief),
+    // The ground arriving moves every mark without a camera move.
+    terrain = useScene((s) => s.terrain),
+    lidar = useScene((s) => s.lidar);
   const installations = useInstallations().data,
     assets = useAssets().data;
   const setInstallation = useUI((s) => s.setInstallation),
@@ -125,6 +141,8 @@ export function EdgeChips() {
         const h = api.groundAt(t.lng, t.lat) + (relief ? t.mount : 0);
         const at = api.project(t.lng, t.lat, h);
         if (!outOfSight(at, { width, height }, plates)) continue;
+        const label = t.kind === 'asset' ? tagBox(t.id) : api.labelBox(t.id);
+        if (label && shownShare(label, { width, height }, plates) >= SHOWN) continue;
         const origin = from ?? { lng: t.lng, lat: t.lat };
         const deg = bearing(origin, t);
         const size = { width: widthOf(t.name), height: CHIP_H };
@@ -166,19 +184,38 @@ export function EdgeChips() {
     schedule();
     const off = api.onCamera(schedule);
     window.addEventListener('resize', schedule);
-    // Panels opening and closing change the free area without a camera move.
+    // Panels opening and closing, and plates growing or settling (a list loading in Capas, a
+    // card docking), change the free area without a camera move.
+    const sizes = new ResizeObserver(schedule);
+    const watch = () => {
+      sizes.disconnect();
+      for (const plate of document.querySelectorAll('[data-map-overlay]')) sizes.observe(plate);
+    };
+    watch();
     const observer = new MutationObserver((records) => {
-      if (records.some((r) => !(r.target as Element).closest?.('.edge-chips'))) schedule();
+      if (records.some((r) => !(r.target as Element).closest?.('.edge-chips'))) {
+        watch();
+        schedule();
+      }
     });
     const hud = document.querySelector('.hud');
     if (hud) observer.observe(hud, { childList: true, subtree: true, attributes: false });
+    // Tags settle a moment after the camera stops (their layout runs after the frame).
+    let late: ReturnType<typeof setTimeout> | undefined;
+    const settle = api.onCamera(() => {
+      clearTimeout(late);
+      late = setTimeout(schedule, 300);
+    });
     return () => {
       off();
+      settle();
+      clearTimeout(late);
+      sizes.disconnect();
       observer.disconnect();
       window.removeEventListener('resize', schedule);
       cancelAnimationFrame(frame);
     };
-  }, [api, installations, assets, relief, hits, all]);
+  }, [api, installations, assets, relief, terrain, lidar, hits, all]);
   return (
     <div className="edge-chips">
       {chips.map((c) => (
@@ -200,7 +237,8 @@ export function EdgeChips() {
             aria-hidden="true"
             className="edge-arrow"
           >
-            <path d="M0,-5 L4.5,4 L0,2 L-4.5,4 Z" transform={`rotate(${c.angle})`} />
+            {/* An arrow with a shaft: its tip reads the same at any angle, even at 12 px. */}
+            <path d="M0,5V-4M-3.6,-0.6L0,-4.6L3.6,-0.6" transform={`rotate(${c.angle})`} />
           </svg>
           {c.target.status && <Glyph status={c.target.status} />}
           <span className="edge-name">{c.target.name}</span>

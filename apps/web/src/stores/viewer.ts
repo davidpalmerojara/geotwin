@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Viewer } from 'cesium';
 import type { LidarTerrain } from '../features/layers/lidar-terrain';
+import type { ScreenBox } from '../features/digital-twin/camera';
 
 /**
  * The 3D viewer, published for the HUD plates. The plates never import Cesium (it stays in the
@@ -46,6 +47,8 @@ export interface SceneApi {
   pickSurface: (x: number, y: number) => { point: GeoPoint; cloud: boolean } | null;
   /** Ellipsoidal height of the scene's ground under a point, as the viewer draws it. */
   groundAt: (lng: number, lat: number) => number;
+  /** Page box of an installation's label as last drawn; null while it is hidden. */
+  labelBox: (installationId: string) => ScreenBox | null;
   zoom: (direction: 1 | -1) => void;
   northUp: () => void;
   /** «Encuadre inicial»: the selected installation, or the whole network. */

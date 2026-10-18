@@ -1810,7 +1810,11 @@ progress::-moz-progress-bar {
   color: var(--fg-1);
 }
 .edge-arrow path {
-  fill: var(--sig);
+  fill: none;
+  stroke: var(--sig);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .edge-name {
   overflow: hidden;

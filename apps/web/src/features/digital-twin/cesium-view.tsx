@@ -442,6 +442,8 @@ function CesiumView({
     v.scene.requestRender();
   }, [assets, installations, ready, relief, photorealOn]);
   const labelBoxes = useRef<ScreenBox[]>([]);
+  // The same boxes by installation (canvas pixels): the edge chips leave out what is labelled.
+  const labelById = useRef(new Map<string, ScreenBox>());
   // Installation labels: placed after every render so they neither overlap each other nor hide
   // under the plates of the HUD.
   useEffect(() => {
@@ -525,12 +527,15 @@ function CesiumView({
           changed = true;
         }
       }
+      labelById.current = new Map();
       const boxes = anchors.flatMap((a) => {
         const o = placement.get(a.id);
         if (!o) return [];
         const left = a.x + o.x - a.width / 2,
           top = a.y + o.y - a.height / 2;
-        return [{ left, right: left + a.width, top, bottom: top + a.height }];
+        const box = { left, right: left + a.width, top, bottom: top + a.height };
+        labelById.current.set(a.id, box);
+        return [box];
       });
       // The asset tags keep clear of these labels.
       labelBoxes.current = boxes;
@@ -899,6 +904,7 @@ function CesiumView({
     useScene.getState().set({
       api: createSceneApi(v, {
         ground: (lng, lat) => groundRef.current(lng, lat),
+        labelBox: (id) => labelById.current.get(id) ?? null,
         home: () => flyToPoints(v, actions.current.framePoints, 1, groundRef.current),
         togglePhotoreal: () => void actions.current.togglePhotoreal(),
         toggleBuildings: () => void actions.current.toggleBuildings(),
