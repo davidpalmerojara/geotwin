@@ -287,7 +287,9 @@ export class ProfileScene {
             }),
           },
         });
-        // The buildings' heights as dimension lines, with E1… and the value.
+        // The buildings' heights as dimension lines, with E1… and the value. On a narrow screen
+        // (a phone) the labels say only E1…, which fit side by side: the sheet lists the values.
+        const compact = this.viewer.canvas.clientWidth < 640;
         const dims: Dimension[] = summary.buildings.map((building) => {
           const p = fromLine(line, building.at);
           const foot = Cartesian3.fromDegrees(p.lng, p.lat, building.ground + n);
@@ -303,7 +305,9 @@ export class ProfileScene {
             labels: [
               {
                 at: Cartesian3.midpoint(foot, roof, new Cartesian3()),
-                text: `${building.label} · ${number(building.height, 1)} m`,
+                text: compact
+                  ? building.label
+                  : `${building.label} · ${number(building.height, 1)} m`,
                 side: 'right',
               },
             ],

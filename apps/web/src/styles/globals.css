@@ -3204,8 +3204,10 @@ table.data {
 .profile-sheet .pd-body {
   flex-direction: column;
 }
+/* At 1:1 a profile a few hundred metres long needs little height: 150 px keeps the axis in sight
+   in a 50 % sheet on a 844 px tall phone, with the readings below. */
 .profile-sheet .pd-plot {
-  min-height: 190px;
+  min-height: 150px;
 }
 .profile-sheet .pd-side {
   width: auto;
