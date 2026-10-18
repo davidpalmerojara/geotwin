@@ -15,7 +15,14 @@ import {
 import type { Alert, Asset, Sensor } from '@geotwin/shared';
 import { api } from '../../lib/api';
 import { time } from '../../lib/utils';
-import { useAlerts, useHealth, useInstallations, useLayers, useSync } from '../../hooks/data';
+import {
+  useAlerts,
+  useAssets,
+  useHealth,
+  useInstallations,
+  useLayers,
+  useSync,
+} from '../../hooks/data';
 import {
   assetTypeLabel,
   axisTick,
@@ -33,6 +40,7 @@ import { sensorLevel } from '../scene/tag-data';
 import { Glyph, Kbd, Sim, StatusWord } from '../hud/glyphs';
 import { formatLatLon, formatMetres, formatUtm, geoidAt } from '../hud/readout';
 import { placeCard, MARGIN, GAP } from '../hud/placement';
+import { distanceLabelBox } from '../section/radius-label';
 import { focusScene, overlayBoxes } from '../hud/dom';
 import { measuredGround } from '../layers/lidar-terrain';
 import { useUI } from '../../stores/ui';
@@ -51,14 +59,20 @@ export function AssetCard() {
 const levelOf = (s: Sensor) => sensorLevel(s);
 
 /** Radio's results on screen (other than the selected asset): the card leaves them in sight. */
-function radiusKeep(sceneApi: SceneApi | null) {
+function radiusKeep(sceneApi: SceneApi | null, mounts: Map<string, number>) {
   const { radius, tool } = useTool.getState();
   if (!sceneApi || !radius || tool !== 'radius') return [];
   const selected = useUI.getState().selectedAssetId;
   return radius.items.flatMap((item) => {
     if (item.id === selected) return [];
-    const p = sceneApi.project(item.lng, item.lat, sceneApi.groundAt(item.lng, item.lat));
-    return p ? [{ x: p.x, y: p.y }] : [];
+    const ground = sceneApi.groundAt(item.lng, item.lat);
+    const p = sceneApi.project(item.lng, item.lat, ground);
+    // The leader ends (and its distance label hangs) at the asset's mounting height.
+    const end = sceneApi.project(item.lng, item.lat, ground + (mounts.get(item.id) ?? 0) + 1);
+    return [
+      ...(p ? [{ x: p.x, y: p.y }] : []),
+      ...(end ? [{ x: end.x, y: end.y }, distanceLabelBox(end, item.distance_m)] : []),
+    ];
   });
 }
 
@@ -74,6 +88,12 @@ function usePlacement(
 ) {
   const sceneApi = useScene((s) => s.api),
     relief = useScene((s) => s.relief);
+  // Mounting heights by asset, for Radio's leaders and labels (read when placing, not a dependency).
+  const assets = useAssets().data;
+  const mounts = useRef(new Map<string, number>());
+  useEffect(() => {
+    mounts.current = new Map((assets ?? []).map((a) => [a.id, a.mount_height_m]));
+  }, [assets]);
   useLayoutEffect(() => {
     const element = card.current;
     // On a phone the card is a bottom sheet: nothing to place.
@@ -105,7 +125,7 @@ function usePlacement(
         obstacles: overlayBoxes(document, element),
         dockTop,
         bottom,
-        keep: radiusKeep(sceneApi),
+        keep: radiusKeep(sceneApi, mounts.current),
       });
       if (placement.mode === 'dock')
         element.style.maxHeight = `${Math.max(160, bottom - dockTop)}px`;

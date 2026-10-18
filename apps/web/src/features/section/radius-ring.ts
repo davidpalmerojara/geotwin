@@ -27,6 +27,7 @@ import { number } from '../../lib/format';
 import { metresPerDegree } from './section-math';
 import { renderUntil } from '../measure/render-until';
 import { overlayBoxes } from '../hud/dom';
+import { DISTANCE_OFFSET, DISTANCE_PAD, distanceText } from './radius-label';
 
 /** Pixels between the ring and the bottom of its label. */
 const LABEL_LIFT = 6;
@@ -60,21 +61,57 @@ interface Box {
   right: number;
   bottom: number;
 }
+type Screen = { x: number; y: number } | null;
+
+/** Whether the segment a–b crosses the box (Liang–Barsky clipping). */
+export function segmentHitsBox(a: { x: number; y: number }, b: { x: number; y: number }, box: Box) {
+  const dx = b.x - a.x,
+    dy = b.y - a.y;
+  let t0 = 0,
+    t1 = 1;
+  const edges: [number, number][] = [
+    [-dx, a.x - box.left],
+    [dx, box.right - a.x],
+    [-dy, a.y - box.top],
+    [dy, box.bottom - a.y],
+  ];
+  for (const [p, q] of edges) {
+    if (p === 0) {
+      if (q < 0) return false;
+      continue;
+    }
+    const t = q / p;
+    if (p < 0) t0 = Math.max(t0, t);
+    else t1 = Math.min(t1, t);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
 /**
- * Where the radius label goes on the ring: of the candidate points (screen positions, or null
- * when behind the camera), the one nearest the bottom of the view (towards the viewer) whose label
- * box stays inside the view and clear of the plates; if none is clear, the lowest one inside the
- * view. Returns the index, or -1 when no point is on screen.
+ * Where the radius label goes on the ring: of the candidate points (box centres on screen, or
+ * null when behind the camera), the one nearest the bottom of the view (towards the viewer) whose
+ * label box stays inside the view, clear of the plates and of the ring's own dashes (`path`, the
+ * ring on screen: where the ring runs steeply on screen a box centred above it would be crossed by
+ * it). Failing that, one clear of the plates only; failing that, the lowest inside the view.
+ * Returns the index, or -1 when no point is on screen.
  */
 export function labelSpot(
-  points: ({ x: number; y: number } | null)[],
+  points: Screen[],
   label: { width: number; height: number },
   view: { width: number; height: number },
   plates: Box[],
   margin = 8,
+  path: Screen[] = [],
 ) {
   let best = -1,
+    plain = -1,
     fallback = -1;
+  const crossed = (box: Box) =>
+    path.some((p, i) => {
+      const q = path[i + 1];
+      return !!p && !!q && segmentHitsBox(p, q, box);
+    });
   points.forEach((p, i) => {
     if (!p) return;
     const box = {
@@ -97,9 +134,11 @@ export function labelSpot(
         box.bottom + margin <= r.top ||
         box.top - margin >= r.bottom,
     );
-    if (clear && (best < 0 || p.y > points[best]!.y)) best = i;
+    if (!clear) return;
+    if (plain < 0 || p.y > points[plain]!.y) plain = i;
+    if (!crossed(box) && (best < 0 || p.y > points[best]!.y)) best = i;
   });
-  return best >= 0 ? best : fallback;
+  return best >= 0 ? best : plain >= 0 ? plain : fallback;
 }
 
 export const radiusText = (metres: number, count: number) =>
@@ -157,6 +196,14 @@ export class RadiusRing {
       const w = SceneTransforms.worldToWindowCoordinates(viewer.scene, p);
       return w ? { x: w.x, y: w.y - LABEL_LIFT - 12 } : null;
     });
+    // The ring itself on screen (a point every 2,5°), which the label must not sit across.
+    const path = circle(view.center, view.metres, 144).map((p) => {
+      const w = SceneTransforms.worldToWindowCoordinates(
+        viewer.scene,
+        Cartesian3.fromDegrees(p.lng, p.lat, this.ground(p.lng, p.lat) + 0.5),
+      );
+      return w ? { x: w.x, y: w.y } : null;
+    });
     const text = radiusText(view.metres, view.items.length);
     const plates = overlayBoxes(document).map((r) => ({
       left: r.left - frame.left,
@@ -169,6 +216,8 @@ export class RadiusRing {
       { width: text.length * 7.3 + 14, height: 24 },
       { width: canvas.clientWidth, height: canvas.clientHeight },
       plates,
+      8,
+      path,
     );
     if (i < 0) return;
     label.position = new ConstantPositionProperty(positions[i]);
@@ -262,16 +311,16 @@ export class RadiusRing {
           id: `radio:distancia:${item.id}`,
           position: end,
           label: {
-            text: `${number(item.distance_m, 0)} m`,
+            text: distanceText(item.distance_m),
             font: '500 11px "IBM Plex Mono", monospace',
             fillColor: FG,
             style: LabelStyle.FILL,
             showBackground: true,
             backgroundColor: INK,
-            backgroundPadding: new Cartesian2(5, 2),
+            backgroundPadding: new Cartesian2(DISTANCE_PAD.x, DISTANCE_PAD.y),
             horizontalOrigin: HorizontalOrigin.LEFT,
             verticalOrigin: VerticalOrigin.BOTTOM,
-            pixelOffset: new Cartesian2(10, -10),
+            pixelOffset: new Cartesian2(DISTANCE_OFFSET.x, DISTANCE_OFFSET.y),
             disableDepthTestDistance: Number.POSITIVE_INFINITY,
           },
         });
