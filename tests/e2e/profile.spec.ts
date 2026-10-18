@@ -194,6 +194,30 @@ test('Perfil A–B, Corte and Radio on a synthetic layer', async ({ page, reques
     expect(values[0]).toBeLessThan(7.5);
     expect(values[1]).toBeGreaterThan(9);
     expect(values[1]).toBeLessThan(11.5);
+    // How the heights are taken is said under the heading, inside the drawer however many
+    // buildings the line crosses.
+    const note = drawer.getByTestId('profile-heights-note');
+    await expect(note).toContainText('percentil 95');
+    const [noteBox, drawerBox] = [(await note.boundingBox())!, (await drawer.boundingBox())!];
+    expect(noteBox.y + noteBox.height).toBeLessThanOrEqual(drawerBox.y + drawerBox.height);
+    // In the scene, E1 and E2 are far enough apart to keep their values (the labels are laid
+    // out on screen and drop the value only when two would overlap).
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const v = (window as unknown as { __geotwinViewer: V }).__geotwinViewer;
+          v.scene.requestRender();
+          const source = v.dataSources.getByName('perfil')[0];
+          return (source?.entities.values ?? [])
+            .filter((e) => e.id.startsWith('perfil:altura:etiqueta'))
+            .map((e) => String(e.label?.text?.getValue(v.clock.currentTime)))
+            .sort();
+        }),
+      )
+      .toEqual([
+        expect.stringMatching(/^E1 · \d+,\d m$/),
+        expect.stringMatching(/^E2 · \d+,\d m$/),
+      ]);
     // The cursor over the plot reads a distance and the ground under it.
     const canvas = (await page.getByTestId('profile-canvas').boundingBox())!;
     await page.mouse.move(canvas.x + canvas.width * 0.5, canvas.y + canvas.height * 0.6, {

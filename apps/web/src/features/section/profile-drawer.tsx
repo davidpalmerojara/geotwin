@@ -467,7 +467,14 @@ function ProfileBody({
           <dt>Clase</dt>
           <dd>{point === null ? '—' : className(points.cls[point]!)}</dd>
         </dl>
-        <h3>Alturas en el corte</h3>
+        <h3 title="Altura = cubierta (percentil 95 de la clase 6) menos MDT">
+          Alturas en el corte
+        </h3>
+        {/* Under the heading, not after the list: with five buildings the end of the column is
+            below the drawer's edge. */}
+        <p className="pd-note pd-note-head" data-testid="profile-heights-note">
+          Cubierta (percentil 95, clase 6) menos MDT
+        </p>
         {buildings.length ? (
           <ul className="pd-heights" data-testid="profile-heights">
             {buildings.map((b) => (
@@ -485,7 +492,6 @@ function ProfileBody({
             {profile.status === 'ready' ? 'La línea no cruza edificios (clase 6).' : '—'}
           </p>
         )}
-        <p className="pd-note">Altura = cubierta (percentil 95, clase 6) menos MDT.</p>
       </aside>
     </div>
   );
