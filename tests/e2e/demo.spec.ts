@@ -5,6 +5,9 @@ test('scene → Resumen → asset card → persisted anomaly → resolved incide
   request,
   context,
 }) => {
+  // The longest walk through the app, with a second page rendering its own scene: on a busy CI
+  // runner it has taken over 90 s.
+  test.setTimeout(180000);
   const assetId = '20000000-0000-4000-8000-000000000001';
   const installationId = '10000000-0000-4000-8000-000000000001';
   // Re-runnable: clear incidents only on this dedicated fixture asset.

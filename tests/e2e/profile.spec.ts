@@ -175,14 +175,16 @@ test('Perfil A–B, Corte and Radio on a synthetic layer', async ({ page, reques
     expect(Number(length!.replace(',', '.'))).toBeLessThan(207);
     const points = Number(text.match(/([\d.]+) puntos$/)![1]!.replace(/\./g, ''));
     expect(points).toBeGreaterThan(300);
-    // Both buildings, with their heights (7,5 and 10 m over rolling ground).
+    // Both buildings, with their heights over the ground under them. The fixture puts the roofs
+    // 7,5 and 10 m above its base level, and the rolling ground is 0,7 to 1,2 m above that level
+    // under the first one and -0,3 to 0,1 m under the second: 6,3 to 6,8 m and 9,9 to 10,3 m.
     const heights = page.getByTestId('profile-heights');
     await expect(heights.locator('li')).toHaveCount(2);
     const values = (await heights.locator('li').allInnerTexts()).map((t) =>
       Number(t.match(/([\d,]+) m$/)![1]!.replace(',', '.')),
     );
-    expect(values[0]).toBeGreaterThan(6.5);
-    expect(values[0]).toBeLessThan(9);
+    expect(values[0]).toBeGreaterThan(5.8);
+    expect(values[0]).toBeLessThan(7.5);
     expect(values[1]).toBeGreaterThan(9);
     expect(values[1]).toBeLessThan(11.5);
     // The cursor over the plot reads a distance and the ground under it.

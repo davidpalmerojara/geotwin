@@ -91,6 +91,9 @@ test('the orthophoto drapes the globe, credits the IGN and gives way to the offl
   page,
   pnoa,
 }) => {
+  // Four views rendered until the globe has its tiles, under a software renderer: on a busy CI
+  // runner that alone has taken over 90 s.
+  test.setTimeout(180000);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   const map = await openTwin(page);
