@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { bearing, compass, edgeChip, intersects, placeCard, separate, type Box } from './placement';
+import {
+  bearing,
+  compass,
+  edgeChip,
+  intersects,
+  MAX_CHIPS,
+  outOfSight,
+  pickChips,
+  placeChips,
+  placeCard,
+  separate,
+  type Box,
+} from './placement';
 
 const viewport = { width: 1440, height: 900 };
 const card = { width: 372, height: 520 };
@@ -142,5 +154,73 @@ describe('edge chips', () => {
     expect(compass(bearing(torrelago, { lat: 41.58, lng: -4.735 }))).toBe('SO');
     expect(compass(359)).toBe('N');
     expect(compass(135)).toBe('SE');
+  });
+  it('is only for what is out of sight, not for what shows between plates', () => {
+    const viewport = { width: 1440, height: 900 };
+    // Medir open on the left: the framing counts the whole left band as covered.
+    const plates: Box[] = [
+      { left: 12, top: 12, right: 380, bottom: 96 },
+      { left: 12, top: 200, right: 372, bottom: 520 },
+    ];
+    // Visible in the left band, below the panel: its mark and tag are on screen.
+    expect(outOfSight({ x: 200, y: 700 }, viewport, plates)).toBe(false);
+    // Under the panel, or half under its edge.
+    expect(outOfSight({ x: 200, y: 300 }, viewport, plates)).toBe(true);
+    expect(outOfSight({ x: 376, y: 300 }, viewport, plates)).toBe(true);
+    // Off the screen or behind the camera.
+    expect(outOfSight({ x: -20, y: 300 }, viewport, plates)).toBe(true);
+    expect(outOfSight({ x: 700, y: 950 }, viewport, plates)).toBe(true);
+    expect(outOfSight(null, viewport, plates)).toBe(true);
+  });
+  it('shows the most urgent chips first and counts the rest', () => {
+    const chips = [
+      { id: 'installation far', rank: 3, distance: 900 },
+      { id: 'radius', rank: 2, distance: 65 },
+      { id: 'installation near', rank: 3, distance: 90 },
+      { id: 'warning', rank: 1, distance: 400 },
+      { id: 'critical', rank: 0, distance: 1200 },
+    ];
+    const { shown, more } = pickChips(chips, (c) => c.rank);
+    expect(shown.map((c) => c.id)).toEqual(['critical', 'warning', 'radius']);
+    expect(shown).toHaveLength(MAX_CHIPS);
+    expect(more).toBe(2);
+    const every = pickChips(chips, (c) => c.rank, true);
+    expect(every.shown).toHaveLength(5);
+    expect(every.more).toBe(0);
+    expect(every.shown[3]!.id).toBe('installation near');
+    expect(pickChips(chips.slice(0, 2), (c) => c.rank).more).toBe(0);
+  });
+  it('slides a chip out from behind a floating card, and keeps chips apart', () => {
+    // The card floats beside its asset; a chip on the right edge lands behind it.
+    const card: Box = { left: 1000, top: 114, right: 1372, bottom: 672 };
+    const chip = edgeChip(free, size, { x: 2000, y: 400 }, 0)!;
+    expect(intersects({ ...chip, right: chip.left + 180, bottom: chip.top + 22 }, card)).toBe(true);
+    const [moved, next] = placeChips(
+      [
+        { ...chip, ...size },
+        { ...chip, ...size },
+      ],
+      free,
+      [card],
+    );
+    for (const c of [moved!, next!]) {
+      const box = { left: c.left, top: c.top, right: c.left + 180, bottom: c.top + 22 };
+      expect(intersects(box, card)).toBe(false);
+      expect(box.top).toBeGreaterThanOrEqual(free.top);
+      expect(box.bottom).toBeLessThanOrEqual(free.bottom);
+    }
+    expect(
+      intersects(
+        { left: moved!.left, top: moved!.top, right: moved!.left + 180, bottom: moved!.top + 22 },
+        { left: next!.left, top: next!.top, right: next!.left + 180, bottom: next!.top + 22 },
+      ),
+    ).toBe(false);
+    // The nearest free spot: just below the card.
+    expect(moved!.top).toBe(card.bottom + 4);
+  });
+  it('leaves a chip out when its whole edge is covered', () => {
+    const wall: Box = { left: 1000, top: 0, right: 1440, bottom: 900 };
+    const chip = edgeChip(free, size, { x: 2000, y: 400 }, 0)!;
+    expect(placeChips([{ ...chip, ...size }], free, [wall])).toEqual([null]);
   });
 });

@@ -213,3 +213,70 @@ export function separate(chips: (EdgeChip & Size)[], free: Box) {
   }
   return placed;
 }
+
+/**
+ * Whether something drawn at `at` on screen is out of sight: behind the camera (null), off the
+ * viewport, or under one of the plates (within `pad` px of it, so a half-covered mark counts).
+ * A point in a band of the scene that the framing treats as covered, but between plates, is in
+ * sight: its mark and its tag are there to see, and a chip for it would only repeat them.
+ */
+export function outOfSight(at: Point | null, viewport: Size, plates: Box[], pad = 8) {
+  if (!at) return true;
+  if (at.x < 0 || at.y < 0 || at.x > viewport.width || at.y > viewport.height) return true;
+  return plates.some(
+    (b) =>
+      at.x >= b.left - pad &&
+      at.x <= b.right + pad &&
+      at.y >= b.top - pad &&
+      at.y <= b.bottom + pad,
+  );
+}
+
+/** Most edge chips shown at once; the rest are counted in a «+n» chip that shows them all. */
+export const MAX_CHIPS = 3;
+/**
+ * The chips to show, most urgent first (`rank`, lower first, then nearer), at most `max` of
+ * them unless `all`; `more` is how many are left out.
+ */
+export function pickChips<T extends { distance: number }>(
+  chips: T[],
+  rank: (chip: T) => number,
+  all = false,
+  max = MAX_CHIPS,
+) {
+  const sorted = [...chips].sort((a, b) => rank(a) - rank(b) || a.distance - b.distance);
+  const shown = all ? sorted : sorted.slice(0, max);
+  return { shown, more: sorted.length - shown.length };
+}
+
+/**
+ * Lays chips out along their edges (in the given order) clear of each other and of the plates
+ * floating inside the free area (a card beside its asset): a chip that would land on one slides
+ * along its edge to the nearest free spot, and is left out (null) when there is none.
+ */
+export function placeChips<T extends EdgeChip & Size>(chips: T[], free: Box, plates: Box[]) {
+  const placed: T[] = [];
+  return chips.map((chip) => {
+    const obstacles = [...plates, ...placed.map((p) => boxOf(p.left, p.top, p))];
+    const fits = (left: number, top: number) =>
+      left >= free.left - 0.5 &&
+      left + chip.width <= free.right + 0.5 &&
+      top >= free.top - 0.5 &&
+      top + chip.height <= free.bottom + 0.5 &&
+      !obstacles.some((o) => intersects(boxOf(left, top, chip), o, 3));
+    const along = chip.side === 'left' || chip.side === 'right';
+    const start = along ? chip.top : chip.left;
+    const size = along ? chip.height : chip.width;
+    const spots = [
+      start,
+      ...obstacles.flatMap((o) =>
+        along ? [o.top - 4 - size, o.bottom + 4] : [o.left - 4 - size, o.right + 4],
+      ),
+    ].sort((a, b) => Math.abs(a - start) - Math.abs(b - start));
+    const spot = spots.find((s) => (along ? fits(chip.left, s) : fits(s, chip.top)));
+    if (spot === undefined) return null;
+    const next = along ? { ...chip, top: spot } : { ...chip, left: spot };
+    placed.push(next);
+    return next;
+  });
+}
