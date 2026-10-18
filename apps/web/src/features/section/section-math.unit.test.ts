@@ -15,6 +15,7 @@ import {
   profileCsv,
   sampleDtmLine,
   toLine,
+  refineOnGround,
 } from './section-math';
 
 // The A–B line of the «Estación total» mockup over Torrelago (sheet 356-4606).
@@ -218,5 +219,32 @@ describe('the cut', () => {
     expect(isClipped(hide, [100, -2, 0])).toBe(true);
     expect(isClipped(hide, [-1, 0, 0])).toBe(true);
     expect(isClipped(hide, [L + 1, 0, 0])).toBe(true);
+  });
+});
+
+describe('refineOnGround', () => {
+  // A ray going down at 30° over a ground that rises 1 m every 10 m along it.
+  const ray = (t: number) => ({ along: t * Math.cos(Math.PI / 6), height: 300 - t * 0.5 });
+  const ground = (along: number) => 700 - 400 + along * 0.1;
+  const gap = (t: number) => ray(t).height - ground(ray(t).along);
+  it("moves the globe's hit onto the bilinear ground model", () => {
+    // The drawn terrain (a coarser tile) put the hit 8 m short of the model's surface.
+    let truth = 0;
+    for (let lo = 0, hi = 2000, i = 0; i < 80; i++) {
+      truth = (lo + hi) / 2;
+      if (gap(truth) > 0) lo = truth;
+      else hi = truth;
+    }
+    const t = refineOnGround(gap, truth - 8);
+    expect(Math.abs(gap(t))).toBeLessThanOrEqual(0.05);
+    expect(t).toBeCloseTo(truth, 1);
+  });
+  it('keeps the hit when it is already on the ground or the steps do not settle', () => {
+    expect(refineOnGround(() => 0.01, 420)).toBe(420);
+    expect(refineOnGround(() => Number.NaN, 420)).toBe(420);
+    // Flat gap (a ray along the ground): no slope to follow.
+    expect(refineOnGround(() => 3, 420)).toBe(420);
+    // A step that would move the point further than allowed.
+    expect(refineOnGround((t) => (t - 900) * 0.01, 420)).toBe(420);
   });
 });

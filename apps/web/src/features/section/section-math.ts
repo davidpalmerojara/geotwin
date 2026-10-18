@@ -373,3 +373,35 @@ export function isClipped(set: { planes: Plane[]; union: boolean }, p: [number, 
   );
   return set.union ? outside.some(Boolean) : outside.every(Boolean);
 }
+
+/**
+ * Where a ray meets the ground model, refined from a first guess: `gap(t)` is the height of the
+ * ray's point at distance `t` above the ground under it (negative below). Secant steps from the
+ * globe's own hit `t0` (the drawn terrain, a coarser level of detail than the bilinear DTM) to
+ * where the gap is under `tolerance` metres. Returns `t0` when the steps do not settle (a ray
+ * grazing a slope), so a pick is never moved further off than the globe put it.
+ */
+export function refineOnGround(
+  gap: (t: number) => number,
+  t0: number,
+  tolerance = 0.05,
+  maxShift = 50,
+) {
+  let a = t0,
+    fa = gap(a);
+  if (!Number.isFinite(fa)) return t0;
+  if (Math.abs(fa) <= tolerance) return a;
+  // A second point a metre further along gives the slope of the gap.
+  let b = t0 + 1,
+    fb = gap(b);
+  for (let i = 0; i < 8; i++) {
+    if (!Number.isFinite(fb) || fb === fa) return t0;
+    const c = b - (fb * (b - a)) / (fb - fa);
+    if (!Number.isFinite(c) || Math.abs(c - t0) > maxShift) return t0;
+    [a, fa] = [b, fb];
+    b = c;
+    fb = gap(b);
+    if (Math.abs(fb) <= tolerance) return b;
+  }
+  return t0;
+}

@@ -17,6 +17,7 @@ import {
   Math as CesiumMath,
   PolylineDashMaterialProperty,
   PolylineOutlineMaterialProperty,
+  Ray,
   SceneTransforms,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
@@ -25,9 +26,9 @@ import {
 } from 'cesium';
 import { number } from '../../lib/format';
 import type { LngLat, SectionSummary } from '../../stores/section';
-import { drawDimensions, type Dimension } from '../measure/dimension-lines';
+import { DimensionLabels, drawDimensions, type Dimension } from '../measure/dimension-lines';
 import { renderUntil } from '../measure/render-until';
-import { fromLine, makeLine, toLine } from './section-math';
+import { fromLine, makeLine, refineOnGround, toLine } from './section-math';
 
 const SIG = Color.fromCssColorString('#FFD21A'),
   SIG_INK = Color.fromCssColorString('#191500'),
@@ -64,6 +65,8 @@ export class ProfileScene {
   private view: ProfileView = { a: null, b: null, summary: null, cursor: null };
   private frame = 0;
   private stopRendering: (() => void) | undefined;
+  /** E1…En laid out on screen so two close buildings never write over each other. */
+  private readonly labels: DimensionLabels;
 
   constructor(
     private readonly viewer: Viewer,
@@ -73,6 +76,7 @@ export class ProfileScene {
   ) {
     this.added = viewer.dataSources.add(this.source);
     const scene = viewer.scene;
+    this.labels = new DimensionLabels(scene);
     this.handler = new ScreenSpaceEventHandler(scene.canvas);
     this.handler.setInputAction(
       (e: { position: Cartesian2 }) => this.press(e.position),
@@ -99,8 +103,17 @@ export class ProfileScene {
     const scene = this.viewer.scene;
     const ray = this.viewer.camera.getPickRay(position);
     const hit = ray ? scene.globe.pick(ray, scene) : undefined;
-    if (!hit) return null;
-    const c = Cartographic.fromCartesian(hit);
+    if (!ray || !hit) return null;
+    // The globe draws a coarser level of the terrain than the bilinear DTM the profile reads: walk
+    // along the ray to where it meets the DTM, so A and B land where the user aimed.
+    const at = (t: number) => Cartographic.fromCartesian(Ray.getPoint(ray, t, new Cartesian3()));
+    const gap = (t: number) => {
+      const c = at(t);
+      return (
+        c.height - this.ground(CesiumMath.toDegrees(c.longitude), CesiumMath.toDegrees(c.latitude))
+      );
+    };
+    const c = at(refineOnGround(gap, Cartesian3.distance(ray.origin, hit)));
     return { lng: CesiumMath.toDegrees(c.longitude), lat: CesiumMath.toDegrees(c.latitude) };
   }
 
@@ -180,6 +193,7 @@ export class ProfileScene {
     const entities = this.source.entities;
     entities.suspendEvents();
     entities.removeAll();
+    this.labels.set([]);
     const { a, b, summary, cursor } = this.view;
     const mark = (id: string, p: LngLat, text: string) =>
       entities.add({
@@ -289,6 +303,8 @@ export class ProfileScene {
         });
         // The buildings' heights as dimension lines, with E1… and the value. On a narrow screen
         // (a phone) the labels say only E1…, which fit side by side: the sheet lists the values.
+        // Elsewhere a label that would land on another steps up or down and, when no step is
+        // free, keeps only E1… too (DimensionLabels).
         const compact = this.viewer.canvas.clientWidth < 640;
         const dims: Dimension[] = summary.buildings.map((building) => {
           const p = fromLine(line, building.at);
@@ -309,11 +325,12 @@ export class ProfileScene {
                   ? building.label
                   : `${building.label} · ${number(building.height, 1)} m`,
                 side: 'right',
+                short: building.label,
               },
             ],
           };
         });
-        drawDimensions(this.source, dims, 'perfil:altura');
+        this.labels.set(drawDimensions(this.source, dims, 'perfil:altura'));
       }
       if (cursor !== null) {
         const p = fromLine(line, Math.min(line.length, Math.max(0, cursor)));
@@ -347,6 +364,7 @@ export class ProfileScene {
   destroy() {
     cancelAnimationFrame(this.frame);
     this.stopRendering?.();
+    this.labels.destroy();
     this.handler.destroy();
     if (this.viewer.isDestroyed()) return;
     this.viewer.scene.screenSpaceCameraController.enableInputs = true;
