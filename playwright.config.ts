@@ -11,6 +11,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   timeout: 90000,
+  // Under SwiftShader a frame of the scene can hold the page's main thread for seconds, so a
+  // screen update that follows a click or a server event may take longer than the default 5 s.
+  expect: { timeout: 10000 },
   // On CI each failure also becomes an annotation of the run, readable without the artifacts.
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: {
