@@ -56,7 +56,7 @@ import {
 import {
   coveredByOverlays,
   liftToGround,
-  overlayBoxes,
+  sceneBlockers,
   shiftedOnGround,
   viewerFov,
 } from './overlays';
@@ -459,7 +459,7 @@ export default function CesiumView({
       if (v.isDestroyed()) return;
       const rect = v.scene.canvas.getBoundingClientRect();
       // The plates of the HUD floating over the scene.
-      const blocked = overlayBoxes().map((b) => ({
+      const blocked = sceneBlockers().map((b) => ({
         left: b.left - rect.left,
         right: b.right - rect.left,
         top: b.top - rect.top,

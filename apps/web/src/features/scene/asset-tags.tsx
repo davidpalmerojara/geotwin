@@ -20,7 +20,7 @@ import {
 } from 'cesium';
 import type { Asset } from '@geotwin/shared';
 import type { ScreenBox } from '../digital-twin/camera';
-import { overlayBoxes } from '../hud/dom';
+import { sceneBlockers } from '../hud/dom';
 import { useTool } from '../../stores/tool';
 import { STATUS_WORD, useTagInfos, type TagInfo } from './tag-data';
 import { overlaps } from '../digital-twin/labels';
@@ -292,7 +292,7 @@ export default function AssetTags({
         });
       }
       const blocked = [
-        ...overlayBoxes().map((b) => ({
+        ...sceneBlockers().map((b) => ({
           left: b.left - rect.left,
           right: b.right - rect.left,
           top: b.top - rect.top,

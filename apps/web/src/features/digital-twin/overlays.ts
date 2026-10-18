@@ -12,9 +12,9 @@ import {
   type Viewer,
 } from 'cesium';
 import { coveredEdges, type Edges } from './camera';
-import { overlayBoxes } from '../hud/dom';
+import { overlayBoxes, sceneBlockers } from '../hud/dom';
 
-export { overlayBoxes };
+export { overlayBoxes, sceneBlockers };
 
 /** Pixels of each edge of the canvas hidden by the HUD. */
 export function coveredByOverlays(viewer: Viewer): Edges {
