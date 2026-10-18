@@ -52,7 +52,7 @@ npm run db:seed
 npm run dev
 ```
 
-Abre **http://localhost:5173**. Vite redirige REST y WebSocket a la API. `npm run dev` arranca API, worker y web, y compila antes los paquetes compartidos (`@geotwin/shared` y `@geotwin/storage`); si modificas sus contratos, reinicia dev. En local las capas se guardan en `data/storage` (`STORAGE_DRIVER=local`). El worker necesita Python 3.12 o posterior con las dependencias fijadas:
+Abre **http://localhost:5173**. Vite redirige REST y WebSocket a la API. `npm run dev` arranca API, worker y web; `npm run dev`, `db:migrate` y `db:seed` compilan antes los paquetes compartidos (`@geotwin/shared` y `@geotwin/storage`), que la API importa ya compilados, así que funcionan nada más hacer `npm ci`. Si modificas sus contratos, reinicia dev. En local las capas se guardan en `data/storage` (`STORAGE_DRIVER=local`). El worker necesita Python 3.12 o posterior con las dependencias fijadas:
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r apps/worker/python/requirements.txt

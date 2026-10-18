@@ -26,6 +26,8 @@
     "db:test": "tsx apps/api/src/db/cli.ts test",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "predev": "npm run build -w @geotwin/shared -w @geotwin/storage",
+    "predb:migrate": "npm run build -w @geotwin/shared -w @geotwin/storage",
+    "predb:seed": "npm run build -w @geotwin/shared -w @geotwin/storage",
     "pretest": "npm run build -w @geotwin/shared -w @geotwin/storage",
     "pretest:integration": "npm run build -w @geotwin/shared -w @geotwin/storage"
   },
