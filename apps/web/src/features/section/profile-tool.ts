@@ -28,6 +28,7 @@ import { number } from '../../lib/format';
 import type { LngLat, SectionSummary } from '../../stores/section';
 import { DimensionLabels, drawDimensions, type Dimension } from '../measure/dimension-lines';
 import { renderUntil } from '../measure/render-until';
+import { clearForRedraw } from '../measure/entities';
 import { fromLine, makeLine, refineOnGround, toLine } from './section-math';
 
 const SIG = Color.fromCssColorString('#FFD21A'),
@@ -203,8 +204,7 @@ export class ProfileScene {
   private draw() {
     if (this.viewer.isDestroyed()) return;
     const entities = this.source.entities;
-    entities.suspendEvents();
-    entities.removeAll();
+    clearForRedraw(entities);
     this.labels.set([]);
     const { a, b, summary, cursor } = this.view;
     const mark = (id: string, p: LngLat, text: string) =>

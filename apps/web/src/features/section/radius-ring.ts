@@ -26,6 +26,7 @@ import {
 import { number } from '../../lib/format';
 import { metresPerDegree } from './section-math';
 import { renderUntil } from '../measure/render-until';
+import { clearForRedraw } from '../measure/entities';
 import { overlayBoxes } from '../hud/dom';
 import { DISTANCE_OFFSET, DISTANCE_PAD, distanceText } from './radius-label';
 
@@ -227,8 +228,7 @@ export class RadiusRing {
   update(view: RingView | null) {
     if (this.viewer.isDestroyed()) return;
     const entities = this.source.entities;
-    entities.suspendEvents();
-    entities.removeAll();
+    clearForRedraw(entities);
     if (view) {
       // The ring follows the DTM (a point every 5 m or so, at the bilinear height of the ground
       // model the globe draws) instead of being classified on the terrain: the point clouds stand
