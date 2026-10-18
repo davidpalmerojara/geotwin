@@ -30,7 +30,7 @@ import { overlayBoxes } from '../hud/dom';
 import { measuredGround } from '../layers/lidar-terrain';
 import { useUI } from '../../stores/ui';
 import { useTool } from '../../stores/tool';
-import { useScene } from '../../stores/viewer';
+import { useScene, type SceneApi } from '../../stores/viewer';
 import { usePhone } from '../../hooks/media';
 import { BottomSheet, useSnap } from '../hud/bottom-sheet';
 import { RadiusList, RadiusSelect } from '../hud/radius-panel';
@@ -42,6 +42,18 @@ export function AssetCard() {
 }
 
 const levelOf = (s: Sensor) => sensorLevel(s);
+
+/** Radio's results on screen (other than the selected asset): the card leaves them in sight. */
+function radiusKeep(sceneApi: SceneApi | null) {
+  const { radius, tool } = useTool.getState();
+  if (!sceneApi || !radius || tool !== 'radius') return [];
+  const selected = useUI.getState().selectedAssetId;
+  return radius.items.flatMap((item) => {
+    if (item.id === selected) return [];
+    const p = sceneApi.project(item.lng, item.lat, sceneApi.groundAt(item.lng, item.lat));
+    return p ? [{ x: p.x, y: p.y }] : [];
+  });
+}
 
 /**
  * Floats the card beside its asset (or docks it to the right) on every camera move, writing the
@@ -86,6 +98,7 @@ function usePlacement(
         obstacles: overlayBoxes(document, element),
         dockTop,
         bottom,
+        keep: radiusKeep(sceneApi),
       });
       if (placement.mode === 'dock')
         element.style.maxHeight = `${Math.max(160, bottom - dockTop)}px`;

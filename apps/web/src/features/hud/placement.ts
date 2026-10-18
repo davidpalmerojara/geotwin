@@ -57,14 +57,27 @@ export interface CardInput {
   dockTop: number;
   /** Lowest the card's bottom may go (above the credits). */
   bottom: number;
+  /** Points the floating card should leave in sight (Radio's results on screen). */
+  keep?: Point[];
 }
+/** Clearance around each point the card keeps in sight (its mark and distance label). */
+const KEEP_PAD = 28;
 
 /**
  * Floats the card beside its asset, on the side with more room and joined by a guide of at
- * least GUIDE px, without covering the asset or another plate. When there is no such spot (or
- * the screen is narrow, or the asset is off screen) the card docks to the right edge.
+ * least GUIDE px, without covering the asset, another plate or a point it must keep in sight
+ * (Radio's results). When there is no such spot (or the screen is narrow, or the asset is off
+ * screen) the card docks to the right edge.
  */
-export function placeCard({ viewport, anchor, card, obstacles, dockTop, bottom }: CardInput) {
+export function placeCard({
+  viewport,
+  anchor,
+  card,
+  obstacles,
+  dockTop,
+  bottom,
+  keep = [],
+}: CardInput) {
   const dock: CardPlacement = {
     mode: 'dock',
     left: viewport.width - MARGIN - card.width,
@@ -93,6 +106,12 @@ export function placeCard({ viewport, anchor, card, obstacles, dockTop, bottom }
     for (const top of tops) {
       const box = boxOf(left, top, card);
       if (intersects(box, asset) || obstacles.some((o) => intersects(box, o, GAP - 1))) continue;
+      const covers = (k: Point) =>
+        k.x > box.left - KEEP_PAD &&
+        k.x < box.right + KEEP_PAD &&
+        k.y > box.top - KEEP_PAD &&
+        k.y < box.bottom + KEEP_PAD;
+      if (keep.some(covers)) continue;
       const edge = side === 'right' ? left : left + card.width;
       return {
         mode: 'float',

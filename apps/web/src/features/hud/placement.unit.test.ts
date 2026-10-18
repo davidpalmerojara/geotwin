@@ -49,6 +49,33 @@ describe('asset card placement', () => {
     const box = { left: p.left, top: p.top, right: p.left + 372, bottom: p.top + 520 };
     expect(intersects(box, panel)).toBe(false);
   });
+  it('leaves Radio’s results in sight, or docks when it cannot', () => {
+    const free = placeCard({ ...base, anchor: { x: 500, y: 300 } });
+    // A result right where the card would float: it goes elsewhere, clear of it.
+    const result = { x: free.left + 150, y: free.top + 200 };
+    const p = placeCard({ ...base, anchor: { x: 500, y: 300 }, keep: [result] });
+    const box = { left: p.left, top: p.top, right: p.left + 372, bottom: p.top + 520 };
+    if (p.mode === 'float')
+      expect(
+        result.x > box.left - 28 &&
+          result.x < box.right + 28 &&
+          result.y > box.top - 28 &&
+          result.y < box.bottom + 28,
+      ).toBe(false);
+    expect(p).not.toEqual(free);
+    // Results on both sides of the asset: no floating spot leaves them in sight.
+    const both = placeCard({
+      ...base,
+      anchor: { x: 700, y: 400 },
+      keep: [
+        { x: 1000, y: 200 },
+        { x: 1000, y: 600 },
+        { x: 400, y: 200 },
+        { x: 400, y: 600 },
+      ],
+    });
+    expect(both.mode).toBe('dock');
+  });
   it('docks to the right when there is no room, off screen or on a narrow screen', () => {
     const tall = placeCard({
       ...base,
