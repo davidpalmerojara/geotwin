@@ -41,11 +41,23 @@ export function ProfileHint() {
   const a = useSection((s) => s.a),
     b = useSection((s) => s.b),
     cut = useSection((s) => s.cut);
+  // On a phone the plate is one short line: the step, without the keys or the cut's legend (the
+  // sheet below says which mode the cut is in).
+  const phone = usePhone();
   const step = !a
-    ? 'Haz clic en el mapa para poner A'
+    ? phone
+      ? 'Toca el mapa para poner A'
+      : 'Haz clic en el mapa para poner A'
     : !b
       ? 'Ahora pon B'
       : 'Arrastra A o B para ajustar';
+  if (phone)
+    return (
+      <div className="plate profile-hint" data-map-overlay data-testid="profile-hint">
+        <b>{cut === 'off' ? 'Perfil' : 'Perfil y corte'}</b>
+        <span>{step}</span>
+      </div>
+    );
   return (
     <div className="plate profile-hint" data-map-overlay data-testid="profile-hint">
       <b>{cut === 'off' ? 'Perfil' : 'Perfil y corte'}</b>

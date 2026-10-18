@@ -3180,6 +3180,22 @@ table.data {
 }
 .profile-sheet .pd-meta {
   display: block;
+  white-space: normal;
+  font-size: 11.5px;
+}
+/* The group names stay for screen readers; on screen the buttons say enough («Ver · Atenuar ·
+   Ocultar», «RGB · Clase», «1:1 · 2:1 · 5:1»), so the controls fit in two rows. */
+.profile-sheet .pd-k {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.profile-sheet .pd-controls {
+  gap: 6px 10px;
 }
 .profile-sheet .pd-controls {
   justify-content: flex-start;
