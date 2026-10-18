@@ -1,6 +1,6 @@
 # Interfaz «Estación total» con placas flotantes
 
-Plan de la nueva interfaz del visor (rama `feat/estacion-total`, creada desde `eac5230` de `feat/laguna-de-duero`). Se construye en cinco pasos, B1 a B5, cada uno a cargo de un agente distinto que trabaja después del anterior sobre esta misma rama.
+Diseño y estado final de la interfaz del visor (rama `feat/estacion-total`, creada desde `eac5230` de `feat/laguna-de-duero`). Se construyó en cinco pasos, B1 a B5, cada uno a cargo de un agente distinto que trabajó después del anterior sobre la misma rama. Los apartados 1 a 5 son el diseño que se acordó y que se ha construido; el 6 resume los pasos; los apartados «Estado tras B1» a «Estado tras B4» guardan las decisiones de cada paso, y el último, [«Estado final»](#11-estado-final-tras-b5), dice qué está hecho, qué queda pendiente y en qué se diferencian las capturas de las maquetas.
 
 **Qué eligió David.** La base es la dirección A, «Estación total» (`design/A/concept.md` y sus maquetas). De la dirección C, «Sala de operaciones», se toman solo dos cosas:
 
@@ -143,7 +143,7 @@ El ámbar se usa solo para las advertencias, siempre con un triángulo. El rojo,
 - Abrir o cerrar una hoja añade una entrada al historial, de modo que Atrás la cierra.
 - `lib/route.ts` y sus pruebas se actualizan. `/` ya no es Resumen.
 
-**Atajos de una tecla** (`1`–`5`, `C`, `0`, `N`, `/`, `[`, `]`, `R`, `F`):
+**Atajos de una tecla** (`1`–`5`, `C`, `0`, `N`, `/`, `[`, `]` y `R`; la `F` «Centrar activo» de la maqueta A no se hizo, ver el estado final):
 
 - Funcionan en toda la página salvo cuando el foco está en `input`, `textarea`, `select` o `[contenteditable]`, cuando hay un diálogo modal abierto o cuando se pulsa un modificador.
 - Ajustes › Atajos tiene un interruptor para apagarlos (WCAG 2.1.4). Se guarda en `localStorage` dentro de `try/catch`.
@@ -177,323 +177,21 @@ El ámbar se usa solo para las advertencias, siempre con un triángulo. El rojo,
 - Las etiquetas de la escena (B3) llevan borde discontinuo, la convención de «dato simulado» que explica la leyenda de Capas, y su `aria-label` termina en «simulado».
 - La línea «Instalaciones ficticias · telemetría simulada» y la atribución LiDAR están siempre en pantalla.
 
-**Ortofoto.** La release `data-laguna` aún no tiene `pnoa-laguna-z13-19.zip` (comprobado el 17/10/2026). Cada paso mira de nuevo con `scripts/fetch-ortho.sh` antes de capturar. Si no está, las capturas se hacen con el fondo Neutro y se dice así. Nunca se simula una foto.
+**Ortofoto.** La release `data-laguna` aún no tiene `pnoa-laguna-z13-19.zip` (comprobado por última vez el 18/10/2026, antes de las capturas de B5). Por eso todas las capturas se hicieron con el fondo Neutro, y así se dice en sus pies. Nunca se simula una foto.
 
-## 6. Reglas para los cinco agentes
+## 6. Cómo se construyó
 
-- **Rama y commits.**
-  - Se trabaja en el worktree `…/geotwin/estacion/wt`, rama `feat/estacion-total`.
-  - Commits pequeños en inglés («web: …», «api: …», «e2e: …», «docs: …») con las dos líneas de coautoría del proyecto.
-  - `git push -u origin feat/estacion-total` al final de cada paso. Nunca se hace `force` ni se toca `main`.
-- **Pruebas.**
-  - Cada paso deja verdes lint, format, typecheck, unitarias, integración, pytest, build y **E2E**, en local y en CI.
-  - Ninguna prueba se salta, se desactiva ni se borra: se adapta a la interfaz nueva con al menos la misma cobertura. Si un paso cambia la interfaz que mira una prueba E2E, ese mismo paso la actualiza.
-- **Capturas de comparación.**
-  - Van a `…/geotwin/estacion/shots/B<n>/`, fuera del repositorio: 1440 × 900 en escritorio y 390 × 844 con DPR 2 en el móvil.
-  - Se hacen con las hojas reales 356-4605, 356-4606, 357-4605 y 357-4606, cargadas con `scripts/upload-layers.sh` en un clúster PostgreSQL desechable.
-  - Se comparan lado a lado con la maqueta indicada y se anotan las diferencias que quedan.
-  - Solo B5 copia capturas a `docs/screenshots/`.
-- **Entorno.**
-  - Se usan los puertos que asigne el paso; nunca los 5401–5403.
-  - Solo se paran los PID propios.
-  - Al acabar se borran el clúster, `data/e2e-storage` y las capturas intermedias que no se vayan a usar.
-- **Textos.** En español de España, claros y con coma decimal. Nombres de modelos de IA, en ningún sitio.
-- **Documentación.** Cada paso deja la documentación fiel a lo que cambia: una línea en `docs/architecture.md` si toca el visor o la API. B5 hace la pasada completa.
+Cada paso dejó verdes lint, formato, tipos, unitarias, integración, pytest, build y E2E en local y en CI, sin saltar, desactivar ni borrar ninguna prueba (las que cambiaban de interfaz se adaptaron en el mismo paso), y comparó sus capturas con las maquetas de `design/A` y `design/C` (fuera del repositorio). Las capturas se hicieron con hojas PNOA-LiDAR reales cargadas por la API en un clúster PostgreSQL desechable; solo B5 las copió a `docs/screenshots/`.
 
-## 7. Plan en cinco pasos
+| Paso | Qué hizo                                                                                                                                                                                                                            | Pruebas nuevas                                                                                                                                                                                                |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1   | Armazón, tokens y fuentes; placas de escritorio (Lugar y anunciador, Herramientas, Rumbo, Lectura, Escala, Créditos, Avisos, chips de borde); Capas; ficha; Radio como placa; hojas de sección; «Ir a»; rutas; atajos; fondo Neutro | Unitarias de UTM, lectura, escala, colocación de la ficha, chips, atajos, rutas, zona tapada y fondo Neutro; `hud.spec.ts`                                                                                    |
+| B2   | Móvil (placa superior, barra de herramientas, hojas al 25, 45 y 90 %); secciones re-maquetadas en el lenguaje A; Ajustes › Atajos; accesibilidad                                                                                    | `contrast.unit.test.ts`, alturas de las hojas, orden de pantalla; `accessibility.spec.ts` (axe a 1440 × 900 y 390 × 844, teclado) y `phone.spec.ts`                                                           |
+| B3   | Etiquetas de los sensores en la escena (de C), haces y anillos de alerta (de C), «Reconocer» en la API y en la interfaz, cotas de medición (de A)                                                                                   | Unitarias de colocación de etiquetas, oclusión, haz y cotas; integración de `acknowledge`; `scene-tags.spec.ts`                                                                                               |
+| B4   | Perfil A–B con el endpoint `section`, Corte (Ver, Atenuar, Ocultar) y el anillo de Radio                                                                                                                                            | Unitarias de lectura de `.pnts`, MDT a lo largo de A–B, alturas, CSV, polígonos y planos de corte, anillo; integración de `section` frente a laspy; `profile.spec.ts`; comprobación con la hoja real 356-4606 |
+| B5   | README y documentación al día, cinco capturas reales nuevas (y la de la medición de la torre), suite completa y CI                                                                                                                  | Ninguna nueva: la suite completa, con los recuentos en [verification.md](verification.md)                                                                                                                     |
 
-### B1 · Armazón, tokens y HUD de escritorio, Capas, ficha del activo y hojas de sección
-
-**Objetivo.** La nueva interfaz de escritorio funciona de punta a punta sin perder ninguna función actual.
-
-**Alcance.**
-
-_Tokens, fuentes y armazón._
-
-- `styles/globals.css`: tokens y estilos reescritos. Se borra lo que ya no se usa.
-- `main.tsx`: se importan las fuentes de @fontsource. Se añaden las dos dependencias a `apps/web/package.json`.
-- `App.tsx`: pasa a ser **Stage** (escena persistente más placas) y desaparecen la barra lateral y la cabecera.
-- `features/digital-twin/twin.tsx` se convierte en `features/hud/stage.tsx`.
-- `cesium-view.tsx`: se quita su DOM de controles (`map-top`, `map-controls`, `map-bottom`), se publica el `Viewer` y se reubica `creditContainer`. `globe.baseColor` pasa a `#1d2420`.
-
-_Placas del HUD_, en `features/hud/` (con un módulo puro y su prueba unitaria donde haga falta):
-
-- `place-plate.tsx`: menú, selectores y anunciador.
-- `tool-bar.tsx`: las teclas 1–5 y C. Perfil y Corte quedan visibles pero desactivados, con el motivo «Llega en un paso posterior del rediseño».
-- `floating-panel.tsx`: panel anclado a su botón, con Esc y foco de vuelta al botón.
-- `readout-plate.tsx` y `readout.ts`.
-- `heading-plate.tsx`, `scale-bar.tsx`, `credits-plate.tsx`, `notes-stack.tsx` y `edge-chips.tsx`.
-- `placement.ts`: dónde flota la ficha, cuándo se ancla y dónde van los chips de borde.
-- `shortcuts.ts`: atajos y la regla de campos editables.
-- `palette.tsx`: «Ir a».
-
-_Resto._
-
-- `lib/utm.ts`: ETRS89 → UTM 30N con la serie de Krüger.
-- `stores/tool.ts` y `stores/viewer.ts`.
-- `overlays.ts` y `camera.ts`: zona tapada en los cuatro bordes.
-- `lib/route.ts` y `hooks/route.ts`: las rutas nuevas.
-- **Fondo**: «Neutro» en `base-imagery.ts`, `pnoa-imagery.ts` y en el store de capas (`BaseImagery = 'pnoa' | 'neutral' | 'natural-earth'`). Cuando fallan todas las fuentes PNOA se cae a Neutro.
-- `features/layers/layers-panel.tsx` se convierte en el panel Capas, con todos los controles de hoy más Fondo, Edificios 3D, Fotorrealista y la leyenda.
-- `features/assets/asset-detail.tsx` se convierte en `asset-card.tsx` (flotante o anclada), con todo lo de hoy.
-- La herramienta 5 Radio pasa a ser una placa con la consulta de hoy, todavía sin anillo.
-- Hojas Resumen, Activos, Alertas y Ajustes: se reutilizan los componentes actuales dentro de `section-sheet.tsx`. B2 los re-maqueta.
-- Las pruebas E2E que se rompan se actualizan en este paso.
-
-**Criterios de aceptación.**
-
-- **Unitarias nuevas:**
-  - UTM 30N frente a pyproj: Torrelago y las cuatro esquinas de la hoja 356-4605, al milímetro.
-  - Formato de lectura: N/O, coma decimal, signo en «Sobre el suelo», «—» con su motivo.
-  - Escala con valores redondos.
-  - Colocación de la ficha: flota, se ancla o evita las placas.
-  - Chips de borde: punto del borde y rumbo.
-  - Atajos: no se disparan en `input`, `select` ni `contenteditable`, ni con modificadores, ni con el interruptor apagado.
-  - Rutas: `/` lleva a `/gemelo`, `/resumen` y los parámetros antiguos.
-  - Zona tapada en los cuatro bordes.
-  - Fondo «Neutro» como caída cuando falla la ortofoto.
-- **E2E nueva `hud.spec.ts` a 1280 × 800 y 1440 × 900:**
-  - La página no tiene scroll.
-  - Las placas no se solapan entre sí.
-  - Con Capas, la ficha y una hoja abiertas, los créditos se ven enteros y no los tapa nada.
-  - `1`, `2` y `C` activan su herramienta o panel; con el foco en un campo de texto no hacen nada.
-  - Esc cierra Capas y devuelve el foco a su botón.
-  - Abrir y cerrar Resumen y Alertas no reconstruye el visor (misma prueba de canvas `data-probe` que `demo.spec.ts`).
-  - La lectura muestra lat/lon, UTM, Cota y «Sobre el suelo» al mover el ratón sobre una capa sintética.
-- **E2E existentes** (`demo`, `deep-link`, `layers`, `base-imagery`, `map-overlays`, `photorealistic`, `accessibility`) en verde con los selectores nuevos y las mismas comprobaciones de fondo:
-  - el visor no se reconstruye;
-  - la ortofoto y su crédito;
-  - el fallo de fuentes, ahora hacia Neutro;
-  - estilos, Híbrido y medición;
-  - Google;
-  - créditos legibles;
-  - axe.
-- **Capturas en `shots/B1/`**, comparadas con estas maquetas:
-  - Vista general: `A/desktop-overview.png` para el contenido de las placas y `C/desktop-overview.png` para la disposición flotante.
-  - Capas abierto en modo Altura: `A/desktop-capas.png`.
-  - Activo en alerta con la ficha flotante: `A/desktop-asset.png` para el contenido y `C/desktop-asset.png` para la posición junto al activo.
-  - Resumen abierto sobre la escena.
-
-### B2 · Móvil, re-maquetación de las secciones, accesibilidad y E2E completas
-
-**Objetivo.** El móvil según `A/phone.png`, con las placas flotantes de `C/phone.png`. Las secciones con el lenguaje A. Accesibilidad AA comprobada. Todas las E2E repasadas.
-
-**Alcance.**
-
-_Móvil._
-
-- `features/hud/*`: variantes de menos de 640 px.
-- `bottom-sheet.tsx`, con alturas de 25, 45 y 90 %, arrastre, teclado (flechas y Esc), `aria-modal` cuando ocupa el 90 % y foco atrapado solo en ese caso.
-- La barra de herramientas del móvil.
-- Los créditos encima de la hoja.
-- En la ficha: «Cercanos y radio» abre Radio, e Incidencias y Laboratorio son alcanzables.
-
-_Secciones._ `dashboard.tsx`, `assets.tsx`, `alerts.tsx` y `pages/settings.tsx` re-maquetadas:
-
-- tablas monoespaciadas;
-- estados con forma, color y palabra;
-- sin titulares de marketing;
-- gráficos de Recharts con los tokens y coma decimal.
-
-_Ajustes._ Atajos (interruptor y lista), la nota del SRID y el enlace a la documentación de la API.
-
-_Accesibilidad._
-
-- Lista oculta y enfocable de los activos de la escena, en orden de pantalla.
-- Orden de foco y anillos de foco.
-- Nombres accesibles.
-- `prefers-reduced-motion`.
-
-**Criterios de aceptación.**
-
-- **`accessibility.spec.ts`:**
-  - axe sin infracciones en la escena, en cada hoja (Resumen, Activos, Alertas, Ajustes), en Capas, en la ficha y en Medir, a 1440 × 900 y a 390 × 844.
-  - Un recorrido solo con teclado: Tab llega a todas las placas, el foco es visible, Esc cierra en orden y Ctrl+K abre «Ir a».
-  - Atajos: no se disparan dentro del campo de renombrar ni en la paleta, y con el interruptor de Ajustes apagado no hacen nada.
-- **`contrast.unit.test.ts`.** Calcula el contraste de cada par de tokens que se usa para texto (4,5:1 o más) y para bordes de control (3:1 o más).
-- **E2E del móvil:**
-  - Sin desbordamiento horizontal.
-  - Las alturas de la hoja del activo funcionan.
-  - Capas en hoja.
-  - Los créditos (CC-BY) se ven por encima de cualquier hoja y del panel Medir (se adaptan las pruebas `map-overlays` de móvil).
-  - Las etiquetas de instalación no chocan con las placas.
-- **Todas las E2E existentes revisadas** contra la interfaz final de B1–B2, con al menos la misma cobertura. `docs/verification.md` › «Qué cubren las pruebas» se pone al día.
-- **Capturas en `shots/B2/`**, comparadas con estas maquetas:
-  - Móvil con un activo seleccionado (hoja al 45 %): `A/phone.png` y `C/phone.png`.
-  - Móvil con Capas al 90 %.
-  - Resumen y Alertas en escritorio, en el lenguaje A.
-
-### B3 · Etiquetas de sensores y haces de alerta en la escena (de C), cotas de medición (de A)
-
-**Objetivo.** Los valores se leen en la escena, junto a cada activo. Las alertas se ven desde lejos. Las medidas son cotas dibujadas sobre la nube.
-
-**Alcance.**
-
-_Etiquetas_: `features/scene/asset-tags.tsx` y `tag-layout.ts`, este último puro, ampliando `labels.ts`.
-
-- Una capa DOM con referencias, colocada en `scene.postRender` con `SceneTransforms.worldToWindowCoordinates`, y un SVG para guías y mástiles.
-- El ancla está a la altura que resuelve hoy el marcador: `RELATIVE_TO_TERRAIN` con `mount_height_m`, y `RELATIVE_TO_3D_TILE` sobre Google.
-- Contenido según el estado:
-  - **Operativo:** punto gris discreto más el valor.
-  - **Advertencia:** triángulo ámbar más nombre, valor y la palabra «advertencia».
-  - **Crítico:** rombo rojo más nombre, valor y la palabra «crítico».
-- El valor es la última lectura del sensor en peor estado (si no hay ninguno en peor estado, el primero), sacada de la caché realtime.
-- **Nivel de detalle** según la distancia de la cámara:
-  - hasta 700 m, nombre y valor en avisos y críticos, y solo el valor en operativos;
-  - hasta 2 km, solo el valor;
-  - más lejos, solo la marca.
-- **Colisiones:** colocación voraz con ocho posiciones candidatas y esta prioridad: crítico, advertencia, seleccionado, resultado de Radio, operativo. La que no cabe se oculta.
-- **Oclusión:** tras `moveEnd` y con las teselas cargadas, `pickPosition` en una cruz de 3 px. Si en 2 de 3 lecturas hay algo más de 3 m por delante del ancla, la marca se dibuja hueca y la etiqueta al 55 %. Nunca se calcula en cada fotograma.
-
-_Haces y pulsos_: `alert-beams.ts`.
-
-- Un `Entity.polyline` vertical sobre la normal geodésica, de 250 m en crítico y 60 m en advertencia, de 10 a 14 px, con `PolylineGlowMaterialProperty` (`glowPower` 0,25, `taperPower` 0,6) y prueba de profundidad.
-- Un `Primitive` con `EllipseGeometry` de 18 m y un material Fabric con `u_time` para dos anillos que se expanden, movido por el bucle de motivos de render.
-- Con movimiento reducido, anillos estáticos.
-
-_«Reconocer»._ Requiere un cambio en la API:
-
-- `PATCH /api/alerts/:id/acknowledge`, con una migración que añade `acknowledged_at` y el campo en `alertSchema`.
-- Se publica `alert:updated` y la operación es idempotente.
-- Reconocer apaga el pulso; el haz sigue hasta que la alerta se resuelve.
-- Botón en la ficha (con la tecla `R`) y en Alertas.
-
-_Cotas_: `features/measure/dimension-lines.ts`.
-
-- Polilínea de 1,5 px en `sig` con `depthFailMaterial` discontinuo, marcas y valor en Plex Mono 500 13 px sobre fondo `sig`, con `disableDepthTestDistance` infinito y `document.fonts.load` antes de dibujar.
-- Casos:
-  - **distancia**, con el valor en el centro de cada tramo y el total;
-  - **área**, con el contorno y el valor en el centroide;
-  - **desnivel**, como cota vertical;
-  - **altura de montaje** del activo seleccionado, como cota vertical del MDT al punto de montaje, con «41,9 m sobre el suelo».
-
-_Accesibilidad._ Las etiquetas se reflejan en la lista oculta de B2: Tab las recorre e Intro selecciona.
-
-**Criterios de aceptación.**
-
-- **Unitarias:**
-  - `tag-layout`: prioridad, nivel de detalle por distancia, sin solapes y oculta la que no cabe.
-  - Regla de oclusión (2 de 3, margen de 3 m).
-  - Geometría del haz: dirección de la normal y longitud por estado.
-  - Cotas: puntos, posición de las etiquetas y texto con coma decimal.
-- **Integración:** `acknowledge` responde 200, es idempotente, devuelve 404 si la alerta no existe, publica `alert:updated` y aparece en OpenAPI.
-- **E2E `scene-tags.spec.ts`:**
-  - Con una alerta inyectada, el activo tiene una etiqueta con rombo y «crítico».
-  - El visor tiene un haz (`data-beams="1"` en `cesium-view`).
-  - «Reconocer» apaga el pulso (`data-pulses="0"`) y el haz sigue hasta «Resolver».
-  - Las etiquetas de operativos muestran el valor con coma decimal.
-  - El `aria-label` de las etiquetas termina en «simulado».
-- **E2E de medición** (`layers.spec.ts`): los valores no cambian (3D, Desnivel y «Al suelo»), y la entidad de la cota y su etiqueta existen.
-- **Capturas en `shots/B3/`**, comparadas con estas maquetas:
-  - Vista general con etiquetas y un haz crítico: las etiquetas y haces de `C/desktop-overview.png` sobre las placas de A.
-  - Activo en alerta: el haz, el pulso y la ficha flotante de `C/desktop-asset.png`, con los colores de A.
-  - Medición de la torre con la cota: `A/phone.png` (cota de 41,9 m) y la medición de 41,7 m de `docs/laguna-de-duero.md`.
-
-### B4 · Perfil A–B (3), Corte (4) y anillo de Radio (5)
-
-**Objetivo.** La función estrella de A: trazar A–B, ver el perfil 1:1 con los puntos LiDAR reales y recortar la nube delante de la línea. Además, Radio dibuja su anillo sobre el MDT.
-
-**Decisión: los puntos del perfil los da un endpoint nuevo de la API, no el navegador.**
-
-- Cesium no da acceso desde la CPU a las posiciones de `.pnts`.
-- Las teselas cargadas dependen del nivel de detalle de la vista: el perfil saldría incompleto y distinto según la cámara.
-- Descargar al navegador todas las teselas que cruza la franja, en todos los niveles (py3dtiles reparte los puntos entre niveles con refinamiento `ADD`), supone varios MB por perfil.
-- El servidor ya lee esas teselas del almacenamiento. Puede recorrer `tileset.json`, descartar por volumen envolvente y devolver solo los puntos de la franja (unos 8.300 puntos en 336 m de la hoja 356-4606, unos 100 KB). El resultado es completo, determinista, cacheable y se puede probar en integración.
-- La alternativa de leer el LAZ original con laspy necesitaría Python en la API: queda descartada.
-
-**Endpoint.** `GET /api/layers/:id/section?a=lon,lat&b=lon,lat&half=1.5`, en `apps/api/src/modules/layers/section.ts`.
-
-- Contrato Zod en `packages/shared`.
-- **Límites:** A–B de 2 km como máximo, `half` de 0,25 a 5 m y 400.000 puntos como máximo (con 413 y mensaje legible si se pasa).
-- **Lectura de las teselas:** analiza `.pnts` (`POSITION` o `POSITION_QUANTIZED`, `RTC_CENTER`, transformaciones del tileset y de cada tesela, RGB y la clasificación de la tabla de lotes).
-- **Respuesta:** columnas `s` (distancia desde A, en m), `h` (altura elipsoidal), `cls` y `rgb`, más la N de la capa y el recuento.
-- **Caché:** LRU en memoria por (capa, A, B, half).
-- El cliente pide a cada capa lista y visible cuya `bbox` cruce A–B y une los resultados.
-- **Línea del terreno:** se calcula en el cliente con el MDT que ya está cargado (`lidar-terrain.ts`, bilineal, cada metro). No se usa `sampleTerrainMostDetailed`, porque el proveedor no tiene `availability`.
-
-**Perfil (tecla 3).**
-
-- `features/section/profile-tool.ts`: A y B con `globe.pick(camera.getPickRay())`, arrastrables, y `[`/`]` para el grosor.
-- `profile-drawer.tsx`: cajón flotante abajo, entre los márgenes, por encima de Lectura y sin tapar los créditos. En el móvil, hoja al 50 %. Contiene:
-  - un gráfico en Canvas a escala 1:1 con exageración de 1:1, 2:1 y 5:1, la línea del MDT y los puntos en su color RGB o de clase, más tenues cuanto más lejos del plano;
-  - la lectura en el cursor (distancia, Cota, Suelo, Sobre el suelo y clase), sincronizada con un cursor en la escena;
-  - «Alturas en el corte»: E1…En, con el percentil 95 de la clase 6 menos el MDT, por grupos;
-  - «Exportar CSV».
-
-**Corte (tecla 4).** `features/section/cut-tool.ts` y `clipping.ts`.
-
-- **Recortar delante:** `ClippingPolygonCollection` en cada tileset (se comprueba `isSupported`).
-- **Atenuar:** el `CustomShader` de puntos redondos se amplía con un uniforme de plano en coordenadas de ojo, actualizado en `preRender`, y multiplica el color difuso por 0,38 fuera de la franja.
-- **Ocultar:** un segundo polígono de la franja con `inverse`.
-- **Sin WebGL 2:** `ClippingPlaneCollection`, con la matriz privada aislada en un helper con prueba.
-- **Suelo de corte:** rejilla de 10 m (`GridMaterialProperty`, `ClassificationType.TERRAIN`) con un recurso de color liso.
-- Fotorrealista se apaga mientras dura el corte, y EDL también si dibuja halos.
-- 3 y 4 solo se activan con el relieve encendido. Si está apagado, aparecen desactivados con el motivo y Capas lo indica con «lo usan Perfil y Corte».
-
-**Radio (tecla 5).** `features/section/radius-ring.ts`.
-
-- Anillo discontinuo sobre el MDT (clasificado sobre el terreno) alrededor del activo seleccionado o de un punto pulsado en el mapa.
-- Radio de 100, 250 o 500 m o 5 km.
-- Resultados de `ST_DWithin` en la placa y en la sección Cercanos de la ficha.
-- Los activos dentro del radio se marcan en la escena, con un chip de borde si quedan tapados.
-
-**Criterios de aceptación.**
-
-- **Integración:** `section` con el LAZ sintético del worker, convertido en la prueba de pipeline existente:
-  - devuelve exactamente los puntos de la franja, comparados con un cálculo independiente sobre el LAZ original menos las clases excluidas;
-  - responde 400 a parámetros no válidos, 404 si la capa no existe, 409 si no está lista y 413 por encima del límite;
-  - aparece en OpenAPI.
-- **Comprobación con la hoja real 356-4606** sobre la línea de `A/desktop-signature.png`: el recuento de puntos y la altura de la torre E4 (41,1 m en la maqueta) frente a un cálculo con laspy y pyproj. Se anota en `docs/verification.md`.
-- **Unitarias:** muestreo del MDT a lo largo de A–B; percentil 95 de la clase 6 menos el MDT; geometría de los polígonos de corte (delante y franja) y signo de los planos; CSV con coma decimal y separador `;`.
-- **E2E `profile.spec.ts`** con la capa sintética:
-  - la tecla 3 y dos clics abren el cajón con «Perfil A–B», la longitud y el número de puntos;
-  - la tecla 4 activa el corte (`data-cut="front"` en `cesium-view`) y Atenuar y Ocultar cambian el modo;
-  - Esc cierra y quita el recorte;
-  - con el relieve apagado, 3 y 4 aparecen desactivados con su motivo;
-  - Radio dibuja el anillo (`data-radius`) y lista activos.
-- **Capturas en `shots/B4/`**, comparadas con estas maquetas:
-  - Perfil más corte sobre Torrelago: `A/desktop-signature.png`, con el cajón flotante en vez de a todo el ancho.
-  - Radio de 300 m alrededor de la sonda de la laguna: `A/desktop-asset.png`.
-  - Perfil en el móvil, hoja al 50 %.
-
-### B5 · Documentación, capturas, suite completa y CI
-
-**Objetivo.** El README y la documentación describen la interfaz nueva, las capturas son reales y todo queda verificado.
-
-**Alcance.**
-
-- `README.md`: imágenes, «Qué funciona», Capas, Medición, atajos y licencias de las fuentes.
-- `docs/demo-guide.md`.
-- `docs/architecture.md`: HUD y placas, rutas, atajos, etiquetas y haces, endpoint `section` y corte.
-- `docs/laguna-de-duero.md`: perfil y alturas.
-- `docs/api.md`: `acknowledge` y `section`.
-- `docs/fotorrealista.md`: dónde están ahora el botón y los créditos.
-- `docs/verification.md`: filas nuevas.
-- Este documento pasa a describir el estado final (lo hecho y lo que quede pendiente).
-- **Capturas en `docs/screenshots/`**, a 1440 × 900 o 390 × 844 con DPR 2, en JPEG de calidad 85:
-  - `estacion-vista-general.jpg`
-  - `estacion-alerta.jpg` (activo con alerta **simulada**, haz y ficha)
-  - `estacion-capas.jpg`
-  - `estacion-perfil-corte.jpg`
-  - `estacion-movil.jpg`
-  - Se hacen con las ocho hojas reales y, si la release ya trae el zip, con la ortofoto real instalada con `scripts/fetch-ortho.sh`. Si no lo trae, con el fondo Neutro, y el pie de foto lo dice.
-- Las capturas antiguas que ya no se citan se borran.
-- El vídeo de 40 s muestra la interfaz anterior: el README lo dice de forma explícita (no se vuelve a grabar en este paso).
-
-**Criterios de aceptación.**
-
-- lint, format, typecheck, unitarias, integración, pytest, build y E2E en verde en local, con los recuentos anotados en `docs/verification.md` con fecha, revisión y entorno.
-- CI en verde sobre la cabeza que se sube.
-- Cada captura se compara con su maqueta:
-  - vista general con `A/desktop-overview.png` y `C/desktop-overview.png`;
-  - alerta con `A/desktop-asset.png` y `C/desktop-asset.png`;
-  - Capas con `A/desktop-capas.png`;
-  - perfil y corte con `A/desktop-signature.png`;
-  - móvil con `A/phone.png` y `C/phone.png`.
-- En el registro de verificación se anotan las diferencias que queden.
-- Ningún texto de la documentación afirma algo que no se haya comprobado. Lo que no se pudo probar (Google, servidores del IGN) se sigue diciendo.
-
-## 8. Estado tras B1
+## 7. Estado tras B1
 
 **Hecho.** La escena ocupa toda la pantalla y no se desmonta (`features/hud/stage.tsx`); las placas de escritorio, Capas con Fondo (Ortofoto PNOA, Neutro, Natural Earth), Edificios 3D, Fotorrealista y la leyenda; la ficha flotante o anclada; Radio como placa; las hojas; «Ir a»; los chips de borde; la lectura del cursor con UTM 30N y cotas; las rutas nuevas; los atajos con su interruptor en Ajustes. Pruebas: unitarias de UTM, lectura, escala, colocación, chips, atajos, rutas, zona tapada en los cuatro bordes, fondo Neutro y búsqueda de «Ir a»; `tests/e2e/hud.spec.ts` y todas las E2E anteriores adaptadas.
 
@@ -506,7 +204,7 @@ _Accesibilidad._ Las etiquetas se reflejan en la lista oculta de B2: Tab las rec
 - El móvil solo tiene una adaptación mínima (placas apiladas arriba, ficha y paneles a todo el ancho, sin lectura ni escala): el diseño de `A/phone.png` y `C/phone.png` es de B2.
 - Los marcadores de los activos siguen siendo cajas y puntos de Cesium con los colores nuevos; los glifos, las etiquetas y los haces son de B3.
 
-## 9. Estado tras B2
+## 8. Estado tras B2
 
 **Hecho.**
 
@@ -522,7 +220,7 @@ _Accesibilidad._ Las etiquetas se reflejan en la lista oculta de B2: Tab las rec
 - El perfil de B4 en el móvil puede usar `PhoneSheet` con `snaps={[50]}`.
 - La lista oculta (`scene-asset-list.tsx`) es el sitio donde B3 puede reflejar las etiquetas de la escena.
 
-## 10. Estado tras B3
+## 9. Estado tras B3
 
 **Hecho.**
 
@@ -544,7 +242,7 @@ _Accesibilidad._ Las etiquetas se reflejan en la lista oculta de B2: Tab las rec
 - Activo en alerta frente a `C/desktop-asset.png` (`cmp-asset.jpg`): haz, anillos, ficha flotante con la incidencia arriba («Reconocer» y «Resolver» a mano) y la cota de montaje. La ficha se coloca a la izquierda porque es el lado con más sitio en este encuadre; el anillo de Radio y la línea de tiempo de C no entran (el anillo es de B4).
 - Cota de montaje frente a `A/phone.png` y la medición documentada de la torre (`cmp-montaje.jpg`): «41,9 m sobre el suelo» del MDT a la cubierta, y Medir sobre la cubierta y el pie de la torre da 54,7 m en 3D, 35,4 m en horizontal y **−41,7 m** de desnivel, el mismo valor que en [laguna-de-duero.md](laguna-de-duero.md). En el móvil el aviso de ortofoto no disponible ocupa parte de la escena (solo pasa sin la foto).
 
-## 11. Estado tras B4
+## 10. Estado tras B4
 
 **Hecho.**
 
@@ -574,3 +272,24 @@ _Accesibilidad._ Las etiquetas se reflejan en la lista oculta de B2: Tab las rec
 - Con el cajón abierto la escena libre se reduce a la franja entre la barra de herramientas y el cajón: las capturas encuadran la línea ahí.
 - Las E2E esperan hasta 10 s en cada aserción (`expect.timeout` en `playwright.config.ts`) y `demo.spec.ts` y la primera de `base-imagery.spec.ts` tienen 180 s: en el ejecutor de GitHub, un fotograma de SwiftShader puede tener ocupada la página varios segundos y esas dos pruebas tardan más de 1,5 min. En CI una prueba que falla se repite una vez (`retries`); si pasa, el informe la marca como «flaky» y la anotación de la ejecución lo dice: en tres ejecuciones seguidas fallaron pruebas distintas que en local pasan siempre (`demo.spec.ts` esperando «Operativo», `accessibility.spec.ts` buscando el interruptor de Ajustes, `profile.spec.ts` proyectando A antes de que la cámara dibujara), sin que los tiempos del resto cambiaran.
 - Las capturas usan `/src/stores/*.ts` desde la página: si el Vite compartido (5311) ha recargado un módulo (por ejemplo, porque una E2E reconstruyó `packages/shared`), la página importa otra copia del store y la herramienta no responde. Reiniciar Vite antes de capturar lo evita.
+
+## 11. Estado final (tras B5)
+
+**Hecho.** Todo lo de los apartados 1 a 5 funciona, salvo lo que se lista abajo como pendiente: escena a pantalla completa con placas flotantes opacas, anunciador, teclas 1–5 y C con sus paneles, lectura del cursor con UTM 30N y cotas ortométricas, ficha flotante o anclada, hojas de sección, «Ir a», chips de borde, móvil con placa superior, barra flotante y hojas, etiquetas de los sensores y haces de alerta en la escena, «Reconocer», cotas de medición, Perfil A–B, Corte y el anillo de Radio. En B5:
+
+- **Documentación**: README (capturas, «Qué funciona», Teclado, Medición, Perfil A–B y corte, pruebas y licencias de las fuentes), `demo-guide.md`, `architecture.md` (placas, rutas, atajos, etiquetas y haces, `section`, corte y radio), `laguna-de-duero.md` (perfil y alturas), `api.md` (`acknowledge` y `section`), `fotorrealista.md` (dónde están el interruptor y los créditos) y `verification.md`.
+- **Capturas** en `docs/screenshots/`: `estacion-vista-general.jpg`, `estacion-alerta.jpg`, `estacion-capas.jpg`, `estacion-perfil-corte.jpg`, `estacion-movil.jpg` y `estacion-medicion-torre.jpg`, con las ocho hojas reales y el fondo neutro. Las capturas antiguas que ya no muestran la interfaz se han borrado; se conservan `laguna-antes-despues.jpg` (compara el dibujo de la nube y lo dice), `lidar-12m.png` y `terrain-buildings.jpg` (registros de verificación).
+- **Dos arreglos** que salieron al mirar las capturas: con Capas abierto, el chip de borde de una instalación lejana se colocaba encima de la etiqueta de un sensor (las etiquetas de la escena y los rótulos de instalación evitan ahora también los chips, `sceneBlockers`); y la etiqueta de un activo en alerta cuya marca queda tapada bajaba al 55 % de opacidad, con el texto rojo o ámbar por debajo del contraste AA (ahora solo se atenúan las de los operativos, `fadesTag`).
+- **Suite completa y CI** con los recuentos en [verification.md](verification.md), junto con la comparación de cada captura con su maqueta.
+
+**Pendiente o distinto del diseño.**
+
+- **Ortofoto real.** Ninguna captura la lleva: la release `data-laguna` no trae `pnoa-laguna-z13-19.zip` y el entorno no llega a IDEE ni al IGN. Que esos servidores acepten las peticiones del navegador (CORS) sigue sin comprobarse.
+- **Google Photorealistic 3D Tiles** sigue sin probarse con Google: solo con una malla local que sustituye la respuesta de Cesium ion ([prueba manual](fotorrealista.md#prueba-manual)).
+- **El vídeo de 40 s** es de la interfaz anterior; no se ha vuelto a grabar.
+- **Tecla `F` «Centrar activo»** de la maqueta A: no existe. Para volver a un activo están «Ir a» (`/`) y un clic en su marca o en su chip de borde.
+- **Anunciador**: los recuentos siguen a la instalación elegida y la alarma es la de toda la red (decisión de B1), así que con una instalación elegida la alarma puede nombrar un activo de otra.
+- **Rótulos de instalación** sin los recuentos de las maquetas («6 activos · 1 crítico»).
+- **Leyenda de Altura** en Capas: una barra de «baja» a «alta», no la regla vertical con cotas de `A/desktop-capas.png`; con varias hojas cada una usa su propio rango.
+- **Perfil**: la placa de lectura de abajo no sigue al cursor del perfil, como sí hace la maqueta (la lectura del cursor está en el cajón). Con el perfil abierto la franja superior de la escena cuenta entera como tapada y aparecen chips de borde de activos que se ven entre las placas.
+- **Móvil**: con la ficha al 45 % los tres botones de abajo (Histórico, Cercanos y radio, Laboratorio) quedan en parte bajo la barra de herramientas y se alcanzan desplazando la hoja.

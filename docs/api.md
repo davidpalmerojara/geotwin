@@ -77,6 +77,14 @@ Errores: 400 si A o B no son válidos, si están a menos de 1 m, si A–B pasa d
 curl 'http://localhost:3001/api/layers/ID/section?a=-4.7231281,41.5901638&b=-4.7269410,41.5891789&half=1.5'
 ```
 
+### Reconocer una alerta: `PATCH /api/alerts/:id/acknowledge`
+
+Sin cuerpo. Marca la incidencia como vista: guarda `acknowledged_at` (la hora del servidor) y publica `alert:updated`. La alerta **sigue activa** hasta que se resuelve; en el visor, reconocerla apaga los anillos que se expanden alrededor del activo y deja el haz. Es idempotente: si ya estaba reconocida o resuelta devuelve la alerta tal cual, con la misma fecha y sin publicar nada. Si la alerta escala de advertencia a crítico, `acknowledged_at` vuelve a `null` (hay que reconocerla de nuevo). Responde 200 con la alerta, 400 si el id no es un UUID y 404 si no existe.
+
+```bash
+curl -X PATCH http://localhost:3001/api/alerts/ID_DE_LA_ALERTA/acknowledge
+```
+
 ## Ejemplo reproducible
 
 ```bash

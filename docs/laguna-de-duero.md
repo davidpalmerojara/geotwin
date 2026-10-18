@@ -2,7 +2,9 @@
 
 El escenario por defecto de la demo está en **Laguna de Duero (Valladolid)** y usa **ocho hojas reales de PNOA-LiDAR** (3.ª cobertura) procesadas por el mismo camino que cualquier subida: API → almacenamiento → cola pg-boss → worker → 3D Tiles. Las instalaciones y los activos son **ficticios** y su telemetría es **simulada**; solo su posición y su altura de montaje se han tomado de la nube de puntos. No son los sistemas reales del municipio.
 
-![Torrelago en la nube LiDAR real, en color RGB, con calidad Alta](screenshots/laguna-torrelago.jpg)
+![Torrelago y la laguna en la nube LiDAR real, en color RGB, con la interfaz de placas flotantes, las lecturas simuladas junto a cada activo y dos alertas simuladas](screenshots/estacion-vista-general.jpg)
+
+Capturas de la interfaz actual en esta página: las ocho hojas reales, renderizador por software y **fondo neutro** bajo la nube (sin la ortofoto, que aún no está en la release y cuyos servidores no se alcanzan desde el entorno de las capturas).
 
 ## Los datos
 
@@ -32,7 +34,7 @@ scripts/upload-layers.sh data/laguna/*.LAZ                          # Compose: h
 scripts/upload-layers.sh -u http://localhost:3001 data/laguna/*.LAZ # npm run dev
 ```
 
-![Las ocho hojas cargadas en el panel Capas, con el relieve del LiDAR](screenshots/laguna-capas.jpg)
+![Las ocho hojas cargadas en el panel Capas, con la nube coloreada por altura](screenshots/estacion-capas.jpg)
 
 Como los nombres empiezan por `PNOA_`, la API guarda en cada capa la atribución de PNOA-LiDAR y el visor la añade a sus créditos mientras alguna de esas capas esté visible (una sola vez, aunque haya ocho). Para que la corrección de alturas use la rejilla oficial del geoide, instálala antes (ver el README); sin ella se aplica EGM96, unos 0,5 m más alto aquí.
 
@@ -64,7 +66,7 @@ Medido en este entorno (4 CPU, `TILER_JOBS=3`, almacenamiento local, rejilla ofi
 
 ## Cómo se dibuja la nube
 
-Es LiDAR **aéreo**: unos 8 puntos/m² con el solape y 5-6 sin él, tomados desde un avión, con el color de una ortofoto cenital. Las cubiertas, el suelo abierto y las copas quedan bien; las fachadas reciben pocos puntos y los patios estrechos y las calles entre bloques altos, ninguno. Alrededor de Torrelago (600 × 600 m), el **19,5 %** de las celdas de 1 m no tiene ningún punto dibujado, y solo un 5 % de esas celdas vacías (el 1 % del total) tenía puntos de solape: el hueco es del vuelo, no de quitar el solape. Por eso de cerca la nube no puede parecerse a un escaneo terrestre, y las capturas y el vídeo se hacen a media altura o en cenital. En los huecos se ve el mapa de fondo sobre el relieve (en las capturas de esta página, el atlas Natural Earth de baja resolución; con la ortofoto PNOA, la foto real: ver [Ortofoto PNOA bajo la nube](#ortofoto-pnoa-bajo-la-nube)).
+Es LiDAR **aéreo**: unos 8 puntos/m² con el solape y 5-6 sin él, tomados desde un avión, con el color de una ortofoto cenital. Las cubiertas, el suelo abierto y las copas quedan bien; las fachadas reciben pocos puntos y los patios estrechos y las calles entre bloques altos, ninguno. Alrededor de Torrelago (600 × 600 m), el **19,5 %** de las celdas de 1 m no tiene ningún punto dibujado, y solo un 5 % de esas celdas vacías (el 1 % del total) tenía puntos de solape: el hueco es del vuelo, no de quitar el solape. Por eso de cerca la nube no puede parecerse a un escaneo terrestre, y las capturas y el vídeo se hacen a media altura o en cenital. En los huecos se ve el fondo sobre el relieve (en las capturas de la interfaz actual, el fondo neutro, oscuro; en la comparación de abajo, el atlas Natural Earth; con la ortofoto PNOA, la foto real: ver [Ortofoto PNOA bajo la nube](#ortofoto-pnoa-bajo-la-nube)).
 
 El visor la dibuja así (detalle técnico en [architecture.md](architecture.md#capas-y-medición-en-el-visor)):
 
@@ -73,7 +75,7 @@ El visor la dibuja así (detalle técnico en [architecture.md](architecture.md#c
 - **Sin contornos**: el _eye-dome lighting_ oscurecía cada borde de edificio y de árbol, y la nube parecía un dibujo. Ahora está apagado; la casilla «Realzar bordes (EDL)» lo enciende, más suave que antes.
 - **Calidad** Baja, Media o Alta (error en pantalla 16, 12 o 3 y caché de 64, 128 o 256 MB por capa). Los móviles empiezan en Baja y el resto en Media; las capturas de esta página son en Alta.
 
-Antes y después, con la misma cámara y calidad Alta (izquierda, puntos cuadrados con EDL fuerte; derecha, la versión actual):
+Antes y después, con la misma cámara y calidad Alta (izquierda, puntos cuadrados con EDL fuerte; derecha, los puntos redondos actuales). Las dos son de la interfaz anterior, con la etiqueta «MODO BÁSICO» del mapa; lo que se compara es el dibujo de la nube, que no ha cambiado:
 
 ![Torrelago antes y después del cambio de dibujo de la nube](screenshots/laguna-antes-despues.jpg)
 
@@ -87,7 +89,7 @@ La nube aérea tiene unos 40 cm entre puntos: de cerca, el suelo se ve como manc
 
 1. Con Python 3 (sin instalar nada más), ejecuta `python3 scripts/descargar_pnoa_laguna.py` (en Windows, `py scripts\descargar_pnoa_laguna.py`). Baja unas 4.850 teselas JPEG sin modificar (z13 a z19, las ocho hojas con 150 m de margen), primero del TMS de IDEE y, si falla, del WMTS del IGN, con reintentos; si se corta, se vuelve a ejecutar y sigue. Al final deja `pnoa-laguna-z13-19.zip` con `LEEME.txt` (atribución y fecha de descarga).
 2. Sube el zip a la release `data-laguna` (o guárdalo donde quieras).
-3. `scripts/fetch-ortho.sh` (o `scripts/fetch-ortho.sh ruta/al/zip`) lo descarga, comprueba que solo trae teselas `z/x/y.jpg` con contenido JPEG y `LEEME.txt`, y lo deja en `apps/web/public/ortho/` (ignorado por Git). La etiqueta del mapa pasa a **ORTOFOTO PNOA (DESCARGADA)**.
+3. `scripts/fetch-ortho.sh` (o `scripts/fetch-ortho.sh ruta/al/zip`) lo descarga, comprueba que solo trae teselas `z/x/y.jpg` con contenido JPEG y `LEEME.txt`, y lo deja en `apps/web/public/ortho/` (ignorado por Git). La placa de créditos pasa a decir **Ortofoto PNOA (descargada)**.
 
 **Lo que hay que saber de la foto:**
 
@@ -96,7 +98,7 @@ La nube aérea tiene unos 40 cm entre puntos: de cerca, el suelo se ve como manc
 - **Sombras y coches** de la foto quedan pegados al suelo; en Híbrido, la vegetación baja que el LiDAR clasifica como 1 (sin clasificar) o 3 sigue como puntos sueltos sobre la foto.
 - Fuera de las ocho hojas la foto se drapea sobre el plano orientativo.
 
-**Captura con ortofoto real pendiente.** En el entorno donde se desarrolló no se llega a los servidores del IGN ni de IDEE y el zip aún no estaba en la release, así que no hay capturas ni vídeo con la foto real: las de esta página usan el atlas Natural Earth. También son anteriores al último cambio de la etiqueta del mapa: aún ponen «MODO BÁSICO · Local · RELIEVE LIDAR», donde hoy se lee el mapa base (por ejemplo «ATLAS NATURAL EARTH»). El drapeado, el crédito, el modo Híbrido y los cambios de fuente están probados con teselas de prueba (un damero magenta).
+**Captura con ortofoto real pendiente.** En el entorno donde se desarrolló no se llega a los servidores del IGN ni de IDEE y el zip aún no estaba en la release (comprobado de nuevo el 18/10/2026 antes de las capturas), así que no hay capturas ni vídeo con la foto real: las capturas de la interfaz actual usan el fondo neutro, y la comparación de la nube y el vídeo, el atlas Natural Earth. El drapeado, el crédito, el modo Híbrido y los cambios de fuente están probados con teselas de prueba (un damero magenta).
 
 ## Comprobación del datum vertical con los datos reales
 
@@ -113,7 +115,7 @@ El **MDT** se ha comparado con los mismos 200.000 puntos de suelo por hoja: dife
 
 ## El escenario de la demo
 
-![Alerta simulada en la sonda de nivel de la laguna](screenshots/laguna-alerta.jpg)
+![Alerta simulada en la sonda de nivel de la laguna: haz, anillos y ficha](screenshots/estacion-alerta.jpg)
 
 `database/seeds/laguna-de-duero.sql` (el seed por defecto; `DEMO_SEED=valladolid` o `npm run db:seed -- valladolid` conserva el anterior) crea tres instalaciones ficticias con 18 activos y 36 sensores. Cada activo está en un sitio que se ve en la nube:
 
@@ -137,23 +139,36 @@ Hechas con la herramienta **Medir** del visor (clics sobre lo dibujado) y contra
 
 Repetidas el 13/10/2026 con los puntos redondos de 4 px y calidad Alta (el clic tiene que seguir cayendo en los discos dibujados): torre **−41,7 m** de desnivel y 38,5 m en horizontal (38,47 m con pyproj entre los dos puntos picados); laguna **36.935 m²** y 927,3 m de perímetro, frente a 36.941 m² y 927,4 m con pyproj para los mismos 28 vértices (la herramienta proyecta al plano tangente; pyproj calcula sobre el elipsoide).
 
-![Medición de la altura de una torre de Torrelago](screenshots/laguna-medicion-torre.jpg)
-
-![Medición del área de la laguna](screenshots/laguna-medicion.jpg)
+![Medición de la altura de una torre de Torrelago, dibujada como cota sobre la nube](screenshots/estacion-medicion-torre.jpg)
 
 Un clic toma la profundidad de lo dibujado: sobre una nube a 3 px por punto, el punto picado puede quedar unos 30 cm por delante del punto LiDAR (en la torre, el suelo picado quedó 27 cm por encima de los puntos de suelo). Las alturas de la tabla son las de la nube, no las de un plano de proyecto.
 
 Un clic cae sobre lo primero que se ve en ese píxel: la copa de un árbol, un coche, una valla o una farola. Para medir el suelo, pica en pavimento despejado o marca **«Al suelo (MDT)»** en el panel Medir (aparece con el relieve del LiDAR activo): cada punto pasa a la altura del modelo del terreno en ese sitio, con su malla de 2 m.
+
+## Perfil y alturas
+
+La herramienta **3 Perfil** da el corte de la nube a lo largo de una línea A–B con los puntos LiDAR reales (los lee la API de las teselas, no la vista) y la altura de cada edificio que cruza. Sobre la fila sur de Torrelago, con la misma línea que la maqueta del diseño (A = −4,7231281, 41,5901638 y B = −4,7269410, 41,5891789), sale:
+
+![Perfil A–B de 336,2 m sobre Torrelago, con el corte atenuado y las alturas de cuatro torres](screenshots/estacion-perfil-corte.jpg)
+
+| Magnitud                          | Visor (API `/section`)           | Cálculo independiente (laspy + pyproj sobre el LAZ original) |
+| --------------------------------- | -------------------------------- | ------------------------------------------------------------ |
+| Longitud de A–B                   | 336,2 m (sobre el elipsoide)     | 336,215 m                                                    |
+| Puntos en la franja de ±1,5 m     | 8.287                            | 8.283, más 8 a menos de 1 mm del borde                       |
+| Torre E4: cubierta, suelo, altura | 742,3 m · 701,3 m (MDT) · 41,1 m | 742,32 m · 701,26 m (mediana de la clase 2) · 41,06 m        |
+| E1 · E2 · E3                      | 29,5 · 37,9 · 38,0 m             | 29,67 · 37,93 · 38,05 m                                      |
+
+Las alturas son **ortométricas** (altitud sobre el nivel del mar, como en PNOA): la cota de la cubierta de E4, 742,3 m, menos el suelo del MDT, 701,3 m. «Altura» es el percentil 95 de los puntos de edificación (clase 6) de cada grupo menos el MDT, así que mide hasta el nivel principal de la cubierta, no hasta el punto más alto (antenas, casetones). Por eso no tiene por qué coincidir al decímetro con lo que da Medir con un clic en un punto concreto de la cubierta. Detalle de la comprobación en [verification.md](verification.md#perfil-ab-corte-y-radio-paso-b4-17102026).
 
 ## Límites
 
 - Fuera de las ocho hojas el terreno es un **plano orientativo** a la altura mediana del MDT, que se funde con el borde de los datos en 400 m y vuelve al elipsoide a 30-60 km. Donde falta la hoja 355-4604 se ve ese plano; cerca de la esquina, las dos hojas vecinas se mezclan con él sin escalón.
 - La laguna no tiene superficie de agua: en la nube es un hueco y en el MDT una superficie interpolada desde la orilla.
 - Densidad de LiDAR aéreo: las fachadas tienen pocos puntos y los patios estrechos ninguno (ver [Cómo se dibuja la nube](#cómo-se-dibuja-la-nube)). La capa opcional [Fotorrealista (Google)](fotorrealista.md) da el aspecto real del entorno, pero no es un dato medido de este proyecto.
-- La ortofoto PNOA no se pudo cargar en el entorno de desarrollo (red bloqueada y sin la copia descargada); las capturas usan el atlas Natural Earth bajo la nube. Captura con ortofoto real pendiente.
+- La ortofoto PNOA no se pudo cargar en el entorno de desarrollo (red bloqueada y sin la copia descargada); las capturas usan el fondo neutro (las de la interfaz anterior, el atlas Natural Earth). Captura con ortofoto real pendiente.
 - En las capturas, hechas con un renderizador por software (SwiftShader), las teselas lejanas aún no habían cargado su máximo detalle; con una GPU cargan en segundos.
 - Una hoja de 2 × 2 km o más densa multiplica tiempos y disco de forma aproximadamente lineal; la subida pasa por la API (150 MiB por defecto).
 
 ## Vídeo
 
-[Demo de 40 s](video/laguna-demo.mp4) ([WebM](video/laguna-demo.webm)): vista general de Laguna de Duero, descenso a Torrelago, cambio de modo de color (altura, clasificación, RGB), medición de una torre (41,7 m de desnivel entre la cubierta y el pie) y una anomalía simulada en la sonda de la laguna, con los puntos redondos y sin contornos. Se grabó fotograma a fotograma en calidad Media: con el renderizador por software cada fotograma tardaba uno o dos minutos, así que la cámara se coloca en cada posición, se espera a las teselas y se captura. Se quitó del montaje un fotograma en el que la cámara aparecía, durante un instante, mucho más lejos.
+[Demo de 40 s](video/laguna-demo.mp4) ([WebM](video/laguna-demo.webm)), grabada con la **interfaz anterior** (barra lateral, mapa dentro de la página e inspector a la derecha) y sin volver a grabar tras la interfaz «Estación total»: vista general de Laguna de Duero, descenso a Torrelago, cambio de modo de color (altura, clasificación, RGB), medición de una torre (41,7 m de desnivel entre la cubierta y el pie) y una anomalía simulada en la sonda de la laguna, con los puntos redondos y sin contornos. Se grabó fotograma a fotograma en calidad Media: con el renderizador por software cada fotograma tardaba uno o dos minutos, así que la cámara se coloca en cada posición, se espera a las teselas y se captura. Se quitó del montaje un fotograma en el que la cámara aparecía, durante un instante, mucho más lejos.
