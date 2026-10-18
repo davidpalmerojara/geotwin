@@ -44,3 +44,53 @@ export function focusBack(anchorId: string, doc: Pick<Document, 'getElementById'
   };
   if (!give()) requestAnimationFrame(() => void give());
 }
+
+/**
+ * Calls `done` once `read()` has given the same answer twice in a row, `interval` ms apart (the
+ * plates have stopped moving: a card docking, a sheet loading its list), or after `max` ms at
+ * the latest. Returns a function that cancels the wait.
+ */
+export function whenSteady(read: () => string, done: () => void, interval = 400, max = 6000) {
+  let last = read(),
+    waited = 0,
+    timer: ReturnType<typeof setTimeout> | undefined;
+  const tick = () => {
+    waited += interval;
+    const now = read();
+    if (now === last || waited >= max) {
+      timer = undefined;
+      done();
+      return;
+    }
+    last = now;
+    timer = setTimeout(tick, interval);
+  };
+  timer = setTimeout(tick, interval);
+  return () => {
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+  };
+}
+
+/** The plates' boxes as a string, rounded to whole pixels: what `whenSteady` compares. */
+export const platesKey = (root: ParentNode = document) =>
+  overlayBoxes(root)
+    .map(
+      (b) =>
+        `${Math.round(b.left)},${Math.round(b.top)},${Math.round(b.right)},${Math.round(b.bottom)}`,
+    )
+    .join(';');
+
+/**
+ * Gives the focus to the 3D scene (its keyboard surface): where it goes when the asset card
+ * closes, as no button opened the card. On the next frame too if the scene cannot take it yet.
+ */
+export function focusScene(doc: Pick<Document, 'querySelector'> = document) {
+  const give = () => {
+    const scene = doc.querySelector<HTMLElement>('.cesium-host');
+    if (!scene) return true;
+    scene.focus({ preventScroll: true });
+    return scene.ownerDocument.activeElement === scene;
+  };
+  if (!give()) requestAnimationFrame(() => void give());
+}

@@ -66,6 +66,7 @@ import AssetTags from '../scene/asset-tags';
 import { useLayers } from '../../hooks/data';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
 import { renderUntil } from '../measure/render-until';
+import { dimensionLabelBoxes } from '../measure/dimension-lines';
 import { useLidarTerrain } from '../layers/lidar-terrain-provider';
 import { terrainHeight, type LidarTerrain } from '../layers/lidar-terrain';
 import { usePnoaImagery } from '../layers/pnoa-imagery';
@@ -75,6 +76,8 @@ import { useLayerView } from '../../stores/layers';
 import { measuring } from '../../stores/measure';
 import { useScene } from '../../stores/viewer';
 import { flightSeconds } from '../../lib/motion';
+import { overlayBoxes, platesKey, whenSteady } from '../hud/dom';
+import { outOfSight } from '../hud/placement';
 type DevWindow = Window & {
   __geotwinViewer?: Viewer;
   /** Installation labels as last placed (canvas px), for end-to-end checks. */
@@ -459,12 +462,16 @@ export default function CesiumView({
       if (v.isDestroyed()) return;
       const rect = v.scene.canvas.getBoundingClientRect();
       // The plates of the HUD floating over the scene.
-      const blocked = sceneBlockers().map((b) => ({
-        left: b.left - rect.left,
-        right: b.right - rect.left,
-        top: b.top - rect.top,
-        bottom: b.bottom - rect.top,
-      }));
+      const blocked = [
+        ...sceneBlockers().map((b) => ({
+          left: b.left - rect.left,
+          right: b.right - rect.left,
+          top: b.top - rect.top,
+          bottom: b.bottom - rect.top,
+        })),
+        // The values of a measurement or a profile being read.
+        ...dimensionLabelBoxes(),
+      ];
       const current = installationIdRef.current;
       const ordered = [...installationsRef.current].sort(
         (a, b) => Number(b.id === current) - Number(a.id === current),
@@ -585,9 +592,39 @@ export default function CesiumView({
   }, [framePoints, ready]);
   // Whether the selected asset is already loaded: a shared link can open before the asset list.
   const selectedLoaded = assets.some((a) => a.id === selectedId);
+  // Once per selection: the asset's card (and a sheet's list) arrive after the flight has been
+  // aimed, and a card docked over the asset would hide it. When the plates have settled and the
+  // asset is under one, the flight is aimed again with them counted.
+  const reaimed = useRef<string | null>(null);
   useEffect(() => {
     const v = viewer.current;
     if (!v || !selectedId || !ready || !selectedLoaded) return;
+    reaimed.current = null;
+    let stopWaiting: (() => void) | undefined;
+    const checkFraming = () => {
+      stopWaiting?.();
+      if (reaimed.current === selectedId) return;
+      stopWaiting = whenSteady(platesKey, () => {
+        const flight = autoFlight.current,
+          asset = assetsRef.current.find((a) => a.id === selectedId);
+        if (v.isDestroyed() || selectedRef.current !== selectedId || !asset) return;
+        // Never over a camera the user has moved since.
+        if (!flight || flight.state !== 'landed' || !samePose(flight.pose!, poseOf(v))) return;
+        const { lng, lat } = asset.location;
+        const world = Cartesian3.fromDegrees(
+          lng,
+          lat,
+          groundRef.current(lng, lat) + (reliefRef.current ? asset.mount_height_m : 0),
+        );
+        const at = SceneTransforms.worldToWindowCoordinates(v.scene, world);
+        const rect = v.scene.canvas.getBoundingClientRect();
+        const point = at ? { x: rect.left + at.x, y: rect.top + at.y } : null;
+        const viewport = { width: window.innerWidth, height: window.innerHeight };
+        if (!outOfSight(point, viewport, overlayBoxes(), 24)) return;
+        reaimed.current = selectedId;
+        flight.redo();
+      });
+    };
     // Fly straight to the asset position. Viewer.flyTo(entity) waits for the entity's
     // bounding sphere in a later render; with requestRenderMode that flight could stay
     // pending until an unrelated update and then start from a stale view.
@@ -620,11 +657,15 @@ export default function CesiumView({
       v.camera.flyToBoundingSphere(sphere, {
         duration: flightSeconds(1),
         offset: new HeadingPitchRange(0, pitch, 650),
-        complete,
+        complete: () => {
+          complete();
+          checkFraming();
+        },
         cancel,
       });
       v.scene.requestRender();
     });
+    return () => stopWaiting?.();
   }, [selectedId, ready, selectedLoaded]);
   /** Shows or hides the Google mesh; the globe (and the LiDAR relief on it) does the opposite. */
   const showPhotoreal = (v: Viewer, show: boolean) => {

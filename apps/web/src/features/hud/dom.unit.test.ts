@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { focusBack, overlayBoxes, sceneBlockers } from './dom';
+import { focusBack, overlayBoxes, sceneBlockers, whenSteady } from './dom';
 
 /** A stand-in document with one button that takes the focus, or not (hidden). */
 function page(focusable: boolean) {
@@ -86,5 +86,41 @@ describe('sceneBlockers', () => {
     } as unknown as ParentNode;
     overlayBoxes(root);
     expect(asked).toEqual(['[data-map-overlay]']);
+  });
+});
+
+describe('whenSteady', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('waits until the plates stop moving (a card docking)', () => {
+    vi.useFakeTimers();
+    const answers = ['', 'card float', 'card dock', 'card dock'];
+    let i = 0;
+    const done = vi.fn();
+    whenSteady(() => answers[Math.min(i++, answers.length - 1)]!, done, 400, 6000);
+    vi.advanceTimersByTime(400);
+    expect(done).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(400);
+    expect(done).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(400);
+    expect(done).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(4000);
+    expect(done).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives up waiting after the longest wait, and can be cancelled', () => {
+    vi.useFakeTimers();
+    let n = 0;
+    const done = vi.fn();
+    whenSteady(() => String(n++), done, 400, 2000);
+    vi.advanceTimersByTime(1999);
+    expect(done).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(done).toHaveBeenCalledTimes(1);
+    const never = vi.fn();
+    const cancel = whenSteady(() => 'still', never, 400);
+    cancel();
+    vi.advanceTimersByTime(1000);
+    expect(never).not.toHaveBeenCalled();
   });
 });

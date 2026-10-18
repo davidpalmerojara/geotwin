@@ -101,6 +101,47 @@ for (const size of sizes)
     }
   });
 
+/** Whether the asset's mark is on screen and outside every plate (a docked card, a sheet). */
+function markInSight(page: Page, id: string) {
+  return page.evaluate((id) => {
+    const mark = document.querySelector<HTMLElement>(`.scene-mark[data-asset="${id}"]`);
+    if (!mark || mark.style.display === 'none') return 'no mark';
+    const r = mark.getBoundingClientRect();
+    const x = r.left,
+      y = r.top;
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return 'off screen';
+    const under = [...document.querySelectorAll('[data-map-overlay]')]
+      .filter((el) => {
+        const b = el.getBoundingClientRect();
+        return b.width > 0 && x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
+      })
+      .map((el) => el.getAttribute('data-testid') ?? el.className);
+    return under.length ? `under ${under.join(', ')}` : 'in sight';
+  }, id);
+}
+
+test('a shared link to an asset with a sheet frames it between the sheet and its card; Esc gives the focus to the scene', async ({
+  page,
+}) => {
+  test.setTimeout(150000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openScene(page, `/alertas?activo=${assetId}`);
+  await expect(page.getByTestId('section-sheet')).toBeVisible();
+  await expect(card(page)).toBeVisible();
+  // The card docks after the camera has been aimed: the view is aimed again once it settles,
+  // so the asset is not left behind its own card.
+  await expect.poll(() => markInSight(page, assetId), { timeout: 90000 }).toBe('in sight');
+  // In sight, it has no edge chip.
+  const name = (await card(page).locator('#asset-card-title').innerText()).trim();
+  await expect(page.getByTestId('edge-chip').filter({ hasText: name })).toHaveCount(0);
+  // Esc closes the sheet, then the card; the focus ends on the scene, not on the page body.
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('section-sheet')).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(card(page)).toBeHidden();
+  await expect(page.getByTestId('cesium-view')).toBeFocused();
+});
+
 test('keys 1, 2 and C work, but not while typing; Esc closes Capas and gives the focus back', async ({
   page,
 }) => {
