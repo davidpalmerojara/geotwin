@@ -1,8 +1,8 @@
 /**
- * Tool 5 in the scene: the ST_DWithin radius as a dashed ring on the terrain (classified on the
- * LiDAR DTM), a faint disc, the radius and count on the ring, and a thin leader from the centre to
- * each asset inside with its distance. While the tool is on, a click on the map (not on an asset)
- * makes that point the centre.
+ * Tool 5 in the scene: the ST_DWithin radius as a dashed ring on the LiDAR DTM (dimmer where the
+ * clouds are in front of it), a faint disc classified on the terrain, the radius and count on the
+ * ring, and a thin leader from the centre to each asset inside with its distance. While the tool
+ * is on, a click on the map (not on an asset) makes that point the centre.
  */
 import {
   ArcType,
@@ -178,17 +178,27 @@ export class RadiusRing {
     entities.suspendEvents();
     entities.removeAll();
     if (view) {
-      const ring = circle(view.center, view.metres);
+      // The ring follows the DTM (a point every 5 m or so, at the bilinear height of the ground
+      // model the globe draws) instead of being classified on the terrain: the point clouds stand
+      // on that ground and would hide a classified line. Where something is in front of it, it is
+      // drawn dimmer instead of disappearing.
+      const n = Math.min(720, Math.max(128, Math.round((2 * Math.PI * view.metres) / 5)));
+      const ring = circle(view.center, view.metres, n);
       entities.add({
         id: 'radio:anillo',
         polyline: {
-          positions: ring.map((p) => Cartesian3.fromDegrees(p.lng, p.lat)),
-          clampToGround: true,
-          classificationType: ClassificationType.TERRAIN,
+          positions: ring.map((p) =>
+            Cartesian3.fromDegrees(p.lng, p.lat, this.ground(p.lng, p.lat) + 0.5),
+          ),
+          arcType: ArcType.NONE,
           width: 2.5,
           material: new PolylineDashMaterialProperty({
             color: SIG,
             gapColor: INK.withAlpha(0.4),
+            dashLength: 14,
+          }),
+          depthFailMaterial: new PolylineDashMaterialProperty({
+            color: SIG.withAlpha(0.55),
             dashLength: 14,
           }),
         },
