@@ -292,4 +292,6 @@ Cada paso dejó verdes lint, formato, tipos, unitarias, integración, pytest, bu
 - **Rótulos de instalación** sin los recuentos de las maquetas («6 activos · 1 crítico»).
 - **Leyenda de Altura** en Capas: una barra de «baja» a «alta», no la regla vertical con cotas de `A/desktop-capas.png`; con varias hojas cada una usa su propio rango.
 - **Perfil**: la placa de lectura de abajo no sigue al cursor del perfil, como sí hace la maqueta (la lectura del cursor está en el cajón). Con el perfil abierto la franja superior de la escena cuenta entera como tapada para el encuadre, pero desde la segunda verificación los chips de borde solo salen para lo que está fuera de la pantalla o bajo una placa.
+- **Perfil visto de lejos** (a unos 500 m): E1…En ya no se pisan entre sí ni con los rótulos, pero la propia línea A–B y sus marcas de distancia pueden cruzar un valor, porque no cuentan como obstáculo.
+- **Móvil, vista de toda la red**: el encuadre abarca todas las instalaciones, también el depósito del cerro, y con cuatro hojas cargadas la nube ocupa una parte pequeña de la pantalla. Los rótulos de instalación ya no quedan bajo las marcas; el encuadre no se ha cambiado.
 - **Móvil**: con la ficha al 45 % los tres botones de abajo (Histórico, Cercanos y radio, Laboratorio) quedan en parte bajo la barra de herramientas y se alcanzan desplazando la hoja.
