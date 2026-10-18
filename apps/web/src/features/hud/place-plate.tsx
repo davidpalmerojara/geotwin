@@ -60,7 +60,10 @@ function InstallationSelect() {
  * Top-left plate: the GeoTwin menu, the workspace with its «demo» tag, the installation selector
  * and the annunciator (asset counts, which open Activos, and the active alarm, which opens
  * Alertas). The alarm is the network's, whatever installation is chosen: an operator looking at
- * one installation still hears about another.
+ * one installation still hears about another. On narrower screens the plate gives way in steps
+ * (container queries on the top-left column, see globals.css): the workspace name goes first,
+ * then the annunciator moves to a second row, then the alarm to a third, so the parts never
+ * overprint each other and the alarm's asset stays readable.
  */
 export function PlacePlate() {
   const setPage = useUI((s) => s.setPage);
@@ -82,7 +85,7 @@ export function PlacePlate() {
           onClick={() => setMenu(!menu)}
         >
           <Brand />
-          GeoTwin
+          <span className="brand-word">GeoTwin</span>
           <Caret />
         </button>
         <GeoTwinMenu open={menu} setOpen={setMenu} trigger={trigger} />

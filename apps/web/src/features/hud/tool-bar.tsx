@@ -26,8 +26,9 @@ function useToolState() {
 }
 
 /**
- * The tool keys (1–5) and Capas (C) under the place plate. The active tool is inverted (light
- * fill, dark text), never yellow. Without the LiDAR relief Perfil and Corte are shown disabled,
+ * The tool keys (1–5) and Capas (C) under the place plate: key and name on a desktop, key and
+ * icon on a tablet (the name in the title and the accessible name). The active tool is inverted
+ * (light fill, dark text), never yellow. Without the LiDAR relief Perfil and Corte are shown disabled,
  * with the reason.
  */
 export function ToolBar() {
@@ -57,6 +58,7 @@ export function ToolBar() {
             onClick={() => !blocked && setTool(id)}
           >
             <Kbd>{key}</Kbd>
+            <ToolIcon tool={id} className="soft-icon" size={16} />
             <span className="soft-label">{label}</span>
           </button>
         );
@@ -77,6 +79,7 @@ export function ToolBar() {
         onClick={() => togglePanel('layers')}
       >
         <Kbd>C</Kbd>
+        <ToolIcon tool="layers" className="soft-icon" size={16} />
         <span className="soft-label">Capas</span>
         {layers.length > 0 && (
           <span className="soft-count num" aria-hidden="true">
@@ -107,9 +110,23 @@ const ICONS: Record<Tool | 'layers', React.ReactNode> = {
   radius: <circle cx="10" cy="10" r="7" strokeDasharray="3 2" />,
   layers: <path d="M10 3 18 7 10 11 2 7Z M2 11l8 4 8-4M2 15l8 4 8-4" />,
 };
-function ToolIcon({ tool }: { tool: Tool | 'layers' }) {
+function ToolIcon({
+  tool,
+  className = '',
+  size = 20,
+}: {
+  tool: Tool | 'layers';
+  className?: string;
+  size?: number;
+}) {
   return (
-    <svg width="20" height="20" viewBox="0 0 20 20" className="tool-icon" aria-hidden="true">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      className={`tool-icon ${className}`}
+      aria-hidden="true"
+    >
       {ICONS[tool]}
     </svg>
   );

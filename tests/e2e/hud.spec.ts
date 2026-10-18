@@ -101,6 +101,122 @@ for (const size of sizes)
     }
   });
 
+/**
+ * The place plate's parts as drawn: every visible leaf (text, tag, glyph, the selector) clipped by
+ * the boxes that hide their overflow. Returns the pairs that are drawn over each other, the parts
+ * drawn outside the plate, and how much of the alarm's asset name shows.
+ */
+function placePlateLayout(page: Page) {
+  return page.evaluate(() => {
+    const plate = document.querySelector<HTMLElement>('[data-testid="place-plate"]')!;
+    const outer = plate.getBoundingClientRect();
+    type Box = { left: number; right: number; top: number; bottom: number };
+    const seen = (el: Element): Box | null => {
+      const r = el.getBoundingClientRect();
+      let box: Box = { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      for (let p = el.parentElement; p && p !== plate.parentElement; p = p.parentElement) {
+        const style = getComputedStyle(p);
+        if (style.clip !== 'auto') return null;
+        if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+        const c = p.getBoundingClientRect();
+        box = {
+          left: Math.max(box.left, c.left),
+          right: Math.min(box.right, c.right),
+          top: Math.max(box.top, c.top),
+          bottom: Math.min(box.bottom, c.bottom),
+        };
+      }
+      return box.right - box.left > 1 && box.bottom - box.top > 1 ? box : null;
+    };
+    const parts = [...plate.querySelectorAll('span, b, svg, select, kbd')]
+      .filter(
+        (el) => !el.parentElement?.closest('svg') && !el.querySelector('span, b, svg, select'),
+      )
+      .filter((el) => getComputedStyle(el).clip === 'auto')
+      .map((el) => ({ el, box: seen(el), text: (el.textContent ?? '').trim() || el.tagName }))
+      .filter((p): p is { el: Element; box: Box; text: string } => p.box !== null);
+    const overprinted: string[] = [];
+    for (let i = 0; i < parts.length; i++)
+      for (let j = i + 1; j < parts.length; j++) {
+        const a = parts[i]!.box,
+          b = parts[j]!.box;
+        const w = Math.min(a.right, b.right) - Math.max(a.left, b.left),
+          h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (w > 1 && h > 1) overprinted.push(`${parts[i]!.text} × ${parts[j]!.text}`);
+      }
+    const outside = parts
+      .filter(
+        ({ box }) =>
+          box.left < outer.left - 0.5 ||
+          box.right > outer.right + 0.5 ||
+          box.top < outer.top - 0.5 ||
+          box.bottom > outer.bottom + 0.5,
+      )
+      .map((p) => p.text);
+    const name = plate.querySelector('.annun-name');
+    const nameBox = name && seen(name);
+    return {
+      overprinted,
+      outside,
+      name: name?.textContent ?? '',
+      nameShown: nameBox ? nameBox.right - nameBox.left : 0,
+      nameWidth: name?.scrollWidth ?? 0,
+    };
+  });
+}
+
+// The documented desktop minimum (1024) and the tablet range (640–1023): the place plate gives way
+// in steps and never draws its parts over each other, with the longest installation name chosen.
+for (const size of [
+  { width: 1024, height: 768 },
+  { width: 900, height: 700 },
+  { width: 700, height: 700 },
+])
+  test(`the place plate keeps its parts apart and the alarm readable at ${size.width} x ${size.height}`, async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(150000);
+    const current = await request.get(`/api/alerts?asset_id=${assetId}&status=active`);
+    for (const old of await current.json()) await request.patch(`/api/alerts/${old.id}/resolve`);
+    const created = await request.post('/api/alerts', {
+      data: { asset_id: assetId, severity: 'warning', message: 'Revisión de la interfaz (E2E)' },
+    });
+    expect(created.status()).toBe(201);
+    const alert = (await created.json()) as { id: string };
+    try {
+      await page.setViewportSize(size);
+      await openScene(page);
+      const alarm = page.getByTestId('annunciator-alarm');
+      await expect(alarm).toContainText(/Advertencia|Crítico/);
+      await expect(alarm).toContainText(/manual|simulado/);
+      const select = page.getByLabel('Seleccionar instalación');
+      const names = await select.locator('option').allInnerTexts();
+      const longest = names.reduce((a, b) => (b.length > a.length ? b : a));
+      for (const choice of [names[0]!, longest]) {
+        await select.selectOption({ label: choice });
+        await expect(select.locator('option:checked')).toHaveText(choice);
+        const layout = await placePlateLayout(page);
+        expect(layout.overprinted).toEqual([]);
+        expect(layout.outside).toEqual([]);
+        // The asset of the alarm shows, whole or at least its first 60 px before the ellipsis.
+        expect(layout.name.length).toBeGreaterThan(0);
+        expect(layout.nameShown).toBeGreaterThanOrEqual(Math.min(layout.nameWidth, 60) - 0.5);
+        await expect(alarm.getByText(/Advertencia|Crítico/)).toBeVisible();
+        expect(await overlaps(page)).toEqual([]);
+        expect(await noScroll(page)).toEqual({ x: true, y: true, scrolled: true });
+        expect((await coveredCredits(page)).covered).toEqual([]);
+      }
+      // A tablet's tool keys show their icon beside the number when there is room for it.
+      if (size.width < 1024 && size.width >= 800)
+        await expect(page.locator('.tool-bar .soft-icon:visible')).toHaveCount(6);
+      // The keys keep their names for screen readers at every width.
+      await expect(page.getByRole('button', { name: 'Medir', exact: true })).toBeVisible();
+    } finally {
+      await request.patch(`/api/alerts/${alert.id}/resolve`);
+    }
+  });
+
 /** Whether the asset's mark is on screen and outside every plate (a docked card, a sheet). */
 function markInSight(page: Page, id: string) {
   return page.evaluate((id) => {

@@ -677,6 +677,8 @@ textarea {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--g);
+  /* The place plate gives way in steps as this column narrows (see «narrower place plate»). */
+  container: place / inline-size;
 }
 .hud-tl > .plate {
   position: relative;
@@ -752,12 +754,17 @@ textarea {
   gap: 8px;
   padding: 0 10px;
   min-width: 0;
-  flex: 0 1 auto;
+  /* When the row is short of room the installation's name gives way before the alarm's. */
+  flex: 0 6 auto;
   color: var(--fg-1);
 }
 .workspace {
   color: var(--fg-0);
   font-weight: 500;
+}
+.place-context .demo-tag,
+.place-context .f2 {
+  flex: none;
 }
 .select-plain {
   position: relative;
@@ -770,7 +777,9 @@ textarea {
   appearance: none;
   field-sizing: content;
   min-height: 0;
-  max-width: 230px;
+  min-width: 0;
+  max-width: min(230px, 100%);
+  overflow: hidden;
   padding: 2px 16px 2px 2px;
   border: 0;
   background: transparent;
@@ -818,6 +827,10 @@ textarea {
   min-width: 0;
   max-width: 340px;
   flex: 0 1 auto;
+  overflow: hidden;
+}
+.annun-alarm > :not(.annun-name) {
+  flex: none;
 }
 .annun-counts {
   flex: none;
@@ -839,8 +852,76 @@ textarea {
   color: var(--warn);
 }
 .annun-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* ---------- narrower place plate ----------
+   The top-left column («place» container) is the screen less the top-right plates. Below 1 000 px
+   the workspace's name goes (it stays for screen readers); below 860 px the annunciator moves to
+   a second row the width of the plate, where the alarm has room for its asset, and the workspace
+   comes back; below 560 px it goes again; below 420 px «GeoTwin» keeps its mark only and the
+   alarm takes a third row. Nothing is drawn over anything else at any width. */
+@container place (max-width: 999px) {
+  .workspace {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+}
+@container place (max-width: 859px) {
+  .place-plate {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    height: auto;
+  }
+  .place-plate > * {
+    height: 38px;
+  }
+  .place-context {
+    flex: none;
+  }
+  .annunciator {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+  }
+  .annun-alarm {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+}
+@container place (min-width: 560px) and (max-width: 859px) {
+  .workspace {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+}
+@container place (max-width: 419px) {
+  .brand-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  .place-plate > .annunciator {
+    flex-wrap: wrap;
+    height: auto;
+  }
+  .annunciator > .annun-cell {
+    flex: 1 1 100%;
+    height: 38px;
+    border-right: 0;
+  }
+  .annunciator > .annun-alarm {
+    border-top: 1px solid var(--rule);
+  }
 }
 .annun-more {
   color: var(--fg-1);
@@ -882,6 +963,10 @@ textarea {
 .soft-key[aria-disabled='true'] kbd {
   color: var(--fg-2);
   border-color: var(--rule);
+}
+/* The icons are the tablet's (see «narrower screens»); a desktop shows the names. */
+.soft-icon {
+  display: none;
 }
 .soft-count {
   font-size: 11px;
@@ -2480,7 +2565,18 @@ table.data {
     clip: rect(0, 0, 0, 0);
   }
   .soft-key {
+    gap: 5px;
     padding: 0 5px;
+  }
+  .soft-icon {
+    display: block;
+    flex: none;
+  }
+  /* …while the column has room for them beside the keys. */
+  @container place (max-width: 379px) {
+    .soft-icon {
+      display: none;
+    }
   }
   .asset-card {
     width: 360px;
