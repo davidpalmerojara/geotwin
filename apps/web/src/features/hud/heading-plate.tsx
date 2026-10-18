@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { create } from 'zustand';
 import { Minus, Plus, Search } from 'lucide-react';
 import { useScene, type CameraInfo } from '../../stores/viewer';
 import { useTool } from '../../stores/tool';
@@ -22,10 +23,16 @@ const CARDINAL: Record<number, string> = {
 const signed = (value: number, digits = 1) =>
   `${value < 0 ? MINUS : ''}${number(Math.abs(value), digits)}`;
 
-/** Follows the camera: heading, pitch, height and the scale at the centre, at most once a frame. */
-export function useCamera() {
+/** The camera as the plates show it, kept out of React state so that only they re-render. */
+const useCameraInfo = create<{ info: CameraInfo | null }>(() => ({ info: null }));
+
+/**
+ * Follows the camera: heading, pitch, height and the scale at the centre, at most once a frame,
+ * into a small store. It renders nothing and holds no state, so a camera move re-renders only the
+ * plates that read it (heading and scale), never the whole HUD.
+ */
+export function CameraFeed() {
   const api = useScene((s) => s.api);
-  const [info, setInfo] = useState<CameraInfo | null>(null);
   useEffect(() => {
     if (!api) return;
     let frame = 0;
@@ -33,7 +40,7 @@ export function useCamera() {
       if (!frame)
         frame = requestAnimationFrame(() => {
           frame = 0;
-          setInfo(api.camera());
+          useCameraInfo.setState({ info: api.camera() });
         });
     };
     update();
@@ -44,10 +51,14 @@ export function useCamera() {
       off();
       clearInterval(timer);
       cancelAnimationFrame(frame);
+      useCameraInfo.setState({ info: null });
     };
   }, [api]);
-  return info;
+  return null;
 }
+
+/** The latest camera reading (null until the viewer is up). */
+export const useCamera = () => useCameraInfo((s) => s.info);
 
 /** A heading tape like a total station's: ticks every 5°, labels every 15°. */
 function Tape({ heading }: { heading: number }) {
@@ -85,7 +96,8 @@ function Tape({ heading }: { heading: number }) {
  * Top-right plates: «Ir a» (/), the heading plate (tape, pitch, camera height and the north
  * needle, which turns the view north up), zoom, and «Encuadre inicial» (0).
  */
-export function HeadingPlate({ info }: { info: CameraInfo | null }) {
+export function HeadingPlate() {
+  const info = useCamera();
   const api = useScene((s) => s.api);
   const setPalette = useTool((s) => s.setPalette);
   const heading = info ? ((info.heading % 360) + 360) % 360 : 0;
@@ -175,7 +187,8 @@ export function HeadingPlate({ info }: { info: CameraInfo | null }) {
 /**
  * The phone's heading plate: heading and pitch in figures and the north needle (tap: north up).
  */
-export function PhoneHeading({ info }: { info: CameraInfo | null }) {
+export function PhoneHeading() {
+  const info = useCamera();
   const api = useScene((s) => s.api);
   const heading = info ? ((info.heading % 360) + 360) % 360 : 0;
   return (

@@ -13,7 +13,7 @@ import { PhonePlate, PlacePlate } from './place-plate';
 import { PhoneToolBar, ToolBar, toolButtonId } from './tool-bar';
 import { FloatingPanel } from './floating-panel';
 import { SectionSheet } from './section-sheet';
-import { HeadingPlate, PhoneHeading, useCamera } from './heading-plate';
+import { CameraFeed, HeadingPlate, PhoneHeading } from './heading-plate';
 import { ScalePlate } from './scale-bar';
 import { ReadoutPlate } from './readout-plate';
 import { CreditsPlate } from './credits-plate';
@@ -59,7 +59,6 @@ export function Stage() {
   const api = useScene((s) => s.api),
     lidarOn = useScene((s) => s.terrain === 'lidar'),
     lidar = useScene((s) => s.lidar);
-  const camera = useCamera();
   const phone = usePhone();
   const failed = assets.isError || installations.isError;
   // The viewer is never gated on query state: unmounting it would destroy the WebGL context, the
@@ -129,13 +128,14 @@ export function Stage() {
         />
       </Suspense>
       {sectionScene}
+      <CameraFeed />
       {phone ? (
         <div className="hud hud-phone">
           <div className="phone-top">
             <PhonePlate />
             <div className="phone-row">
-              <ScalePlate info={camera} />
-              <PhoneHeading info={camera} />
+              <ScalePlate />
+              <PhoneHeading />
             </div>
             {profiling && <ProfileHint />}
           </div>
@@ -239,13 +239,13 @@ export function Stage() {
               <RadiusPanel />
             </FloatingPanel>
           ) : null}
-          <HeadingPlate info={camera} />
+          <HeadingPlate />
           {profiling && <ProfileDrawer />}
           <AssetCard />
           <EdgeChips />
           <div className="hud-bottom">
             <div className="hud-bl">
-              <ScalePlate info={camera} />
+              <ScalePlate />
               <ReadoutPlate />
             </div>
             <div className="hud-br">

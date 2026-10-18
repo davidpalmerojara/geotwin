@@ -3,7 +3,7 @@
  * line, the cut on the LiDAR tilesets and Radio's ring. The drawer and the panels are plain React
  * outside this chunk; they share state through stores/section.ts and stores/tool.ts.
  */
-import { useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import type { Viewer } from 'cesium';
 import { useSection } from '../../stores/section';
 import { useTool } from '../../stores/tool';
@@ -116,7 +116,7 @@ function RadiusLayer({ viewer, ground }: { viewer: Viewer; ground: Ground }) {
   return null;
 }
 
-export default function SectionScene({ viewer, ground }: { viewer: Viewer; ground: Ground }) {
+function SectionScene({ viewer, ground }: { viewer: Viewer; ground: Ground }) {
   const tool = useTool((s) => s.tool);
   return (
     <>
@@ -126,3 +126,6 @@ export default function SectionScene({ viewer, ground }: { viewer: Viewer; groun
     </>
   );
 }
+
+// Memoized: the HUD around it re-renders for its own reasons (a sheet, a panel), the scene need not.
+export default memo(SectionScene);

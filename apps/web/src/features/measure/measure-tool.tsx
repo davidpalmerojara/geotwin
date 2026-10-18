@@ -5,7 +5,7 @@
  * Loaded on demand; the HUD shows it in the panel next to the «Medir» key, and Esc (handled by the
  * HUD) closes it.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Cartesian2,
   Cartesian3,
@@ -42,7 +42,7 @@ function pick(viewer: Viewer, position: Cartesian2) {
   return scene.camera.pickEllipsoid(position, scene.globe.ellipsoid);
 }
 
-export default function MeasureTool({
+function MeasureTool({
   viewer,
   ground,
 }: {
@@ -274,3 +274,6 @@ export default function MeasureTool({
     </div>
   );
 }
+
+// Memoized: the HUD around it re-renders for its own reasons (a sheet, a panel), the scene need not.
+export default memo(MeasureTool);

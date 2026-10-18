@@ -1,5 +1,5 @@
 // Workers and imagery assets are served from /cesium/ in dev and production.
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   Cartesian3,
   Cartesian2,
@@ -151,7 +151,7 @@ interface Props {
   onSelect: (id: string) => void;
   onInstallation: (id: string) => void;
 }
-export default function CesiumView({
+function CesiumView({
   assets,
   installations,
   installationId,
@@ -954,3 +954,6 @@ export default function CesiumView({
     </div>
   );
 }
+
+// Memoized: the HUD around it re-renders for its own reasons (a sheet, a panel), the scene need not.
+export default memo(CesiumView);

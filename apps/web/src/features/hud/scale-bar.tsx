@@ -1,8 +1,9 @@
-import type { CameraInfo } from '../../stores/viewer';
+import { useCamera } from './heading-plate';
 import { niceScale, type ScaleBar } from './readout';
 
 /** The scale at the centre of the view, with round lengths. */
-export function ScalePlate({ info }: { info: CameraInfo | null }) {
+export function ScalePlate() {
+  const info = useCamera();
   const bar: ScaleBar | null = info?.metresPerPixel ? niceScale(info.metresPerPixel, 150) : null;
   return (
     <div className="plate scale-plate" data-map-overlay data-testid="scale">
