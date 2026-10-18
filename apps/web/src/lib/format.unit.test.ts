@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { assetTypeLabel, axisTick, coordinates, count, decimal, initials, number } from './format';
+import {
+  assetTypeLabel,
+  axisTick,
+  coordinates,
+  count,
+  decimal,
+  initials,
+  number,
+  withoutSimulatedSuffix,
+} from './format';
 describe('Spanish formatting', () => {
   it('uses the singular for exactly one', () => {
     expect(count(1, 'sensor activo', 'sensores activos')).toBe('1 sensor activo');
@@ -32,5 +41,21 @@ describe('Spanish formatting', () => {
   it('names the level probe as such, not as a reservoir', () => {
     expect(assetTypeLabel.level_probe).toBe('Sonda de nivel');
     expect(assetTypeLabel.reservoir).toBe('Depósito');
+  });
+});
+
+describe('withoutSimulatedSuffix', () => {
+  it("drops the API's «telemetría simulada» once the line says it", () => {
+    expect(
+      withoutSimulatedSuffix('Nivel de agua: 2,31 m (umbral crítico 2,1 m) · telemetría simulada'),
+    ).toBe('Nivel de agua: 2,31 m (umbral crítico 2,1 m)');
+  });
+  it('leaves any other message as it is', () => {
+    expect(withoutSimulatedSuffix('Revisión manual de la válvula')).toBe(
+      'Revisión manual de la válvula',
+    );
+    expect(withoutSimulatedSuffix('telemetría simulada en pruebas: revisar')).toBe(
+      'telemetría simulada en pruebas: revisar',
+    );
   });
 });

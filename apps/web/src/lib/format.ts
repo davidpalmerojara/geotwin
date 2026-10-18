@@ -46,3 +46,11 @@ export function number(value: number, digits = 0) {
     maximumFractionDigits: digits,
   });
 }
+
+/**
+ * An alert's message without the «· telemetría simulada» the API ends it with, for a place that
+ * already says where the alert came from (the card's incident line: «desde las … · telemetría
+ * simulada»), so the words are not written twice.
+ */
+export const withoutSimulatedSuffix = (message: string) =>
+  message.replace(/\s*·\s*telemetría simulada\s*$/u, '');

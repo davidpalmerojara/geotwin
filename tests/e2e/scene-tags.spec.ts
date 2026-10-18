@@ -74,6 +74,9 @@ test('an injected alert gets a critical tag, a beam and rings until it is acknow
 
   // «Reconocer» stops the rings; the beam stays.
   const incident = card(page).locator('.incident-critical');
+  // The incident says once where it comes from: the API's message ends without a second suffix.
+  const said = (await incident.locator('.incident-open').innerText()).match(/telemetría simulada/g);
+  expect(said).toHaveLength(1);
   await incident.getByRole('button', { name: /^Reconocer/ }).click();
   await expect(map(page)).toHaveAttribute('data-pulses', '0', slow);
   await expect(map(page)).toHaveAttribute('data-beams', '1');

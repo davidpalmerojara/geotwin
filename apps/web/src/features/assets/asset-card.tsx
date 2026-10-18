@@ -16,7 +16,14 @@ import type { Alert, Asset, Sensor } from '@geotwin/shared';
 import { api } from '../../lib/api';
 import { time } from '../../lib/utils';
 import { useAlerts, useHealth, useInstallations, useLayers, useSync } from '../../hooks/data';
-import { assetTypeLabel, axisTick, decimal, metricLabel, number } from '../../lib/format';
+import {
+  assetTypeLabel,
+  axisTick,
+  decimal,
+  metricLabel,
+  number,
+  withoutSimulatedSuffix,
+} from '../../lib/format';
 import { Loading, ErrorState, Empty } from '../../components/common';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../components/ui/dialog';
@@ -26,7 +33,7 @@ import { sensorLevel } from '../scene/tag-data';
 import { Glyph, Kbd, Sim, StatusWord } from '../hud/glyphs';
 import { formatLatLon, formatMetres, formatUtm, geoidAt } from '../hud/readout';
 import { placeCard, MARGIN, GAP } from '../hud/placement';
-import { overlayBoxes } from '../hud/dom';
+import { focusScene, overlayBoxes } from '../hud/dom';
 import { measuredGround } from '../layers/lidar-terrain';
 import { useUI } from '../../stores/ui';
 import { useTool } from '../../stores/tool';
@@ -172,6 +179,16 @@ function AssetCardBody({ id }: { id: string }) {
   const historyRef = useRef<HTMLElement>(null),
     labRef = useRef<HTMLElement>(null);
   usePlacement(card, guide, asset.data, phone);
+  // Closed (Esc, «Cerrar») with the focus inside it or on the page body: to the scene, where
+  // the arrows move the camera and Tab reaches the list of assets, not back to the page's start.
+  useEffect(() => {
+    const element = card.current;
+    return () => {
+      if (element?.isConnected || useUI.getState().selectedAssetId) return;
+      const active = document.activeElement;
+      if (!active || active === document.body || element?.contains(active)) focusScene();
+    };
+  }, []);
   const selected = sensors.data?.find((s) => s.id === sensorId) ?? sensors.data?.[0];
   const readings = useQuery({
     queryKey: ['geo', 'readings', id, selected?.id],
@@ -239,7 +256,9 @@ function AssetCardBody({ id }: { id: string }) {
               <Glyph status={al.severity} />
               <span>
                 <strong>{al.severity === 'critical' ? 'Alerta crítica' : 'Advertencia'}</strong>
-                <span className="incident-msg">{al.message}</span>
+                <span className="incident-msg">
+                  {al.source === 'telemetry' ? withoutSimulatedSuffix(al.message) : al.message}
+                </span>
                 <span className="incident-meta">
                   desde las {time(al.triggered_at)} ·{' '}
                   {al.source === 'telemetry' ? 'telemetría simulada' : 'registro manual'}
