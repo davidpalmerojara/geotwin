@@ -34,6 +34,11 @@ const boxOf = (p: TagPlacement, i: TagItem) => ({
 describe('level of detail by distance', () => {
   it('shows name and value for warnings and critical assets up to 700 m', () => {
     expect(lodFor(300, 'critical')).toBe('full');
+    // While a profile is drawn, operational assets keep only their mark; alarms keep their tags.
+    expect(lodFor(300, 'healthy', false, true)).toBe('mark');
+    expect(lodFor(300, 'healthy', true, true)).toBe('full');
+    expect(lodFor(300, 'warning', false, true)).toBe('full');
+    expect(lodFor(1500, 'critical', false, true)).toBe('value');
     expect(lodFor(NEAR_M, 'warning')).toBe('full');
     expect(lodFor(300, 'healthy')).toBe('value');
     expect(lodFor(300, 'healthy', true)).toBe('full');

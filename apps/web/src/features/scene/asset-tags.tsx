@@ -74,6 +74,8 @@ export default function AssetTags({
   // While measuring (and with the later tools that pick on the map) a click on a mark or a tag
   // goes through to the scene: it adds a point instead of selecting the asset.
   const passive = useTool((s) => s.tool !== 'orbit' && s.tool !== 'radius');
+  // While a profile is drawn, operational assets show only their mark (the section is the subject).
+  const quiet = useTool((s) => s.tool === 'profile');
   const layer = useRef<HTMLDivElement>(null);
   const [fonts, setFonts] = useState(0);
   // Heights of the assets on the Google mesh (sampled after the camera stops), by id.
@@ -209,12 +211,12 @@ export default function AssetTags({
   // State of the placement shared by the frames: sides kept between frames, hidden marks.
   const sides = useRef(new Map<string, Side>());
   const occluded = useRef(new Set<string>());
-  const live = useRef({ infos, anchors, selectedId, hits });
+  const live = useRef({ infos, anchors, selectedId, hits, quiet });
   useEffect(() => {
-    live.current = { infos, anchors, selectedId, hits };
+    live.current = { infos, anchors, selectedId, hits, quiet };
     occlusionDue.current = performance.now();
     viewer.scene.requestRender();
-  }, [infos, anchors, selectedId, hits, viewer]);
+  }, [infos, anchors, selectedId, hits, quiet, viewer]);
   const occlusionDue = useRef<number | null>(null);
 
   useEffect(() => {
@@ -236,7 +238,7 @@ export default function AssetTags({
     const place = () => {
       const root = layer.current;
       if (!root || viewer.isDestroyed()) return;
-      const { infos, anchors, selectedId, hits } = live.current;
+      const { infos, anchors, selectedId, hits, quiet } = live.current;
       const width = scene.canvas.clientWidth,
         height = scene.canvas.clientHeight;
       const rect = scene.canvas.getBoundingClientRect();
@@ -261,7 +263,7 @@ export default function AssetTags({
           x: p.x,
           y: p.y,
           distance,
-          lod: lodFor(distance, info.status, selected),
+          lod: lodFor(distance, info.status, selected, quiet),
         });
         marks.set(info.id, {
           left: p.x - MARK,
