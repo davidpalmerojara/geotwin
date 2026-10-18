@@ -23,20 +23,25 @@ import type { ScreenBox } from '../digital-twin/camera';
 import { sceneBlockers } from '../hud/dom';
 import { useTool } from '../../stores/tool';
 import { STATUS_WORD, useTagInfos, type TagInfo } from './tag-data';
-import { overlaps } from '../digital-twin/labels';
 import {
   OCCLUSION_SAMPLES,
   fadesTag,
   isOccluded,
   layoutTags,
   lodFor,
+  placeValue,
   rankOf,
   type Side,
   type TagItem,
   type TagLod,
 } from './tag-layout';
 import { AlertBeams, type BeamSpec, type PulseMotion } from './alert-beams';
-import { dimensionFontReady, drawDimensions, mountDimension } from '../measure/dimension-lines';
+import {
+  dimensionFontReady,
+  dimensionLabelBoxes,
+  drawDimensions,
+  mountDimension,
+} from '../measure/dimension-lines';
 
 /** Half the size of a mark, px: what other tags keep clear of. */
 const MARK = 8;
@@ -300,6 +305,7 @@ export default function AssetTags({
           bottom: b.bottom - rect.top,
         })),
         ...(labelBoxes.current ?? []),
+        ...dimensionLabelBoxes(),
       ];
       // The mounting height's value: to the left of the dimension line, or to its right when a
       // plate (the card) is there; tags keep clear of it.
@@ -309,11 +315,9 @@ export default function AssetTags({
         const at = label ? SceneTransforms.worldToWindowCoordinates(scene, label.at) : undefined;
         const w = value.offsetWidth,
           h = value.offsetHeight;
-        const boxAt = (left: number) =>
-          at ? { left, right: left + w, top: at.y - h / 2, bottom: at.y + h / 2 } : null;
-        const free = (box: ScreenBox | null) =>
-          !!box && box.left >= 0 && box.right <= width && !blocked.some((b) => overlaps(box, b));
-        const box = at ? [boxAt(at.x - 12 - w), boxAt(at.x + 12)].find(free) : undefined;
+        // Clear of the other assets' marks too: one under the value hid its digits.
+        const others = [...marks].filter(([id]) => id !== selectedId).map(([, b]) => b);
+        const box = at ? placeValue(at, { width: w, height: h }, width, blocked, others) : null;
         if (box) {
           value.style.display = '';
           value.style.transform = `translate(${box.left}px, ${box.top}px)`;

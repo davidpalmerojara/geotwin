@@ -543,6 +543,8 @@ textarea {
   font: 500 13px/17px var(--mono);
   white-space: nowrap;
   box-shadow: 0 0 0 1px var(--ink-0);
+  /* Over the marks of other assets, should one still fall under it. */
+  z-index: 1;
 }
 /* The tag: a solid plate with a dashed outline, the «dato simulado» convention of the legend. */
 .scene-tag {
@@ -608,9 +610,13 @@ textarea {
 .scene-tags[data-passive] .scene-tag {
   pointer-events: none;
 }
+/* Behind the cloud: the frame fades (a faint outline, no shadow), the text keeps its contrast. */
 .scene-tag.occluded {
-  opacity: 0.55;
+  border-color: var(--rule-2);
   box-shadow: none;
+}
+.scene-tag.occluded .tag-value {
+  color: var(--fg-1);
 }
 /* Measured off screen once per change, at both levels of detail. */
 .scene-tag[data-measure] {

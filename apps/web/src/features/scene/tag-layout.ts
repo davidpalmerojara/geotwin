@@ -200,3 +200,34 @@ export function isOccluded(
  */
 export const fadesTag = (status: AssetStatus, occluded: boolean) =>
   occluded && status === 'healthy';
+
+/**
+ * Where the value of the selected asset's mounting dimension goes (its top-left corner), for a
+ * label `size` beside the point `at` of the dimension line: to its left, to its right, or a step
+ * above or below either, the first place inside the view clear of `blocked` (plates, chips,
+ * installation labels) and of the other assets' `marks`. When only the marks are in the way, the
+ * first place clear of the rest (the label is drawn over the marks); null when none is.
+ */
+export function placeValue(
+  at: { x: number; y: number },
+  size: { width: number; height: number },
+  viewWidth: number,
+  blocked: ScreenBox[],
+  marks: ScreenBox[],
+  gap = 12,
+): ScreenBox | null {
+  const { width: w, height: h } = size;
+  const step = h + 6;
+  const candidates = [0, -step, step].flatMap((dy) =>
+    [at.x - gap - w, at.x + gap].map((left) => ({
+      left,
+      right: left + w,
+      top: at.y - h / 2 + dy,
+      bottom: at.y + h / 2 + dy,
+    })),
+  );
+  const inside = (b: ScreenBox) => b.left >= 0 && b.right <= viewWidth;
+  const clear = (b: ScreenBox, of: ScreenBox[]) => !of.some((o) => overlaps(b, o));
+  const usable = candidates.filter((b) => inside(b) && clear(b, blocked));
+  return usable.find((b) => clear(b, marks)) ?? usable[0] ?? null;
+}

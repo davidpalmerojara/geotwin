@@ -68,4 +68,18 @@ describe('Installation labels on the map', () => {
       y: 50,
     });
   });
+  it('goes a step further out before covering a marker (a dense network on a phone)', () => {
+    // Marks under the three usual spots: below, above and further below the anchor.
+    const marks = [50, -34, 78].map((dy) => ({
+      left: 192,
+      right: 208,
+      top: 200 + dy - 8,
+      bottom: 200 + dy + 8,
+    }));
+    const placed = placeLabels([label('a', 200, 200)], [], view, marks).get('a')!;
+    expect(placed.y).toBe(-62);
+    const box = { left: 100 + placed.x, right: 300 + placed.x, top: 126, bottom: 150 };
+    for (const m of marks)
+      expect(box.right <= m.left || m.right <= box.left || box.bottom <= m.top).toBe(true);
+  });
 });

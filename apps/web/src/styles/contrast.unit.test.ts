@@ -34,3 +34,17 @@ describe('colour tokens', () => {
     expect(ratio([a, b])).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe('scene tags behind the cloud', () => {
+  const rule = (selector: string) => {
+    const start = css.indexOf(`${selector} {`);
+    return start < 0 ? '' : css.slice(start, css.indexOf('}', start));
+  };
+  it('fade only their frame: the text keeps its contrast', () => {
+    const occluded = rule('.scene-tag.occluded');
+    expect(occluded).not.toBe('');
+    expect(occluded).not.toMatch(/opacity/);
+    expect(rule('.scene-tag.occluded .tag-value')).toMatch(/color:\s*var\(--fg-1\)/);
+    expect(contrast(TOKENS['fg-1'], TOKENS['ink-0'])).toBeGreaterThanOrEqual(4.5);
+  });
+});

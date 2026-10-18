@@ -15,6 +15,11 @@ export type LabelOffset = { x: number; y: number } | null;
 
 /** Vertical offsets tried in order: below the area's centre, above it, further below. */
 export const LABEL_OFFSETS = [50, -34, 78];
+/**
+ * Further out, tried only to keep the asset markers uncovered: the marks are drawn over the scene,
+ * so a label under one loses the letters behind it (a dense network seen whole on a phone).
+ */
+export const FAR_OFFSETS = [-62, 106];
 const GAP = 4;
 
 export const overlaps = (a: ScreenBox, b: ScreenBox) =>
@@ -23,8 +28,9 @@ export const overlaps = (a: ScreenBox, b: ScreenBox) =>
 /**
  * Places each label (in order of priority) at the first free spot: below or above its anchor,
  * slid sideways past whatever is in the way as long as it still spans its anchor, and inside the
- * view. `soft` obstacles (the asset markers) are avoided when possible and covered only when there
- * is no other spot. A label with no free spot is hidden rather than drawn on top of another.
+ * view. `soft` obstacles (the asset markers) are avoided when possible, also a step further out
+ * (`far`), and covered only when there is no other spot. A label with no free spot is hidden
+ * rather than drawn on top of another.
  */
 export function placeLabels(
   anchors: LabelAnchor[],
@@ -32,11 +38,12 @@ export function placeLabels(
   view: { width: number; height: number },
   soft: ScreenBox[] = [],
   offsets = LABEL_OFFSETS,
+  far = FAR_OFFSETS,
 ) {
   const placed: ScreenBox[] = [];
   const result = new Map<string, LabelOffset>();
-  const spot = (a: LabelAnchor, avoid: ScreenBox[]): LabelOffset => {
-    for (const dy of offsets) {
+  const spot = (a: LabelAnchor, avoid: ScreenBox[], tries = offsets): LabelOffset => {
+    for (const dy of tries) {
       const top = a.y + dy - a.height / 2,
         bottom = top + a.height;
       if (top < 0 || bottom > view.height) continue;
@@ -66,7 +73,8 @@ export function placeLabels(
     result.set(
       a.id,
       inView
-        ? (spot(a, [...blocked, ...placed, ...soft]) ?? spot(a, [...blocked, ...placed]))
+        ? (spot(a, [...blocked, ...placed, ...soft], [...offsets, ...far]) ??
+            spot(a, [...blocked, ...placed]))
         : null,
     );
   }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  placeValue,
   fadesTag,
   EDGE,
   FAR_M,
@@ -180,5 +181,40 @@ describe('fadesTag', () => {
   it('keeps the tag of a hidden alert at full strength', () => {
     expect(fadesTag('warning', true)).toBe(false);
     expect(fadesTag('critical', true)).toBe(false);
+  });
+});
+
+describe('placeValue (the mounting height)', () => {
+  const size = { width: 150, height: 21 };
+  const at = { x: 600, y: 400 };
+  it('goes left of the dimension line when there is room', () => {
+    const box = placeValue(at, size, 1440, [], [])!;
+    expect(box.right).toBe(588);
+    expect(box.top).toBeCloseTo(389.5, 5);
+  });
+  it("moves aside from another asset's mark instead of being drawn under it", () => {
+    // A mark right where «41,9 m sobre el suelo» would go, on its left.
+    const mark = { left: 500, right: 516, top: 392, bottom: 408 };
+    const box = placeValue(at, size, 1440, [], [mark])!;
+    expect(overlaps(box, mark)).toBe(false);
+    expect(box.left).toBe(612);
+  });
+  it('steps up or down when both sides have a mark', () => {
+    const marks = [
+      { left: 500, right: 516, top: 392, bottom: 408 },
+      { left: 700, right: 716, top: 392, bottom: 408 },
+    ];
+    const box = placeValue(at, size, 1440, [], marks)!;
+    expect(marks.some((m) => overlaps(box, m))).toBe(false);
+    expect(box.top).toBeLessThan(389.5);
+  });
+  it('keeps clear of plates before marks, and gives up when nothing is free', () => {
+    const card = { left: 300, right: 1440, top: 0, bottom: 900 };
+    expect(placeValue(at, size, 1440, [card], [])).toBeNull();
+    const left = { left: 0, right: 590, top: 0, bottom: 900 };
+    const everywhere = [{ left: 600, right: 900, top: 0, bottom: 900 }];
+    // Only marks to the right: drawn over them rather than under the plate on the left.
+    const box = placeValue(at, size, 1440, [left], everywhere)!;
+    expect(box.left).toBe(612);
   });
 });
