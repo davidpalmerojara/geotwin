@@ -216,7 +216,9 @@ test('shortcuts never fire in the rename field or the palette, and do nothing wh
   // Ajustes › Atajos switches them off: the keys do nothing, Ctrl+K and Esc still work.
   await openSheet(page, 'Ajustes');
   const toggle = page.getByRole('switch', { name: /Teclas de una pulsación/ });
-  await expect(toggle).toHaveAttribute('aria-checked', 'true');
+  // Ajustes is a lazy chunk fetched on this first opening: on the CI runner, with SwiftShader
+  // holding the page, it twice took over 10 s to appear (the sheet's heading was already there).
+  await expect(toggle).toHaveAttribute('aria-checked', 'true', { timeout: 30_000 });
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-checked', 'false');
   await expect(page.getByTestId('section-sheet')).toContainText('Ctrl+K');
