@@ -26,6 +26,7 @@ import { STATUS_WORD, useTagInfos, type TagInfo } from './tag-data';
 import { overlaps } from '../digital-twin/labels';
 import {
   OCCLUSION_SAMPLES,
+  fadesTag,
   isOccluded,
   layoutTags,
   lodFor,
@@ -378,7 +379,7 @@ export default function AssetTags({
           show(element);
           element.dataset.lod = s.lod;
           element.style.transform = `translate(${at.left}px, ${at.top}px)`;
-          toggle(element, 'occluded', hidden);
+          toggle(element, 'occluded', fadesTag(s.info.status, hidden));
           sides.current.set(id, at.side);
         } else if (kind === 'leader') {
           const at = placement.get(id);

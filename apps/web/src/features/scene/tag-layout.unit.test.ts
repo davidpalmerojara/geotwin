@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  fadesTag,
   EDGE,
   FAR_M,
   NEAR_M,
@@ -167,5 +168,17 @@ describe('occlusion', () => {
   it('ignores the sky and missing reads', () => {
     expect(isOccluded(500, [null, undefined, 400])).toBe(false);
     expect(isOccluded(500, [Number.NaN, 400, 400])).toBe(true);
+  });
+});
+
+describe('fadesTag', () => {
+  it('fades the tag of a hidden operating asset only', () => {
+    expect(fadesTag('healthy', true)).toBe(true);
+    expect(fadesTag('healthy', false)).toBe(false);
+  });
+
+  it('keeps the tag of a hidden alert at full strength', () => {
+    expect(fadesTag('warning', true)).toBe(false);
+    expect(fadesTag('critical', true)).toBe(false);
   });
 });

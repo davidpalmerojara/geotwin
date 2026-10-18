@@ -192,3 +192,11 @@ export function isOccluded(
     if (typeof d === 'number' && Number.isFinite(d) && d < anchorDistance - margin) nearer++;
   return nearer >= 2;
 }
+
+/**
+ * Whether the tag of a hidden mark is drawn faded (55 %). Only an operating asset's: the mark of an
+ * asset in warning or critical goes hollow like any other, but its tag stays at full strength, as
+ * an alert has to be read from afar and faded red or amber text falls below AA contrast.
+ */
+export const fadesTag = (status: AssetStatus, occluded: boolean) =>
+  occluded && status === 'healthy';
