@@ -15,18 +15,25 @@ const A = { lng: -4.71795, lat: 41.582649 },
 type V = import('cesium').Viewer;
 /** The page position of a ground point, on the ground the viewer draws (its LiDAR DTM). */
 async function screen(page: Page, p: { lng: number; lat: number }) {
-  const at = await page.evaluate(
-    async ([lng, lat]) => {
-      const { useScene } = (await import('/src/stores/viewer.ts' as string)) as {
-        useScene: { getState(): { api: import('../../apps/web/src/stores/viewer').SceneApi } };
-      };
-      const api = useScene.getState().api;
-      return api.project(lng!, lat!, api.groundAt(lng!, lat!));
-    },
-    [p.lng, p.lat],
-  );
-  expect(at, `${p.lng}, ${p.lat} is in front of the camera`).not.toBeNull();
-  return [at!.x, at!.y] as [number, number];
+  const project = () =>
+    page.evaluate(
+      async ([lng, lat]) => {
+        const { useScene } = (await import('/src/stores/viewer.ts' as string)) as {
+          useScene: { getState(): { api: import('../../apps/web/src/stores/viewer').SceneApi } };
+        };
+        (window as unknown as { __geotwinViewer: V }).__geotwinViewer.scene.requestRender();
+        const api = useScene.getState().api;
+        return api.project(lng!, lat!, api.groundAt(lng!, lat!));
+      },
+      [p.lng, p.lat],
+    );
+  // The camera's matrices follow a setView on the next frame, which a slow renderer may not have
+  // drawn yet: ask again until the point projects.
+  await expect
+    .poll(project, { message: `${p.lng}, ${p.lat} is in front of the camera`, timeout: 30000 })
+    .not.toBeNull();
+  const at = (await project())!;
+  return [at.x, at.y] as [number, number];
 }
 /**
  * The page position of a ground point once the globe can be picked there: A and B are picked on

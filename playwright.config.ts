@@ -14,6 +14,9 @@ export default defineConfig({
   // Under SwiftShader a frame of the scene can hold the page's main thread for seconds, so a
   // screen update that follows a click or a server event may take longer than the default 5 s.
   expect: { timeout: 10000 },
+  // On CI a test that fails is run once more and, if it passes, reported as flaky (in the list and
+  // in the run's annotations): the shared runner's software renderer stalls now and then.
+  retries: process.env.CI ? 1 : 0,
   // On CI each failure also becomes an annotation of the run, readable without the artifacts.
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: {

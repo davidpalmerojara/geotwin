@@ -76,7 +76,9 @@ test('scene → Resumen → asset card → persisted anomaly → resolved incide
   await card(page).getByRole('button', { name: 'Alerta crítica', exact: false }).click();
   await expect(page.getByRole('heading', { name: 'Detalle de incidencia' })).toBeVisible();
   await page.getByRole('button', { name: 'Marcar como resuelta' }).click();
-  await expect(card(page).locator('.status-healthy').first()).toContainText('Operativo');
+  // The resolution reaches the card by a refetch and the realtime events, on a page that may be
+  // busy drawing the alarm's beam: it waits as long as the observer's checks.
+  await expect(card(page).locator('.status-healthy').first()).toContainText('Operativo', slow);
   await expect(observer.getByTestId('active-alerts')).toContainText('00', slow);
   await expect(alarm).toBeHidden();
   await observer.close();
