@@ -28,6 +28,8 @@ import { metresPerDegree } from './section-math';
 import { renderUntil } from '../measure/render-until';
 import { overlayBoxes } from '../hud/dom';
 
+/** Pixels between the ring and the bottom of its label. */
+const LABEL_LIFT = 6;
 const SIG = Color.fromCssColorString('#FFD21A'),
   INK = Color.fromCssColorString('#0E0E0D'),
   FG = Color.fromCssColorString('#EEECE6');
@@ -150,9 +152,10 @@ export class RadiusRing {
     );
     const canvas = viewer.scene.canvas;
     const frame = canvas.getBoundingClientRect();
+    // The label's box sits LABEL_LIFT px above the ring point; labelSpot takes box centres.
     const points = positions.map((p) => {
       const w = SceneTransforms.worldToWindowCoordinates(viewer.scene, p);
-      return w ? { x: w.x, y: w.y } : null;
+      return w ? { x: w.x, y: w.y - LABEL_LIFT - 12 } : null;
     });
     const text = radiusText(view.metres, view.items.length);
     const plates = overlayBoxes(document).map((r) => ({
@@ -228,7 +231,9 @@ export class RadiusRing {
           backgroundColor: INK,
           backgroundPadding: new Cartesian2(7, 4),
           horizontalOrigin: HorizontalOrigin.CENTER,
-          verticalOrigin: VerticalOrigin.CENTER,
+          // Just above the ring, so the dashes do not run through the text.
+          verticalOrigin: VerticalOrigin.BOTTOM,
+          pixelOffset: new Cartesian2(0, -LABEL_LIFT),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       });
