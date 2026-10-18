@@ -16,9 +16,13 @@ import {
   LabelStyle,
   PolylineDashMaterialProperty,
   PolylineOutlineMaterialProperty,
+  SceneTransforms,
   VerticalOrigin,
   type CustomDataSource,
+  type Entity,
+  type Scene,
 } from 'cesium';
+import { labelBox, labelSize, layoutLabels, type Box, type LabelItem } from './label-layout';
 import { number } from '../../lib/format';
 import { formatArea, formatHeight, formatLength, groundDistance, horizontalArea } from './geodesy';
 
@@ -34,6 +38,10 @@ export interface DimensionLabel {
   at: Cartesian3;
   text: string;
   side: LabelSide;
+  /** A shorter text for when the full one has no room (Perfil's «E3» for «E3 · 38,0 m»). */
+  short?: string;
+  /** The segment whose value this is: the label moves off it on screen. */
+  segment?: [Cartesian3, Cartesian3];
 }
 export interface Dimension {
   kind: 'distance' | 'area' | 'height' | 'mount';
@@ -108,7 +116,12 @@ export function measureDimensions(points: Cartesian3[], mode: 'distance' | 'area
       b = points[i]!;
     const length = Cartesian3.distance(a, b);
     total += length;
-    labels.push({ at: midpoint(a, b), text: formatLength(length), side: 'center' });
+    labels.push({
+      at: midpoint(a, b),
+      text: formatLength(length),
+      side: 'center',
+      segment: [a, b],
+    });
   }
   if (points.length > 2)
     labels.push({ at: points.at(-1)!, text: `total ${formatLength(total)}`, side: 'center' });
@@ -181,6 +194,9 @@ export function dimensionFontReady() {
   return fonts;
 }
 
+/** The dimension label each label entity drawn by `drawDimensions` shows. */
+const labelOf = new WeakMap<Entity, DimensionLabel>();
+
 /**
  * Adds the dimensions to a data source as entities with ids `<prefix>:linea:<n>`,
  * `<prefix>:marca:<n>:<m>` and `<prefix>:etiqueta:<n>:<m>`. Returns the entities added.
@@ -221,34 +237,125 @@ export function drawDimensions(source: CustomDataSource, dimensions: Dimension[]
           },
         }),
       );
-    for (const [m, label] of d.labels.entries())
-      added.push(
-        source.entities.add({
-          id: `${prefix}:etiqueta:${n}:${m}`,
-          position: label.at,
-          label: {
-            text: label.text,
-            font: DIMENSION_FONT,
-            fillColor: SIG_INK,
-            style: LabelStyle.FILL,
-            showBackground: true,
-            backgroundColor: SIG,
-            backgroundPadding: new Cartesian2(5, 3),
-            horizontalOrigin:
-              label.side === 'left'
-                ? HorizontalOrigin.RIGHT
-                : label.side === 'right'
-                  ? HorizontalOrigin.LEFT
-                  : HorizontalOrigin.CENTER,
-            verticalOrigin: VerticalOrigin.CENTER,
-            pixelOffset: new Cartesian2(
-              label.side === 'left' ? -10 : label.side === 'right' ? 10 : 0,
-              0,
-            ),
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          },
-        }),
-      );
+    for (const [m, label] of d.labels.entries()) {
+      const entity = source.entities.add({
+        id: `${prefix}:etiqueta:${n}:${m}`,
+        position: label.at,
+        label: {
+          text: label.text,
+          font: DIMENSION_FONT,
+          fillColor: SIG_INK,
+          style: LabelStyle.FILL,
+          showBackground: true,
+          backgroundColor: SIG,
+          backgroundPadding: new Cartesian2(5, 3),
+          horizontalOrigin:
+            label.side === 'left'
+              ? HorizontalOrigin.RIGHT
+              : label.side === 'right'
+                ? HorizontalOrigin.LEFT
+                : HorizontalOrigin.CENTER,
+          verticalOrigin: VerticalOrigin.CENTER,
+          pixelOffset: new Cartesian2(
+            label.side === 'left' ? -10 : label.side === 'right' ? 10 : 0,
+            0,
+          ),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      });
+      labelOf.set(entity, label);
+      added.push(entity);
+    }
   }
   return added;
+}
+
+/**
+ * Keeps the labels of some dimensions laid out on screen after every frame (`layoutLabels`):
+ * values off their own segment and no two labels on top of each other, the short form when the
+ * full one does not fit. Only what changes is written back, so a still camera draws no frames.
+ */
+interface LabelEntry {
+  entity: Entity;
+  label: DimensionLabel;
+  /** The offset and text last written, to write only changes. */
+  key: string;
+}
+/** The layouts alive (Medir, Perfil), for `dimensionLabelBoxes`. */
+const layouts = new Set<DimensionLabels>();
+/**
+ * Where the dimension labels are on screen (canvas px), as last laid out: the installation
+ * labels and the asset tags keep clear of them, as the measurement is what the user is reading.
+ */
+export const dimensionLabelBoxes = (): Box[] => [...layouts].flatMap((l) => l.boxes);
+
+export class DimensionLabels {
+  private entries: LabelEntry[] = [];
+  /** Boxes of the labels as last placed. */
+  boxes: Box[] = [];
+  private readonly off: () => void;
+  constructor(private readonly scene: Scene) {
+    this.off = scene.postRender.addEventListener(() => this.place());
+    layouts.add(this);
+  }
+  /** Lays out the label entities among `entities` (others are ignored), in this order. */
+  set(entities: Entity[]) {
+    this.entries = entities.flatMap((entity) => {
+      const label = labelOf.get(entity);
+      return label ? [{ entity, label, key: '' }] : [];
+    });
+    this.scene.requestRender();
+  }
+  private place() {
+    if (!this.entries.length) {
+      this.boxes = [];
+      return;
+    }
+    const shown: { entry: LabelEntry; item: LabelItem }[] = [];
+    for (const entry of this.entries) {
+      const { label } = entry;
+      const at = SceneTransforms.worldToWindowCoordinates(this.scene, label.at);
+      if (!at) continue;
+      const size = labelSize(label.text);
+      let segment: LabelItem['segment'];
+      if (label.segment) {
+        const a = SceneTransforms.worldToWindowCoordinates(this.scene, label.segment[0]),
+          b = SceneTransforms.worldToWindowCoordinates(this.scene, label.segment[1]);
+        if (a && b) segment = { x: b.x - a.x, y: b.y - a.y };
+      }
+      shown.push({
+        entry,
+        item: {
+          x: at.x,
+          y: at.y,
+          ...size,
+          side: label.side,
+          segment,
+          shortWidth: label.short ? labelSize(label.short).width : undefined,
+        },
+      });
+    }
+    const places = layoutLabels(shown.map((s) => s.item));
+    this.boxes = places.map((place, i) => labelBox(shown[i]!.item, place));
+    let changed = false;
+    places.forEach((place, i) => {
+      const { entry } = shown[i]!;
+      const dx = Math.round(place.dx),
+        dy = Math.round(place.dy);
+      const text = place.compact && entry.label.short ? entry.label.short : entry.label.text;
+      const key = `${dx},${dy},${text}`;
+      if (key === entry.key || !entry.entity.label) return;
+      entry.key = key;
+      entry.entity.label.pixelOffset = new ConstantProperty(new Cartesian2(dx, dy));
+      entry.entity.label.text = new ConstantProperty(text);
+      changed = true;
+    });
+    if (changed) this.scene.requestRender();
+  }
+  destroy() {
+    this.off();
+    this.entries = [];
+    this.boxes = [];
+    layouts.delete(this);
+  }
 }

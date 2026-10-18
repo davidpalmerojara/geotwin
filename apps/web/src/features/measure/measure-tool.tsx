@@ -21,7 +21,12 @@ import { Crosshair, Ruler, Shapes, Trash2, Undo2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { formatArea, formatHeight, formatLength, measure, snapToGround } from './geodesy';
 import { renderUntil } from './render-until';
-import { dimensionFontReady, drawDimensions, measureDimensions } from './dimension-lines';
+import {
+  DimensionLabels,
+  dimensionFontReady,
+  drawDimensions,
+  measureDimensions,
+} from './dimension-lines';
 
 type Mode = 'distance' | 'area';
 // Signal yellow: the instrument colour, used only for what measures.
@@ -56,6 +61,7 @@ export default function MeasureTool({
   const [miss, setMiss] = useState(false);
   const source = useRef<CustomDataSource | null>(null);
   const stopRendering = useRef<() => void>(undefined);
+  const labels = useRef<DimensionLabels | null>(null);
   const result = useMemo(() => measure(points, mode), [points, mode]);
 
   const add = useCallback(
@@ -76,6 +82,9 @@ export default function MeasureTool({
   useEffect(() => {
     const ds = new CustomDataSource('medicion');
     source.current = ds;
+    // The values move off their segments on screen, after every frame.
+    const layout = new DimensionLabels(viewer.scene);
+    labels.current = layout;
     // DataSourceCollection.add resolves later: the removal waits for it, or a source removed
     // before it was in (a remount) would stay behind.
     const added = viewer.dataSources.add(ds);
@@ -87,6 +96,8 @@ export default function MeasureTool({
     viewer.scene.canvas.style.cursor = 'crosshair';
     return () => {
       stopRendering.current?.();
+      layout.destroy();
+      labels.current = null;
       handler.destroy();
       if (!viewer.isDestroyed()) {
         viewer.scene.canvas.style.cursor = '';
@@ -144,6 +155,7 @@ export default function MeasureTool({
         }),
       );
       const shapes: Entity[] = drawDimensions(ds, measureDimensions(points, mode), 'cota');
+      labels.current?.set(shapes);
       if (mode === 'area' && points.length > 2)
         shapes.push(
           ds.entities.add({
