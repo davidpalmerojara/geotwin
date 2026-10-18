@@ -326,6 +326,22 @@ La diferencia de 4 puntos cae dentro de los 8 que están a menos de 1 mm del bor
 - Con Capas abierto, el chip de borde de «Depósito elevado del cerro» se colocaba encima de la etiqueta de la sonda: las etiquetas solo evitaban las placas. Ahora las etiquetas de la escena y los rótulos de instalación evitan también los chips (`sceneBlockers` en `hud/dom.ts`).
 - La etiqueta crítica de la sonda salía al 55 % de opacidad porque su marca, a ras de suelo junto a los árboles de la orilla, quedaba tapada: el texto rojo atenuado no llega al contraste AA. Ahora solo se atenúan las etiquetas de los activos operativos; la marca de una alerta tapada sigue dibujándose hueca (`fadesTag` en `scene/tag-layout.ts`).
 
+### Segunda verificación independiente y correcciones (18/10/2026)
+
+Una verificación independiente de `efe577a` (suite completa, CI y doce capturas con cuatro hojas reales) no encontró fallos graves, pero sí tres problemas de nivel medio y ocho menores. Todos se han corregido, cada uno con su prueba:
+
+- **Etiquetas E1…En del perfil, unas sobre otras.** Con dos edificios cerca, «E3 · 38,0 m» y «E4 · 36,8 m» se dibujaban encima y no se leía ninguna. Ahora, tras cada fotograma, `DimensionLabels` las coloca en pantalla (`measure/label-layout.ts`, puro): la que pisaría a otra sube o baja un escalón (hasta dos en cada sentido) y, si no queda ninguno libre, se queda en «E4» sin el valor, como en el móvil (el cajón lista las alturas). Unitarias de solape, escalón y forma corta; `profile.spec.ts` comprueba que E1 y E2, separados, conservan el valor.
+- **Chips de borde de lo que se ve.** Con Medir, Radio, Perfil o una hoja abiertos, toda la franja izquierda contaba como tapada y salían cuatro o cinco chips en mitad de la escena para activos con la marca a la vista. Ahora un chip solo sale si su objetivo está fuera de la pantalla, detrás de la cámara o bajo una placa (`outOfSight`), como mucho tres, los más urgentes (crítico, advertencia, resultado de Radio, instalación; luego el más cercano), con «+n» para ver el resto (`pickChips`), y los chips se apartan de una ficha que flota en la zona libre (`placeChips`; antes uno quedaba detrás). Unitarias de las tres funciones.
+- **Enlace con hoja y ficha: el activo detrás de su ficha.** Con `/alertas?activo=…` a 1280 × 800 la cámara apuntaba antes de que llegara la ficha, y el activo quedaba bajo ella. Ahora, cuando las placas dejan de moverse (`whenSteady`), si el activo está bajo una se repite el vuelo una vez contándolas, nunca si el usuario ha movido la cámara. Nuevo E2E en `hud.spec.ts`: el activo queda a la vista, sin chip, y Esc, Esc deja el foco en la escena.
+- **Valor de la altura de montaje bajo otras marcas** («41,9 m so⊙e el suelo»): se coloca libre también de las marcas de otros activos (`placeValue`, a los lados o un escalón arriba o abajo) y se dibuja por encima de ellas.
+- **«telemetría simulada» dos veces** en la incidencia de la ficha: la línea de la incidencia ya lo dice, así que el mensaje de la API se muestra sin ese final (`withoutSimulatedSuffix`). Unitaria y comprobación en `scene-tags.spec.ts`.
+- **La línea de Medir cruzaba su valor** («53,|4 m»): el valor de cada tramo se aparta en pantalla, perpendicular al tramo, lo justo para que la línea no lo toque (`clearOfSegment`).
+- **Nota de «Alturas en el corte» cortada** con cinco edificios: va bajo el título, antes de la lista, y la columna se desplaza con una barra fina. `profile.spec.ts` comprueba que la nota queda dentro del cajón.
+- **Etiquetas tapadas al 55 %** («41,9 °C», «2,49 mm/s» sobre la nube clara): ahora se atenúa solo el marco (contorno tenue, sin sombra) y el texto conserva el contraste (`contrast.unit.test.ts` comprueba que la regla no usa opacidad y que el valor llega a 4,5:1).
+- **Foco tras cerrar la ficha con Esc**: pasa a la escena (`focusScene`) y no al cuerpo de la página. E2E en `hud.spec.ts`.
+- **Rótulos de instalación bajo las marcas en el móvil**: antes de taparlas prueban un escalón más lejos, arriba y abajo (`FAR_OFFSETS`). Unitaria.
+- **A y B del perfil, unos metros fuera** en vistas oblicuas: el punto de `globe.pick` (el terreno dibujado, un nivel de detalle más grueso) se afina a lo largo del rayo hasta el MDT bilineal (`refineOnGround`, sin moverlo más de 50 m). Unitaria; con clics reales, A y B caen ahora sobre los puntos pedidos (−4,7231281 / 41,5901638 y −4,7269410 / 41,5891796) y la línea A–B documentada da 336,2 m y 8.286 puntos.
+
 ## Límites del entorno
 
 - No hay despliegue público ni recursos en AWS; [aws.md](aws.md) es un plan.
