@@ -10,6 +10,7 @@ import {
   fitDistance,
   fitInView,
   frameOf,
+  freeCentre,
   samePose,
 } from './camera';
 const pisuerga = { lat: 41.655, lng: -4.737 };
@@ -225,6 +226,44 @@ describe('Framing beside a floating panel', () => {
     expect(samePose(landed, [-0.0824 + 1e-6, 0.7258, 0, -0.785])).toBe(false);
     expect(samePose(landed, [-0.0824, 0.7258, 0.1, -0.785])).toBe(false);
     expect(samePose(landed, [-0.0824, 0.7258, 0, -0.6])).toBe(false);
+  });
+});
+
+describe('The middle of the free scene (Medir’s crosshair)', () => {
+  it('on a phone with the Medir sheet at 45 % lies between the top plates and the credits', () => {
+    const canvas = { left: 0, top: 0, right: 390, bottom: 844 };
+    const plates = {
+      top: { left: 10, top: 10, right: 380, bottom: 118 },
+      scale: { left: 10, top: 126, right: 170, bottom: 170 },
+      heading: { left: 220, top: 126, right: 380, bottom: 170 },
+      credits: { left: 10, top: 404, right: 380, bottom: 456 },
+      sheet: { left: 10, top: 464, right: 380, bottom: 768 },
+      tools: { left: 10, top: 776, right: 380, bottom: 834 },
+    };
+    const at = freeCentre(canvas, Object.values(plates));
+    expect(at).toEqual({ x: 195, y: (170 + 404) / 2 });
+    // The middle of the screen (422) would be on the credits.
+    const middle = (canvas.top + canvas.bottom) / 2;
+    expect(middle).toBeGreaterThan(plates.credits.top);
+    expect(at.y).toBeLessThan(plates.credits.top);
+    expect(at.y).toBeGreaterThan(plates.heading.bottom);
+  });
+  it('on a desktop sits right of the Medir panel and between the top and bottom plates', () => {
+    const canvas = { left: 0, top: 0, right: 1440, bottom: 900 };
+    const at = freeCentre(canvas, [
+      { left: 12, top: 12, right: 620, bottom: 52 },
+      { left: 12, top: 60, right: 540, bottom: 96 },
+      { left: 12, top: 104, right: 342, bottom: 520 },
+      { left: 12, top: 858, right: 760, bottom: 888 },
+    ]);
+    expect(at).toEqual({ x: (342 + 1440) / 2, y: (96 + 858) / 2 });
+  });
+  it('with no room left is the middle of the canvas', () => {
+    const canvas = { left: 0, top: 0, right: 390, bottom: 844 };
+    expect(freeCentre(canvas, [{ left: 0, top: 0, right: 390, bottom: 844 }])).toEqual({
+      x: 195,
+      y: 422,
+    });
   });
 });
 

@@ -151,6 +151,51 @@ test('the CC-BY credits stay above every sheet, Capas and the Medir panel', asyn
   await expect(measure).toBeVisible();
   await expect(measure).toHaveAttribute('data-snap', '45');
   await creditsAbove(page, measure);
+  // Its crosshair sits in the middle of the scene left between the top plates and the credits
+  // over the sheet (the middle of the screen would be on the credits), and «Centro» measures
+  // the point under it.
+  await rests(measure, 45);
+  const cross = page.getByTestId('measure-crosshair');
+  await expect
+    .poll(async () => {
+      const c = (await cross.boundingBox())!;
+      const at = { x: c.x + c.width / 2, y: c.y + c.height / 2 };
+      return page.evaluate((at) => {
+        const plates = [...document.querySelectorAll('[data-map-overlay]')]
+          .map((p) => p.getBoundingClientRect())
+          .filter((b) => b.width > 0);
+        const under = plates.some(
+          (b) => at.x >= b.left && at.x <= b.right && at.y >= b.top && at.y <= b.bottom,
+        );
+        const above = Math.max(...plates.filter((b) => b.bottom < at.y).map((b) => b.bottom));
+        const below = Math.min(...plates.filter((b) => b.top > at.y).map((b) => b.top));
+        const credits = document.querySelector('[data-testid="credits"]')!.getBoundingClientRect();
+        return {
+          under,
+          centred: Math.abs(at.y - (above + below) / 2) < 2 && Math.abs(at.x - innerWidth / 2) < 2,
+          aboveCredits: at.y < credits.top,
+        };
+      }, at);
+    })
+    .toEqual({ under: false, centred: true, aboveCredits: true });
+  await measure.getByRole('button', { name: 'Añadir punto en el centro' }).click();
+  const c = (await cross.boundingBox())!;
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const v = (window as unknown as { __geotwinViewer: import('cesium').Viewer })
+          .__geotwinViewer;
+        const point = v.dataSources
+          .getByName('medicion')[0]
+          ?.entities.getById('medida:0')
+          ?.position?.getValue(v.clock.currentTime);
+        if (!point) return null;
+        const at = v.scene.cartesianToCanvasCoordinates(point);
+        const rect = v.scene.canvas.getBoundingClientRect();
+        return at ? [rect.left + at.x, rect.top + at.y] : null;
+      }),
+    )
+    .toEqual([expect.closeTo(c.x + c.width / 2, -1), expect.closeTo(c.y + c.height / 2, -1)]);
   // Capas, a modal sheet at 90 %.
   const capas = await openCapas(page);
   await expect(capas).toHaveAttribute('aria-modal', 'true');

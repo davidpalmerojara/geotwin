@@ -21,6 +21,8 @@ import { Crosshair, Ruler, Shapes, Trash2, Undo2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { formatArea, formatHeight, formatLength, measure, snapToGround } from './geodesy';
 import { renderUntil } from './render-until';
+import { freeCentre } from '../digital-twin/camera';
+import { overlayBoxes } from '../hud/dom';
 import {
   DimensionLabels,
   dimensionFontReady,
@@ -40,6 +42,55 @@ function pick(viewer: Viewer, position: Cartesian2) {
   }
   // Nothing with depth under the cursor (e.g. the globe edge): fall back to the ellipsoid.
   return scene.camera.pickEllipsoid(position, scene.globe.ellipsoid);
+}
+
+/**
+ * The middle of the scene the plates leave visible (page px), kept up to date as panels, sheets
+ * and plates open, close or change size.
+ */
+function useFreeCentre(viewer: Viewer) {
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      if (viewer.isDestroyed()) return;
+      const next = freeCentre(viewer.scene.canvas.getBoundingClientRect(), overlayBoxes());
+      setAt((current) =>
+        current && Math.abs(current.x - next.x) < 0.5 && Math.abs(current.y - next.y) < 0.5
+          ? current
+          : next,
+      );
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    schedule();
+    const sizes = new ResizeObserver(schedule);
+    const watch = () => {
+      sizes.disconnect();
+      for (const plate of document.querySelectorAll('[data-map-overlay]')) sizes.observe(plate);
+    };
+    watch();
+    // Plates come and go (a sheet opens, a note appears).
+    const plates = new MutationObserver(() => {
+      watch();
+      schedule();
+    });
+    const hud = document.querySelector('.hud');
+    if (hud) plates.observe(hud, { childList: true, subtree: true });
+    // A phone sheet moves to another height (its top slides) without changing the plates' list.
+    hud?.addEventListener('transitionend', schedule);
+    window.addEventListener('resize', schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      sizes.disconnect();
+      plates.disconnect();
+      hud?.removeEventListener('transitionend', schedule);
+      window.removeEventListener('resize', schedule);
+    };
+  }, [viewer]);
+  return at;
 }
 
 function MeasureTool({
@@ -72,9 +123,16 @@ function MeasureTool({
     },
     [viewer],
   );
+  // The crosshair and «Centro» aim at the middle of the free scene, not of the screen.
+  const centre = useFreeCentre(viewer);
   const addCentre = () => {
-    const canvas = viewer.scene.canvas;
-    add(new Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2));
+    const canvas = viewer.scene.canvas,
+      rect = canvas.getBoundingClientRect();
+    add(
+      centre
+        ? new Cartesian2(centre.x - rect.left, centre.y - rect.top)
+        : new Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2),
+    );
   };
   const undo = useCallback(() => setPoints((current) => current.slice(0, -1)), []);
 
@@ -190,7 +248,12 @@ function MeasureTool({
   const needed = mode === 'distance' ? 2 : 3;
   return (
     <div className="measure-tool">
-      <div className="measure-crosshair" aria-hidden="true" />
+      <div
+        className="measure-crosshair"
+        aria-hidden="true"
+        data-testid="measure-crosshair"
+        style={centre ? { left: centre.x, top: centre.y } : undefined}
+      />
       <div className="measure-head">
         <div className="segmented" role="group" aria-label="Tipo de medida">
           <button

@@ -237,6 +237,23 @@ export function coveredEdges(canvas: ScreenBox, overlays: ScreenBox[]): Edges {
 }
 
 /**
+ * The middle of the part of the canvas the HUD leaves visible (page px): where «Medir» puts its
+ * crosshair and its «Centro» point. On a phone with the Medir sheet at 45 % it lies between the
+ * top plate and the credits over the sheet, not on them.
+ */
+export function freeCentre(canvas: ScreenBox, overlays: ScreenBox[]) {
+  const edges = coveredEdges(canvas, overlays);
+  const left = canvas.left + edges.left,
+    right = canvas.right - edges.right,
+    top = canvas.top + edges.top,
+    bottom = canvas.bottom - edges.bottom;
+  // A HUD that leaves no room (it never should): the middle of the canvas.
+  if (right - left < 40 || bottom - top < 40)
+    return { x: (canvas.left + canvas.right) / 2, y: (canvas.top + canvas.bottom) / 2 };
+  return { x: (left + right) / 2, y: (top + bottom) / 2 };
+}
+
+/**
  * Whether two camera poses [longitude, latitude, heading, pitch] (radians) are the same: about
  * 0.5 m on the ground and 0.05° of rotation. Height is left out on purpose, as Cesium lifts a
  * camera that ends up below newly loaded terrain without the user moving it.
