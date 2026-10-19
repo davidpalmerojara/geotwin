@@ -51,9 +51,10 @@ import {
 } from './photorealistic';
 import {
   aimOffsets,
-  fitInView,
   flyOnOwn,
-  frameOf,
+  extentOf,
+  fitGround,
+  networkFrame,
   samePose,
   type AutoFlight,
   type LatLng,
@@ -116,9 +117,11 @@ const groundOf =
 // Status colours of the «Estación total» palette: operational in light grey, amber for a
 // warning, red for a critical asset (the HUD adds the shape and the word).
 const colors = { healthy: '#EEECE6', warning: '#FF9F1A', critical: '#FF5A4C' };
-const FRAME_PITCH = CesiumMath.toRadians(-55);
-// Oblique view that fits every point in the part of the scene that the HUD's plates leave
-// visible, on every edge.
+// The framings look down at 45°, like an asset's close-up: low enough for the towers to read as
+// towers (A/desktop-overview), high enough for the labels not to stack.
+const FRAME_PITCH = CesiumMath.toRadians(-45);
+// Oblique view, looking north, that fits the points' box of ground in the part of the scene that
+// the HUD's plates leave visible, on every edge.
 function flyToPoints(
   v: Viewer,
   points: LatLng[],
@@ -127,12 +130,20 @@ function flyToPoints(
   complete?: () => void,
   cancel?: () => void,
 ) {
-  const frame = frameOf(points);
+  const frame = extentOf(points);
   if (!frame || v.isDestroyed()) return;
   const canvas = v.scene.canvas;
   const width = canvas.clientWidth || 1,
     height = canvas.clientHeight || 1;
-  const view = fitInView(frame.radius, viewerFov(v), width, height, coveredByOverlays(v));
+  const view = fitGround(
+    frame.halfE,
+    frame.halfN,
+    FRAME_PITCH,
+    viewerFov(v),
+    width,
+    height,
+    coveredByOverlays(v),
+  );
   const heading = 0;
   v.camera.flyToBoundingSphere(
     shiftedOnGround(
@@ -142,7 +153,7 @@ function flyToPoints(
           frame.center.lat,
           ground(frame.center.lng, frame.center.lat),
         ),
-        frame.radius,
+        Math.hypot(frame.halfE, frame.halfN),
       ),
       heading,
       view.shift,
@@ -630,18 +641,29 @@ function CesiumView({
       remove();
     };
   }, [ready]);
-  // Frame the selected installation (its assets and centre) or the whole network.
+  // Frame the selected installation (its assets and centre) or the whole network: with LiDAR
+  // clouds loaded, the installations inside them that lie together (see networkFrame).
   // Keyed on positions only, so status updates and renames never move the camera.
+  const hiddenLayers = useLayerView((s) => s.hidden);
+  const clouds = (useLayers().data ?? [])
+    .filter((l) => l.status === 'ready' && l.tileset_url && l.bbox && !hiddenLayers[l.id])
+    .map((l) => l.bbox as [number, number, number, number]);
   const frameKey = JSON.stringify(
     (() => {
       const installation = installations.find((i) => i.id === installationId);
-      const scoped = installation
-        ? assets.filter((a) => a.installation_id === installation.id)
-        : assets;
-      return [
-        ...scoped.map((a) => a.location),
-        ...(installation ? [installation.location] : installations.map((i) => i.location)),
-      ].map(({ lat, lng }) => ({ lat, lng }));
+      const at = ({ lat, lng }: LatLng) => ({ lat, lng });
+      if (installation)
+        return [
+          ...assets.filter((a) => a.installation_id === installation.id).map((a) => a.location),
+          installation.location,
+        ].map(at);
+      return networkFrame(
+        installations.map((i) => ({
+          location: i.location,
+          points: assets.filter((a) => a.installation_id === i.id).map((a) => a.location),
+        })),
+        clouds,
+      ).map(at);
     })(),
   );
   const framePoints = useMemo(() => JSON.parse(frameKey) as LatLng[], [frameKey]);
@@ -664,11 +686,18 @@ function CesiumView({
     }
     flight.redo();
   }, [ground, relief]);
+  // The installation the last framing was for: the frame also changes when the clouds arrive or
+  // a layer is shown, hidden or uploaded, and that must not undo a move of the user's.
+  const framedFor = useRef<string | null>(null);
   useEffect(() => {
     const v = viewer.current;
     if (!v || !ready || !framePoints.length) return;
     // A selected asset has its own close-up; do not pull the camera away from it.
     if (selectedRef.current && framed.current) return;
+    const flight = autoFlight.current;
+    const moved = !flight || (flight.state === 'landed' && !samePose(flight.pose!, poseOf(v)));
+    if (framed.current && framedFor.current === installationId && moved) return;
+    framedFor.current = installationId;
     // The first framing is instant; later ones (another place, the real ground) fly for 1 s.
     let duration = framed.current ? 1 : 0;
     flyOnOwn(autoFlight, v, poseOf, (complete, cancel) => {
@@ -676,6 +705,8 @@ function CesiumView({
       duration = 1;
     });
     framed.current = true;
+    // installationId is read, not a trigger: a new choice changes framePoints.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [framePoints, ready]);
   // Whether the selected asset is already loaded: a shared link can open before the asset list.
   const selectedLoaded = assets.some((a) => a.id === selectedId);

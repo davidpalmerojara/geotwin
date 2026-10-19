@@ -33,6 +33,86 @@ export function frameOf(points: LatLng[], paddingM?: number, minRadiusM = 300) {
   const padding = paddingM ?? Math.min(450, Math.max(200, radius * 0.3));
   return { center, radius: Math.max(minRadiusM, radius + padding) };
 }
+const M_PER_DEG_LAT = 111_320;
+/**
+ * The middle of the points' box and its half extents east and north (metres), each grown by a
+ * padding that leaves room for the marks' tags and the installation's label at the edges:
+ * 30 % of the larger half extent, never under 50 m.
+ */
+export function extentOf(points: LatLng[]) {
+  if (!points.length) return undefined;
+  const lats = points.map((p) => p.lat),
+    lngs = points.map((p) => p.lng);
+  const center = {
+    lat: (Math.min(...lats) + Math.max(...lats)) / 2,
+    lng: (Math.min(...lngs) + Math.max(...lngs)) / 2,
+  };
+  const halfN = ((Math.max(...lats) - Math.min(...lats)) / 2) * M_PER_DEG_LAT;
+  const halfE =
+    ((Math.max(...lngs) - Math.min(...lngs)) / 2) * M_PER_DEG_LAT * Math.cos(toRad(center.lat));
+  const pad = Math.max(50, 0.3 * Math.max(halfN, halfE));
+  return { center, halfE: halfE + pad, halfN: halfN + pad };
+}
+
+/**
+ * Camera distance that fits a box of the ground (`halfE` by `halfN` metres around its middle),
+ * seen looking north at `pitch` (radians, negative down), in the part of a `width` x `height`
+ * canvas that the HUD leaves visible, and the aim offsets that centre it there. Unlike a sphere,
+ * the box is foreshortened along the line of sight, so a framing fills the free area: the near
+ * edge, the closest to the camera, is the one that must fit.
+ */
+export function fitGround(
+  halfE: number,
+  halfN: number,
+  pitch: number,
+  fov: number,
+  width: number,
+  height: number,
+  covered: number | Partial<Edges> = 0,
+  margin = 1.1,
+) {
+  const edges = clampEdges(toEdges(covered), width, height);
+  const half = halfTangents(fov, width, height);
+  const tanX = (half.x * (width - edges.left - edges.right)) / width,
+    tanY = (half.y * (height - edges.top - edges.bottom)) / height;
+  const down = Math.abs(Math.sin(pitch)),
+    along = Math.abs(Math.cos(pitch));
+  const distance = (Math.max((halfN * down) / tanY, halfE / tanX) + halfN * along) * margin;
+  return { distance, ...aimOffsets(distance, fov, width, height, edges) };
+}
+
+/**
+ * The points «Encuadre inicial» frames for the whole network. With no LiDAR cloud loaded: every
+ * installation. With clouds: the installations inside them, and of those the largest group whose
+ * members lie within `link` metres of one another (the most assets breaks a tie). An installation
+ * far from the group (the hill tank, 1 km away) is left to its edge chip, so the clouds fill the
+ * screen instead of a corner of it.
+ */
+export function networkFrame(
+  installations: { location: LatLng; points: LatLng[] }[],
+  clouds: [number, number, number, number][],
+  link = 700,
+) {
+  const inside = (p: LatLng) =>
+    clouds.some(([w, s, e, n]) => p.lng >= w && p.lng <= e && p.lat >= s && p.lat <= n);
+  const all = (list: typeof installations) => list.flatMap((i) => [i.location, ...i.points]);
+  const candidates = clouds.length ? installations.filter((i) => inside(i.location)) : [];
+  if (!candidates.length) return all(installations);
+  // Groups by single linkage: an installation joins every group it is within `link` of.
+  const group = candidates.map((_, i) => i);
+  const root = (i: number): number => (group[i] === i ? i : (group[i] = root(group[i]!)));
+  candidates.forEach((a, i) =>
+    candidates.forEach((b, j) => {
+      if (j > i && distanceM(a.location, b.location) <= link) group[root(j)] = root(i);
+    }),
+  );
+  const groups = new Map<number, typeof candidates>();
+  candidates.forEach((c, i) => groups.set(root(i), [...(groups.get(root(i)) ?? []), c]));
+  const size = (g: typeof candidates) => g.reduce((n, i) => n + 1 + i.points.length, 0);
+  const best = [...groups.values()].sort((a, b) => b.length - a.length || size(b) - size(a))[0]!;
+  return all(best);
+}
+
 /**
  * Camera distance that fits a sphere of `radius` in a perspective frustum.
  * Cesium's `fov` spans the wider screen axis, so on a portrait phone the

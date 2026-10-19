@@ -7,10 +7,13 @@ import {
   coveredEdges,
   coveredRight,
   distanceM,
+  extentOf,
   fitDistance,
+  fitGround,
   fitInView,
   frameOf,
   freeCentre,
+  networkFrame,
   samePose,
 } from './camera';
 const pisuerga = { lat: 41.655, lng: -4.737 };
@@ -226,6 +229,107 @@ describe('Framing beside a floating panel', () => {
     expect(samePose(landed, [-0.0824 + 1e-6, 0.7258, 0, -0.785])).toBe(false);
     expect(samePose(landed, [-0.0824, 0.7258, 0.1, -0.785])).toBe(false);
     expect(samePose(landed, [-0.0824, 0.7258, 0, -0.6])).toBe(false);
+  });
+});
+
+// The demo network as seeded: the installations and their assets' extremes, and the four
+// LiDAR sheets of the shared stack (356/357-4605/4606).
+const torrelago = {
+  location: { lng: -4.725258, lat: 41.589069 },
+  points: [
+    { lng: -4.726391, lat: 41.587724 },
+    { lng: -4.724305, lat: 41.590574 },
+  ],
+};
+const laguna = {
+  location: { lng: -4.722179, lat: 41.586053 },
+  points: [
+    { lng: -4.725184, lat: 41.584717 },
+    { lng: -4.721184, lat: 41.587245 },
+  ],
+};
+const deposito = {
+  location: { lng: -4.710608, lat: 41.584019 },
+  points: [
+    { lng: -4.710778, lat: 41.583827 },
+    { lng: -4.710192, lat: 41.584269 },
+  ],
+};
+const sheets: [number, number, number, number][] = [
+  [-4.715762, 41.583901, -4.703532, 41.593082],
+  [-4.715524, 41.574897, -4.703296, 41.584079],
+  [-4.727755, 41.583721, -4.715524, 41.592904],
+  [-4.727515, 41.574718, -4.715286, 41.583901],
+];
+const DESKTOP = { width: 1440, height: 900, covered: { top: 96, bottom: 70 } };
+const PHONE = { width: 390, height: 844, covered: { top: 170, bottom: 150 } };
+const PITCH = (-45 * Math.PI) / 180;
+const heightOf = (points: { lat: number; lng: number }[], view: typeof DESKTOP) => {
+  const box = extentOf(points)!;
+  const d = fitGround(
+    box.halfE,
+    box.halfN,
+    PITCH,
+    Math.PI / 3,
+    view.width,
+    view.height,
+    view.covered,
+  ).distance;
+  return d * Math.sin(-PITCH);
+};
+
+describe('Framing the network and an installation', () => {
+  it('frames the installations inside the clouds that lie together; the far tank gets a chip', () => {
+    const framed = networkFrame([torrelago, laguna, deposito], sheets);
+    expect(framed).toContainEqual(torrelago.location);
+    expect(framed).toContainEqual(laguna.location);
+    expect(framed).not.toContainEqual(deposito.location);
+    expect(framed).toHaveLength(6);
+  });
+  it('frames every installation with no cloud, or none inside the clouds', () => {
+    expect(networkFrame([torrelago, laguna, deposito], [])).toHaveLength(9);
+    expect(networkFrame([torrelago, laguna], [[-4.6, 41.6, -4.5, 41.7]])).toHaveLength(6);
+  });
+  it('keeps a lone installation that is the only one inside the clouds', () => {
+    const framed = networkFrame([torrelago, deposito], [[-4.712, 41.583, -4.709, 41.585]]);
+    expect(framed).toEqual([deposito.location, ...deposito.points]);
+  });
+  it('pads the box for the labels: 30 % of its larger half, never under 50 m', () => {
+    const box = extentOf([torrelago.location, ...torrelago.points])!;
+    expect(box.halfN).toBeCloseTo(158.6 + 50, 0);
+    expect(box.halfE).toBeCloseTo(87 + 50, 0);
+  });
+  it('puts the camera about 900 m up for the network on a desktop, as A/desktop-overview', () => {
+    const h = heightOf(networkFrame([torrelago, laguna, deposito], sheets), DESKTOP);
+    expect(h).toBeGreaterThan(800);
+    expect(h).toBeLessThan(1050);
+  });
+  it('brings an installation close enough to fill the free area', () => {
+    const h = heightOf([torrelago.location, ...torrelago.points], DESKTOP);
+    expect(h).toBeGreaterThan(400);
+    expect(h).toBeLessThan(600);
+    // The old framing (a padded sphere at −55°) stood about 1 250 m up.
+    const old = fitInView(
+      frameOf([torrelago.location, ...torrelago.points])!.radius,
+      Math.PI / 3,
+      1440,
+      900,
+      DESKTOP.covered,
+    );
+    expect(old.distance * Math.sin((55 * Math.PI) / 180)).toBeGreaterThan(2 * h);
+  });
+  it('on a phone fits the narrow width: the network about 1 km up, not 3', () => {
+    const h = heightOf(networkFrame([torrelago, laguna, deposito], sheets), PHONE);
+    expect(h).toBeGreaterThan(800);
+    expect(h).toBeLessThan(1200);
+  });
+  it('fits the near edge of the box, which the camera sees largest', () => {
+    const near = fitGround(100, 300, PITCH, Math.PI / 3, 1440, 900);
+    const flat = fitGround(100, 0, PITCH, Math.PI / 3, 1440, 900);
+    expect(near.distance).toBeGreaterThan(flat.distance);
+    expect(fitGround(400, 100, PITCH, Math.PI / 3, 390, 844).distance).toBeGreaterThan(
+      fitGround(400, 100, PITCH, Math.PI / 3, 1440, 900).distance,
+    );
   });
 });
 
