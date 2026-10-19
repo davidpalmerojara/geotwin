@@ -400,6 +400,8 @@ Siete notas sobre la lectura, las placas, el móvil y los encuadres. Cada arregl
 
 Dos arreglos más que salieron al mirar las capturas: con una instalación elegida, los rótulos de las demás decían «0 activos · sin alertas» (contaban solo los activos cargados); ahora cuentan sobre toda la red (E2E en `map-overlays.spec.ts`). Y el chip del depósito caía en el móvil sobre la marca crítica de la pasarela de Torrelago: los chips se apartan ahora de las marcas cuando su borde tiene sitio (unitaria; en esa vista el chip baja de y = 466 a 535). Una marca es un elemento sin tamaño en el punto del activo, así que cuenta como una caja de 26 px alrededor de él.
 
+En local, sobre `037de3a`: lint, formato, tipos, unitarias 383/383 (45 ficheros) y compilación. E2E de las especificaciones tocadas (`hud`, `profile`, `phone`, `map-overlays`, `accessibility`, `deep-link`, `scene-tags`, `layout-errors` y `demo`): 41/42 en la primera pasada; la de `F` falló porque el vuelo de la selección seguía en marcha cuando la prueba movía la cámara, y con el vuelo cancelado pasa 3/3 con `--repeat-each`. Tras los dos últimos arreglos, `hud`, `map-overlays`, `phone` y `scene-tags` 33/33. La suite completa queda para el grupo siguiente.
+
 CI: las ejecuciones de la rama no llegan a empezar desde `9dda86d` («recent account payments have failed or your spending limit needs to be increased», facturación de GitHub); las comprobaciones son las locales de arriba.
 
 ## Límites del entorno
