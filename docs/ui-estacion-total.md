@@ -299,6 +299,14 @@ Cada paso dejó verdes lint, formato, tipos, unitarias, integración, pytest, bu
 - **Perfil**: las cotas E1…En evitan las marcas A y B.
 - **Desarrollo local**: `db:migrate` y `db:seed` compilan antes los paquetes compartidos, así que funcionan nada más hacer `npm ci`.
 
+**Tras las notas menores de la tercera verificación.**
+
+- **Sin «ResizeObserver loop»**: `Stage` medía las placas de arriba y de abajo dentro de su `ResizeObserver` y escribía `--hud-top` y `--hud-bottom`, que cambian el tamaño de paneles, hojas y ficha, observados a su vez por los chips de borde; el navegador lo daba como error de la ventana (37 veces en una pasada de las E2E). Ahora la medida va al siguiente fotograma. Todas las E2E fallan si aparece ese error y `layout-errors.spec.ts` abre y cierra Capas, dos hojas, la ficha y el cajón del perfil en escritorio y en móvil.
+- **Lectura del cursor sobre una marca**: las marcas y etiquetas están encima del lienzo, así que al pasar sobre ellas todas las casillas se quedaban en «—». Ahora la placa dice «Activo» y da la posición conocida del activo (grados, UTM 30N y MDT), como la selección.
+- **Rótulos de instalación**: guardan el margen de la interfaz (12 px, 10 en el móvil) con todos los bordes de la vista y, si ningún sitio queda libre de marcas, toman el que menos tapa; A, B, la línea y el contorno del perfil cuentan como marcas (`scene-marks.ts`).
+- **Capas**: la barra y la etapa («descargando») de una hoja en proceso van en la columna del texto, debajo del nombre.
+- **E2E de Perfil**: la prueba ponía la cámara sobre `globe.getHeight`, que justo al llegar el relieve aún puede ser el elipsoide; la cámara quedaba bajo el suelo y A no llegaba a la pantalla (el fallo intermitente de CI). Ahora usa el MDT de la aplicación y espera a que el punto esté dentro de la página.
+
 **Pendiente o distinto del diseño.**
 
 - **Ortofoto real.** Ninguna captura la lleva: la release `data-laguna` no trae `pnoa-laguna-z13-19.zip` y el entorno no llega a IDEE ni al IGN. Que esos servidores acepten las peticiones del navegador (CORS) sigue sin comprobarse.
@@ -311,4 +319,6 @@ Cada paso dejó verdes lint, formato, tipos, unitarias, integración, pytest, bu
 - **Perfil**: la placa de lectura de abajo no sigue al cursor del perfil, como sí hace la maqueta (la lectura del cursor está en el cajón). Con el perfil abierto la franja superior de la escena cuenta entera como tapada para el encuadre, pero desde la segunda verificación los chips de borde solo salen para lo que está fuera de la pantalla o bajo una placa.
 - **Perfil visto de lejos** (a unos 500 m): E1…En ya no se pisan entre sí, ni con los rótulos, ni con las marcas A y B, pero la propia línea A–B y sus marcas de distancia pueden cruzar un valor, porque no cuentan como obstáculo.
 - **Móvil, vista de toda la red**: el encuadre abarca todas las instalaciones, también el depósito del cerro, y con cuatro hojas cargadas la nube ocupa una parte pequeña de la pantalla. Los rótulos de instalación ya no quedan bajo las marcas; el encuadre no se ha cambiado.
+- **Radio**: un chip de borde puede tapar en parte la distancia de un resultado (por ejemplo «180 m» bajo el chip de la Pasarela LoRa): los chips evitan las placas y la ficha, pero no las distancias que dibuja Cesium.
+- **Lectura sobre una marca**: da la posición y el suelo (MDT) del activo, como la selección, pero no su cota ni la altura sobre el suelo.
 - **Móvil**: con la ficha al 45 % los tres botones de abajo (Histórico, Cercanos y radio, Laboratorio) quedan en parte bajo la barra de herramientas y se alcanzan desplazando la hoja.
