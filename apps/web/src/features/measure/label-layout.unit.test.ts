@@ -62,6 +62,19 @@ describe('dimension label layout', () => {
     expect(p!.dy).toBeLessThan(0);
     expect(p!.compact).toBe(false);
   });
+  it("keeps off the next building's dimension line (Torrelago from afar: E2 and E3)", () => {
+    // E3's dimension stands 66 px right of E2's: E2's value, 96 px wide, would run across it.
+    const e2 = { x: 591, y: 361, ...labelSize('E2 · 37,9 m'), side: 'right' as const };
+    const item = { ...e2, shortWidth: labelSize('E2').width };
+    const e3line = boxesAlong([
+      { x: 667, y: 400 },
+      { x: 667, y: 330 },
+    ]);
+    const [free] = layoutLabels([item]);
+    expect(e3line.some((b) => overlap(box(item, free!), b))).toBe(true);
+    const [p] = layoutLabels([item], e3line);
+    for (const b of e3line) expect(overlap(box(item, p!), b)).toBe(false);
+  });
   it('steps a label that would land on another (Torrelago: E3 and E4 side by side)', () => {
     const e3 = { x: 600, y: 420, ...labelSize('E3 · 38,0 m'), side: 'right' as const };
     const e4 = { x: 640, y: 424, ...labelSize('E4 · 36,8 m'), side: 'right' as const };

@@ -81,6 +81,8 @@ export class ProfileScene {
   /** The line on the ground (a point every 20 m) and its distance ticks, for `lineBoxes`. */
   private trace: Cartesian3[] = [];
   private ticks: { at: Cartesian3; text: string }[] = [];
+  /** The buildings' height dimensions (foot and roof), for `lineBoxes`. */
+  private heights: Cartesian3[][] = [];
   private readonly removeMarks: () => void;
 
   constructor(
@@ -221,7 +223,10 @@ export class ProfileScene {
     });
   }
 
-  /** The line on the ground and the labels of its distance ticks on screen (canvas px). */
+  /**
+   * The line on the ground, the labels of its distance ticks and the buildings' dimension lines on
+   * screen (canvas px).
+   */
   private lineBoxes() {
     if (this.viewer.isDestroyed()) return [];
     const scene = this.viewer.scene;
@@ -231,6 +236,10 @@ export class ProfileScene {
         const p = SceneTransforms.worldToWindowCoordinates(scene, at);
         return p ? [tickLabelBox(p, text)] : [];
       }),
+      // The other buildings' dimension lines: a label beside its own line never reaches it.
+      ...this.heights.flatMap((line) =>
+        boxesAlong(line.map((p) => SceneTransforms.worldToWindowCoordinates(scene, p))),
+      ),
     ];
   }
 
@@ -262,6 +271,7 @@ export class ProfileScene {
     this.outline = [];
     this.trace = [];
     this.ticks = [];
+    this.heights = [];
     const { a, b, summary, cursor } = this.view;
     const mark = (id: string, p: LngLat, text: string) =>
       entities.add({
@@ -407,6 +417,7 @@ export class ProfileScene {
             ],
           };
         });
+        this.heights = dims.map((d) => d.line);
         this.labels.set(drawDimensions(this.source, dims, 'perfil:altura'));
       }
       if (cursor !== null) {
