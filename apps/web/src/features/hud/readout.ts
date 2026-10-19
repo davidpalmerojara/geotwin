@@ -152,3 +152,47 @@ export function geoidAt(
   }
   return null;
 }
+
+/**
+ * The readout for an asset (the one under the pointer, or the selected one): its known position,
+ * mounted `mount` metres above the ground model, so its Cota is the DTM plus the mount and «Sobre
+ * el suelo» the mount itself.
+ */
+export function assetReadout(
+  asset: { location: { lng: number; lat: number }; mount_height_m: number },
+  ground: number | null,
+  geoid: number | null,
+  relief: boolean,
+): Readout {
+  const { lng, lat } = asset.location;
+  return readout({
+    point: { lng, lat, h: (ground ?? 0) + asset.mount_height_m },
+    ground,
+    geoid,
+    relief,
+  });
+}
+
+/**
+ * What moves the asset the readout calls «Activo» (the one whose mark or tag is under the pointer):
+ * - `over`: the pointer entered an element (`asset` is the mark's asset, or null off the marks).
+ *   Only a mouse hovers: a tap (finger or pen) selects the asset, and leaves no «Activo» behind.
+ * - `out`: the pointer left an element; `page` when it left the page altogether.
+ * - `recheck`: the mark now under the still pointer (after a frame, or when the marks change),
+ *   since a mark can move away from the pointer or be taken out without any pointer event. It
+ *   only keeps or drops the asset already shown: a new one waits for the pointer to move.
+ */
+export type HoverEvent =
+  | { type: 'over'; pointer: string; asset: string | null }
+  | { type: 'out'; pointer: string; page: boolean }
+  | { type: 'recheck'; asset: string | null };
+export function nextHover(current: string | null, event: HoverEvent): string | null {
+  switch (event.type) {
+    case 'over':
+      return event.pointer === 'mouse' ? event.asset : null;
+    case 'out':
+      return event.page || event.pointer !== 'mouse' ? null : current;
+    case 'recheck':
+      return current === null ? null : event.asset;
+  }
+}

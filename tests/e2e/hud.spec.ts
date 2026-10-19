@@ -460,7 +460,57 @@ test('over an asset mark the readout gives that asset’s position, not dashes',
   await expect(readout.locator('.ro-k').first()).toHaveText('Activo');
   await expect(value('position')).toHaveText(new RegExp(`^${lat}°\\sN\\s+${lng}°\\sO$`));
   await expect(value('utm')).toHaveText(/^\d{3}\s\d{3},\d\s+4\s\d{3}\s\d{3},\d$/);
+  // Its Cota and height above the ground are there too (DTM plus mount; without the LiDAR relief
+  // of this database they say why they are missing), unlike the shorter selection line.
+  await expect(value('cota')).toBeVisible();
+  await expect(value('sobre')).toBeVisible();
+  await expect(value('sobre')).toHaveAttribute('title', 'activa Relieve del LiDAR');
   // Back on the scene, it reads the cursor again.
   await page.mouse.move(sx!, sy!, { steps: 4 });
   await expect(readout.locator('.ro-k').first()).toHaveText('Cursor');
+  // The pointer stays still on the mark and the camera moves: the mark leaves the pointer, and
+  // «Activo» goes with it.
+  await page.mouse.move(x, y, { steps: 4 });
+  await expect(readout.locator('.ro-k').first()).toHaveText('Activo');
+  await page.evaluate(async () => {
+    const { useScene } = (await import('/src/stores/viewer.ts' as string)) as {
+      useScene: { getState(): { api: { zoom(direction: 1 | -1): void } } };
+    };
+    useScene.getState().api.zoom(-1);
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ([x, y]) => !document.elementFromPoint(x!, y!)?.closest('.scene-tags [data-asset]'),
+        [x, y],
+      ),
+    )
+    .toBe(true);
+  await expect(readout.locator('.ro-k').first()).not.toHaveText('Activo');
+});
+
+test.describe('on a touch screen', () => {
+  test.use({ hasTouch: true });
+  test('a tap on an asset mark selects it and leaves no «Activo» behind', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openScene(page);
+    const readout = page.getByTestId('readout');
+    await expect(page.locator('.scene-mark i:visible').first()).toBeVisible({ timeout: 30000 });
+    const found = () =>
+      page.evaluate(() => {
+        for (const ring of document.querySelectorAll('.scene-mark i')) {
+          const r = ring.getBoundingClientRect();
+          if (!r.width) continue;
+          const [x, y] = [r.left + r.width / 2, r.top + r.height / 2];
+          if (document.elementFromPoint(x, y)?.closest('.scene-mark') === ring.parentElement)
+            return { x, y };
+        }
+        return null;
+      });
+    await expect.poll(found).not.toBeNull();
+    const { x, y } = (await found())!;
+    await page.touchscreen.tap(x, y);
+    await expect(page.getByTestId('asset-card')).toBeVisible();
+    await expect(readout.locator('.ro-k').first()).toHaveText('Selección');
+  });
 });

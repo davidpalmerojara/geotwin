@@ -4,7 +4,17 @@ import { useUI } from '../../stores/ui';
 import { useScene } from '../../stores/viewer';
 import { useTool } from '../../stores/tool';
 import { measuredGround } from '../layers/lidar-terrain';
-import { geoidAt, readout, NBSP, NO_GROUND, type Cell, type Readout } from './readout';
+import {
+  assetReadout,
+  geoidAt,
+  nextHover,
+  readout,
+  NBSP,
+  NO_GROUND,
+  type Cell,
+  type HoverEvent,
+  type Readout,
+} from './readout';
 
 const CELLS: [keyof Readout, string][] = [
   ['position', 'Cursor'],
@@ -77,12 +87,7 @@ export function ReadoutPlate() {
     const { lng, lat } = asset.location;
     const ground = grid ? measuredGround(grid, lng, lat) : null;
     write(
-      readout({
-        point: { lng, lat, h: (ground ?? 0) + asset.mount_height_m },
-        ground,
-        geoid: geoidAt(sheets ?? [], lng, lat),
-        relief,
-      }),
+      assetReadout(asset, ground, geoidAt(sheets ?? [], lng, lat), relief),
       hovered && asset.id === hovered ? 'Activo' : 'Selección',
     );
   };
@@ -93,14 +98,59 @@ export function ReadoutPlate() {
   useEffect(() => {
     if (!cursor) showRef.current();
   }, [cursor, over, selectedId, assets, lidar, terrain]);
+  // The asset under the pointer follows the pointer, and also the marks: one that moves away
+  // from a still pointer (the camera flies) or is taken out stops being «Activo», and so does
+  // everything when the pointer leaves the page. A tap never hovers (see nextHover).
   useEffect(() => {
-    const enter = (event: PointerEvent) => {
-      const mark = (event.target as Element | null)?.closest?.('.scene-tags [data-asset]');
-      setOver(mark?.getAttribute('data-asset') ?? null);
+    const MARK = '.scene-tags [data-asset]';
+    const assetOf = (element: Element | null | undefined) =>
+      element?.closest?.(MARK)?.getAttribute('data-asset') ?? null;
+    let current: string | null = null,
+      at: { x: number; y: number } | null = null,
+      frame = 0;
+    const apply = (event: HoverEvent) => {
+      current = nextHover(current, event);
+      setOver(current);
     };
-    document.addEventListener('pointerover', enter);
-    return () => document.removeEventListener('pointerover', enter);
-  }, []);
+    const recheck = () => {
+      frame = 0;
+      if (current === null) return;
+      apply({
+        type: 'recheck',
+        asset: at ? assetOf(document.elementFromPoint(at.x, at.y)) : null,
+      });
+    };
+    const schedule = () => {
+      if (current !== null && !frame) frame = requestAnimationFrame(recheck);
+    };
+    const over = (event: PointerEvent) => {
+      at = event.pointerType === 'mouse' ? { x: event.clientX, y: event.clientY } : null;
+      apply({ type: 'over', pointer: event.pointerType, asset: assetOf(event.target as Element) });
+    };
+    const move = (event: PointerEvent) => {
+      if (event.pointerType === 'mouse') at = { x: event.clientX, y: event.clientY };
+    };
+    const out = (event: PointerEvent) => {
+      const page = !event.relatedTarget;
+      if (page) at = null;
+      apply({ type: 'out', pointer: event.pointerType, page });
+    };
+    document.addEventListener('pointerover', over);
+    document.addEventListener('pointermove', move, { passive: true });
+    document.addEventListener('pointerout', out);
+    // The marks are laid out after every frame, and React adds and removes them.
+    const offRender = api?.onRender(schedule);
+    const marks = new MutationObserver(schedule);
+    marks.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener('pointerover', over);
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerout', out);
+      offRender?.();
+      marks.disconnect();
+    };
+  }, [api]);
 
   useEffect(() => {
     if (!api) return;
@@ -165,9 +215,12 @@ export function ReadoutPlate() {
     return () => clearInterval(timer);
   }, []);
   const selection = !cursor && !!(over ?? selectedId);
+  // The selection line is short (position, UTM, ground and Radio, as in A); an asset under the
+  // pointer also gives its Cota and its height above the ground (its mount).
+  const hovering = selection && !!over && !!assets?.some((a) => a.id === over);
   return (
     <div
-      className={`plate readout-plate ${selection ? 'selection' : ''}`}
+      className={`plate readout-plate ${selection ? (hovering ? 'hovering' : 'selection') : ''}`}
       data-map-overlay
       data-testid="readout"
     >

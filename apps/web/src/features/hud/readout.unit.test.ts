@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assetReadout,
   formatLatLon,
   formatSigned,
   formatUtm,
@@ -10,6 +11,7 @@ import {
   NO_CURSOR,
   NO_GROUND,
   NO_RELIEF,
+  nextHover,
   OUTSIDE,
   readout,
 } from './readout';
@@ -58,6 +60,52 @@ describe('cursor readout', () => {
       missing: NO_GROUND,
     });
     expect(sky.cota).toEqual({ text: '—', reason: NO_GROUND });
+  });
+});
+
+describe('readout over an asset', () => {
+  // A gateway 41,9 m up on a tower roof, over a 752,3 m ground (N = 53,1 m).
+  const gateway = { location: { lng: -4.72565, lat: 41.58786 }, mount_height_m: 41.9 };
+  it('gives its Cota (the DTM plus the mount) and its height above the ground', () => {
+    const r = assetReadout(gateway, 752.3, 53.1, true);
+    expect(plain(r.position.text)).toBe('41,58786° N  4,72565° O');
+    expect(plain(r.suelo.text)).toBe('699,2 m');
+    expect(plain(r.cota.text)).toBe('741,1 m');
+    expect(plain(r.sobre.text)).toBe('+41,9 m');
+  });
+  it('gives «—» with the reason outside the sheets or without the relief', () => {
+    expect(assetReadout(gateway, null, null, true).cota).toEqual({ text: '—', reason: OUTSIDE });
+    expect(assetReadout(gateway, 752.3, 53.1, false).sobre).toEqual({
+      text: '—',
+      reason: NO_RELIEF,
+    });
+  });
+});
+
+describe('asset under the pointer', () => {
+  const A = 'asset-a';
+  it('follows a mouse onto a mark and off it', () => {
+    let hover = nextHover(null, { type: 'over', pointer: 'mouse', asset: A });
+    expect(hover).toBe(A);
+    // Leaving the mark for its own tag keeps it until the next «over» says otherwise.
+    hover = nextHover(hover, { type: 'out', pointer: 'mouse', page: false });
+    expect(hover).toBe(A);
+    expect(nextHover(hover, { type: 'over', pointer: 'mouse', asset: null })).toBeNull();
+  });
+  it('drops it when the pointer leaves the page from the mark', () => {
+    expect(nextHover(A, { type: 'out', pointer: 'mouse', page: true })).toBeNull();
+  });
+  it('never comes from a tap', () => {
+    expect(nextHover(null, { type: 'over', pointer: 'touch', asset: A })).toBeNull();
+    expect(nextHover(A, { type: 'over', pointer: 'pen', asset: A })).toBeNull();
+    expect(nextHover(A, { type: 'out', pointer: 'touch', page: false })).toBeNull();
+  });
+  it('drops it when the mark moves away from a still pointer or is taken out', () => {
+    expect(nextHover(A, { type: 'recheck', asset: null })).toBeNull();
+    expect(nextHover(A, { type: 'recheck', asset: 'asset-b' })).toBe('asset-b');
+    expect(nextHover(A, { type: 'recheck', asset: A })).toBe(A);
+    // A mark arriving under a still pointer waits for the pointer to move.
+    expect(nextHover(null, { type: 'recheck', asset: A })).toBeNull();
   });
 });
 
