@@ -12,6 +12,7 @@ import {
   ClassificationType,
   Color,
   ConstantPositionProperty,
+  ConstantProperty,
   CustomDataSource,
   HorizontalOrigin,
   JulianDate,
@@ -28,16 +29,20 @@ import { number } from '../../lib/format';
 import { metresPerDegree } from './section-math';
 import { renderUntil } from '../measure/render-until';
 import { clearForRedraw } from '../measure/entities';
-import { overlayBoxes } from '../hud/dom';
+import { overlayBoxes, platesKey, whenSteady } from '../hud/dom';
 import { addSceneLabels } from '../scene/scene-marks';
 import {
   DISTANCE_OFFSET,
   DISTANCE_PAD,
+  RING_ANCHORS,
   RING_LABEL_LIFT,
   distanceLabelBox,
+  distanceSide,
   distanceText,
+  ringAnchorOffset,
   ringLabelBox,
-  ringLabelSize,
+  type DistanceSide,
+  type RingAnchor,
 } from './radius-label';
 const SIG = Color.fromCssColorString('#FFD21A'),
   INK = Color.fromCssColorString('#0E0E0D'),
@@ -97,56 +102,58 @@ export function segmentHitsBox(a: { x: number; y: number }, b: { x: number; y: n
 }
 
 /**
- * Where the radius label goes on the ring: of the candidate points (box centres on screen, or
- * null when behind the camera), the one nearest the bottom of the view (towards the viewer) whose
- * label box stays inside the view, clear of the plates and of the ring's own dashes (`path`, the
- * ring on screen: where the ring runs steeply on screen a box centred above it would be crossed by
- * it). Failing that, one clear of the plates only; failing that, the lowest inside the view.
- * Returns the index, or -1 when no point is on screen.
+ * Where the radius label goes on the ring: of the ring's points on screen (null when behind the
+ * camera), the one nearest the bottom of the view (towards the viewer) where the label box, against
+ * that point by one of RING_ANCHORS (above it first, then below, then off a corner), stays inside
+ * the view, clear of the plates and of the ring's own dashes (`path`, the ring on screen: where the
+ * ring runs steeply or at a slant on screen a box centred above it would be crossed by it). Failing
+ * that, one clear of the plates only; failing that, the lowest inside the view. Returns the point's
+ * index and the anchor, or null when no point is on screen.
  */
 export function labelSpot(
   points: Screen[],
-  label: { width: number; height: number },
+  text: string,
   view: { width: number; height: number },
   plates: Box[],
   margin = 8,
   path: Screen[] = [],
-) {
-  let best = -1,
-    plain = -1,
-    fallback = -1;
+): { index: number; anchor: RingAnchor } | null {
+  type Spot = { index: number; anchor: RingAnchor; y: number };
+  let best: Spot | null = null,
+    plain: Spot | null = null,
+    fallback: Spot | null = null;
   const crossed = (box: Box) =>
     path.some((p, i) => {
       const q = path[i + 1];
       return !!p && !!q && segmentHitsBox(p, q, box);
     });
-  points.forEach((p, i) => {
+  const lower = (spot: Spot | null, y: number) => !spot || y > spot.y;
+  points.forEach((p, index) => {
     if (!p) return;
-    const box = {
-      left: p.x - label.width / 2,
-      right: p.x + label.width / 2,
-      top: p.y - label.height / 2,
-      bottom: p.y + label.height / 2,
-    };
-    const inside =
-      box.left >= margin &&
-      box.top >= margin &&
-      box.right <= view.width - margin &&
-      box.bottom <= view.height - margin;
-    if (!inside) return;
-    if (fallback < 0 || p.y > points[fallback]!.y) fallback = i;
-    const clear = plates.every(
-      (r) =>
-        box.right + margin <= r.left ||
-        box.left - margin >= r.right ||
-        box.bottom + margin <= r.top ||
-        box.top - margin >= r.bottom,
-    );
-    if (!clear) return;
-    if (plain < 0 || p.y > points[plain]!.y) plain = i;
-    if (!crossed(box) && (best < 0 || p.y > points[best]!.y)) best = i;
+    for (const anchor of RING_ANCHORS) {
+      const box = ringLabelBox(p, text, anchor);
+      const inside =
+        box.left >= margin &&
+        box.top >= margin &&
+        box.right <= view.width - margin &&
+        box.bottom <= view.height - margin;
+      if (!inside) continue;
+      const spot = { index, anchor, y: p.y };
+      if (lower(fallback, p.y)) fallback = spot;
+      const clear = plates.every(
+        (r) =>
+          box.right + margin <= r.left ||
+          box.left - margin >= r.right ||
+          box.bottom + margin <= r.top ||
+          box.top - margin >= r.bottom,
+      );
+      if (!clear) continue;
+      if (lower(plain, p.y)) plain = spot;
+      if (lower(best, p.y) && !crossed(box)) best = spot;
+    }
   });
-  return best >= 0 ? best : plain >= 0 ? plain : fallback;
+  const spot: Spot | null = best ?? plain ?? fallback;
+  return spot ? { index: spot.index, anchor: spot.anchor } : null;
 }
 
 export const radiusText = (metres: number, count: number) =>
@@ -158,8 +165,12 @@ export class RadiusRing {
   private readonly handler: ScreenSpaceEventHandler;
   private stopRendering: (() => void) | undefined;
   private view: RingView | null = null;
-  /** Where each distance label hangs (the end of its leader), for `valueBoxes`. */
-  private ends: { at: Cartesian3; metres: number }[] = [];
+  /** Where each distance label hangs (the end of its leader) and on which side, for `valueBoxes`. */
+  private ends: { id: string; at: Cartesian3; metres: number; side: DistanceSide }[] = [];
+  /** How the radius label sits against its point on the ring. */
+  private anchor: RingAnchor = 'above';
+  private cancelSteady: (() => void) | undefined;
+  private readonly plates: MutationObserver;
   private readonly removeMoveEnd: () => void;
   private readonly removeLabels: () => void;
 
@@ -186,8 +197,12 @@ export class RadiusRing {
       const c = Cartographic.fromCartesian(hit);
       onPoint({ lng: CesiumMath.toDegrees(c.longitude), lat: CesiumMath.toDegrees(c.latitude) });
     }, ScreenSpaceEventType.LEFT_CLICK);
-    // The label moves along the ring to a visible spot whenever the camera stops.
-    this.removeMoveEnd = viewer.camera.moveEnd.addEventListener(() => this.placeLabel());
+    // The labels move to a visible spot whenever the camera stops, and again once the plates have
+    // settled (a card docking, a panel opening) and whenever one opens or closes.
+    this.removeMoveEnd = viewer.camera.moveEnd.addEventListener(() => this.placeSoon());
+    this.plates = new MutationObserver(() => this.placeSoon());
+    const hud = document.querySelector('.hud');
+    if (hud) this.plates.observe(hud, { childList: true, subtree: true });
     // The installation labels, the tags and the edge chips keep off the distances and the radius.
     this.removeLabels = addSceneLabels(() => this.valueBoxes());
   }
@@ -198,19 +213,29 @@ export class RadiusRing {
       viewer = this.viewer;
     if (!view || viewer.isDestroyed()) return [];
     const scene = viewer.scene;
-    const boxes = this.ends.flatMap(({ at, metres }) => {
-      const p = SceneTransforms.worldToWindowCoordinates(scene, at);
-      return p ? [distanceLabelBox(p, metres)] : [];
+    const boxes = this.ends.flatMap(({ at, metres, side }) => {
+      const p = side === 'hidden' ? undefined : SceneTransforms.worldToWindowCoordinates(scene, at);
+      return p ? [distanceLabelBox(p, metres, side)] : [];
     });
     const ring = this.source.entities
       .getById('radio:etiqueta')
       ?.position?.getValue(JulianDate.now());
     const p = ring ? SceneTransforms.worldToWindowCoordinates(scene, ring) : undefined;
-    if (p) boxes.push(ringLabelBox(p, radiusText(view.metres, view.items.length)));
+    if (p) boxes.push(ringLabelBox(p, radiusText(view.metres, view.items.length), this.anchor));
     return boxes;
   }
 
-  /** Puts the radius label on the ring where it is on screen and clear of the plates. */
+  /** Places the labels now and once more when the plates have stopped moving. */
+  private placeSoon() {
+    this.placeLabel();
+    this.cancelSteady?.();
+    this.cancelSteady = whenSteady(platesKey, () => this.placeLabel(), 300, 3000);
+  }
+
+  /**
+   * Puts the radius label on the ring where it is on screen and clear of the plates and of the
+   * ring's dashes, and each distance on the side of its leader that is in sight (or hides it).
+   */
   private placeLabel() {
     const view = this.view,
       viewer = this.viewer;
@@ -222,12 +247,11 @@ export class RadiusRing {
     );
     const canvas = viewer.scene.canvas;
     const frame = canvas.getBoundingClientRect();
-    const text = radiusText(view.metres, view.items.length),
-      size = ringLabelSize(text);
-    // The label's box sits RING_LABEL_LIFT px above the ring point; labelSpot takes box centres.
+    const size = { width: canvas.clientWidth, height: canvas.clientHeight };
+    const text = radiusText(view.metres, view.items.length);
     const points = positions.map((p) => {
       const w = SceneTransforms.worldToWindowCoordinates(viewer.scene, p);
-      return w ? { x: w.x, y: w.y - RING_LABEL_LIFT - size.height / 2 } : null;
+      return w ? { x: w.x, y: w.y } : null;
     });
     // The ring itself on screen (a point every 2,5°), which the label must not sit across.
     const path = circle(view.center, view.metres, 144).map((p) => {
@@ -243,16 +267,41 @@ export class RadiusRing {
       top: r.top - frame.top,
       bottom: r.bottom - frame.top,
     }));
-    const i = labelSpot(
-      points,
-      size,
-      { width: canvas.clientWidth, height: canvas.clientHeight },
-      plates,
-      8,
-      path,
-    );
-    if (i < 0) return;
-    label.position = new ConstantPositionProperty(positions[i]);
+    const spot = labelSpot(points, text, size, plates, 8, path);
+    if (spot) {
+      this.anchor = spot.anchor;
+      const o = ringAnchorOffset(spot.anchor);
+      label.position = new ConstantPositionProperty(positions[spot.index]);
+      if (label.label) {
+        label.label.horizontalOrigin = new ConstantProperty(
+          o.horizontal === 'left'
+            ? HorizontalOrigin.LEFT
+            : o.horizontal === 'right'
+              ? HorizontalOrigin.RIGHT
+              : HorizontalOrigin.CENTER,
+        );
+        label.label.verticalOrigin = new ConstantProperty(
+          o.vertical === 'top' ? VerticalOrigin.TOP : VerticalOrigin.BOTTOM,
+        );
+        label.label.pixelOffset = new ConstantProperty(new Cartesian2(o.x, o.y));
+      }
+    }
+    // The distances: right of the leader's end, else left of it, else hidden (the panel lists them).
+    for (const end of this.ends) {
+      const entity = this.source.entities.getById(`radio:distancia:${end.id}`);
+      if (!entity?.label) continue;
+      const at = SceneTransforms.worldToWindowCoordinates(viewer.scene, end.at);
+      end.side = distanceSide(at ? { x: at.x, y: at.y } : null, end.metres, size, plates);
+      entity.label.show = new ConstantProperty(end.side !== 'hidden');
+      if (end.side === 'hidden') continue;
+      const left = end.side === 'left';
+      entity.label.horizontalOrigin = new ConstantProperty(
+        left ? HorizontalOrigin.RIGHT : HorizontalOrigin.LEFT,
+      );
+      entity.label.pixelOffset = new ConstantProperty(
+        new Cartesian2(left ? -DISTANCE_OFFSET.x : DISTANCE_OFFSET.x, DISTANCE_OFFSET.y),
+      );
+    }
     viewer.scene.requestRender();
   }
 
@@ -300,6 +349,7 @@ export class RadiusRing {
       // The radius and count, on the ring: south-west at first, then wherever it is on screen and
       // clear of the plates (placeLabel).
       const at = circle(view.center, view.metres, 8)[5]!;
+      this.anchor = 'above';
       entities.add({
         id: 'radio:etiqueta',
         position: Cartesian3.fromDegrees(at.lng, at.lat, this.ground(at.lng, at.lat) + 1),
@@ -329,7 +379,7 @@ export class RadiusRing {
           item.lat,
           this.ground(item.lng, item.lat) + item.mount + 1,
         );
-        this.ends.push({ at: end, metres: item.distance_m });
+        this.ends.push({ id: item.id, at: end, metres: item.distance_m, side: 'right' });
         entities.add({
           id: `radio:guia:${item.id}`,
           polyline: {
@@ -366,7 +416,7 @@ export class RadiusRing {
     }
     entities.resumeEvents();
     this.view = view;
-    this.placeLabel();
+    this.placeSoon();
     this.viewer.scene.requestRender();
     this.stopRendering?.();
     this.stopRendering = renderUntil(
@@ -377,6 +427,8 @@ export class RadiusRing {
 
   destroy() {
     this.stopRendering?.();
+    this.cancelSteady?.();
+    this.plates.disconnect();
     this.removeMoveEnd();
     this.removeLabels();
     this.handler.destroy();

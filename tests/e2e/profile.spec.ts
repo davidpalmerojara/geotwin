@@ -404,14 +404,22 @@ test('Perfil A–B, Corte and Radio on a synthetic layer', async ({ page, reques
               b.left < a.right - 1 &&
               a.top < b.bottom - 1 &&
               b.top < a.bottom - 1;
+            // Nor are they left under a plate or cut by the edge of the view: a distance moves to
+            // the other side of its leader, or goes (the panel lists them all).
+            const plates = shown('[data-map-overlay]');
             return {
               values: values.length,
               covered: values.filter((a) => others.some((b) => hit(a, b))).length,
+              underPlate: values.filter((a) => plates.some((b) => hit(a, b))).length,
+              outside: values.filter(
+                (a) =>
+                  a.left < 0 || a.top < 0 || a.right > canvas.width || a.bottom > canvas.height,
+              ).length,
             };
           }),
         { timeout: 30000 },
       )
-      .toEqual({ values: expect.any(Number), covered: 0 });
+      .toEqual({ values: expect.any(Number), covered: 0, underPlate: 0, outside: 0 });
     await page.keyboard.press('Escape');
     await expect(map).not.toHaveAttribute('data-radius');
   } finally {
