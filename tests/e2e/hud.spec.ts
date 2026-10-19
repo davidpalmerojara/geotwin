@@ -343,9 +343,11 @@ test('F «Centrar activo» flies back to the asset of the card, and says so when
   const centre = page.getByRole('button', { name: 'Centrar activo' });
   await expect(centre).toBeVisible();
   await expect(centre).toHaveAttribute('aria-keyshortcuts', 'F');
-  // The camera goes 3 km east, looking further east: the asset is behind it...
+  // The camera goes 3 km east, looking further east: the asset is behind it. (The selection's
+  // flight, or its re-aim once the card docks, may still be under way: it is cancelled first.)
   await page.evaluate(() => {
     const v = (window as unknown as { __geotwinViewer: import('cesium').Viewer }).__geotwinViewer;
+    v.camera.cancelFlight();
     const at = v.camera.positionCartographic;
     v.camera.setView({
       destination: v.scene.globe.ellipsoid.cartographicToCartesian({
