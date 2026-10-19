@@ -333,11 +333,21 @@ Cada paso dejó verdes lint, formato, tipos, unitarias, integración, pytest, bu
 
 - **Dos más, vistos en las capturas**: con una instalación elegida, los rótulos de las demás decían «0 activos · sin alertas» (contaban solo los activos cargados) y ahora cuentan sobre toda la red; y los chips de borde se apartan de las marcas de los activos cuando su borde tiene sitio (en el móvil, el chip del depósito tapaba la marca crítica de la pasarela de Torrelago).
 
-**Pendiente o distinto del diseño.**
+**Tras las notas menores de la cuarta verificación (Capas, relieve, pruebas y documentación).**
+
+- **Leyenda de Altura**: la barra horizontal de «baja» a «alta» de Capas pasa a ser la regla vertical «Cota m» de `A/desktop-capas.png`, bajo «Encuadre inicial» (a la izquierda de una ficha anclada): la rampa de pie, cotas con marcas cada 10 o 20 m y, en amarillo, la cota bajo el cursor con una línea hasta el suelo, en blanco. En el móvil la regla va dentro de Capas. Todas las hojas visibles comparten ahora un solo rango de cota, la unión de los suyos, así que un color es la misma altura en todas; Capas lo dice: «Cota de 692,3 a 769,5 m, el mismo rango en las 8 hojas».
+- **Suelo en blanco al llegar una hoja**: cada vez que una hoja terminaba de procesarse (o se borraba) el relieve cambiaba de proveedor, Cesium soltaba todas las teselas del globo y, hasta recargarlas, no se dibujaba suelo: la escena quedaba en blanco bajo las nubes y la escala decía «el centro de la vista no mira al suelo». Ahora el mismo proveedor toma las alturas nuevas y las teselas se recargan sin dejar de dibujarse (`terrain-refresh.ts`).
+- **Pruebas**: la guarda de «ResizeObserver loop» de las E2E escucha todas las páginas del contexto (también el observador de `demo.spec.ts`).
+- **Perfil**: con el puntero en el gráfico, la línea A–B, el contorno del plano y las cotas de los edificios desaparecían de la escena: cada movimiento del cursor la redibujaba entera. Ahora solo se mueve la marca del cursor.
+- **Capturas** de `docs/screenshots/` repetidas con las ocho hojas reales y el fondo neutro (con la web de `b643995`; el perfil, con `2684544`; ver [verification.md](verification.md)).
+
+**Pendiente.**
 
 - **Ortofoto real.** Ninguna captura la lleva: la release `data-laguna` no trae `pnoa-laguna-z13-19.zip` y el entorno no llega a IDEE ni al IGN. Que esos servidores acepten las peticiones del navegador (CORS) sigue sin comprobarse.
 - **Google Photorealistic 3D Tiles** sigue sin probarse con Google: solo con una malla local que sustituye la respuesta de Cesium ion ([prueba manual](fotorrealista.md#prueba-manual)).
 - **El vídeo de 40 s** es de la interfaz anterior; no se ha vuelto a grabar.
-- **Leyenda de Altura** en Capas: una barra de «baja» a «alta», no la regla vertical con cotas de `A/desktop-capas.png`; con varias hojas cada una usa su propio rango.
-- **Perfil**: con el perfil abierto la franja superior de la escena cuenta entera como tapada para el encuadre, pero desde la segunda verificación los chips de borde solo salen para lo que está fuera de la pantalla o bajo una placa.
+
+**Distinto de la maqueta a propósito.**
+
 - **Encuadre a −45°**: la maqueta mira desde −30° con rumbo 150°; los encuadres miran al norte desde −45°, como la vista cercana de un activo, para que las etiquetas no se amontonen al fondo.
+- **Perfil**: con el perfil abierto, la franja superior de la escena cuenta entera como tapada para el encuadre; los chips de borde, en cambio, solo salen para lo que está fuera de la pantalla o bajo una placa.
