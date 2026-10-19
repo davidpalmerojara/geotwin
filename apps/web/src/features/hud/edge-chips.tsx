@@ -184,10 +184,13 @@ export function EdgeChips() {
       }));
       // The assets' marks, which a chip slides off when its edge has room (a critical asset's
       // mark under a chip would hide it).
+      // The mark element is a point at the asset (its ring is drawn around it): 26 px around it.
       const marks = [...document.querySelectorAll<HTMLElement>('.scene-tags .scene-mark')]
         .filter((m) => m.style.display !== 'none')
-        .map((m) => m.getBoundingClientRect())
-        .filter((b) => b.width > 0);
+        .map((m) => {
+          const { left: x, top: y } = m.getBoundingClientRect();
+          return { left: x - 13, right: x + 13, top: y - 13, bottom: y + 13 };
+        });
       const placed = placeChips(
         extra ? [...shown, extra] : shown,
         free,
