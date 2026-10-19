@@ -128,8 +128,9 @@ export function labelSpot(
       return !!p && !!q && segmentHitsBox(p, q, box);
     });
   const lower = (spot: Spot | null, y: number) => !spot || y > spot.y;
-  points.forEach((p, index) => {
-    if (!p) return;
+  // A plain loop, not forEach: the type checker follows assignments made in it.
+  for (const [index, p] of points.entries()) {
+    if (!p) continue;
     for (const anchor of RING_ANCHORS) {
       const box = ringLabelBox(p, text, anchor);
       const inside =
@@ -151,7 +152,7 @@ export function labelSpot(
       if (lower(plain, p.y)) plain = spot;
       if (lower(best, p.y) && !crossed(box)) best = spot;
     }
-  });
+  }
   const spot: Spot | null = best ?? plain ?? fallback;
   return spot ? { index: spot.index, anchor: spot.anchor } : null;
 }
