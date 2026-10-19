@@ -13,6 +13,7 @@ import {
   NO_RELIEF,
   nextHover,
   OUTSIDE,
+  profileReadout,
   readout,
 } from './readout';
 
@@ -79,6 +80,27 @@ describe('readout over an asset', () => {
       text: '—',
       reason: NO_RELIEF,
     });
+  });
+});
+
+describe('readout from the profile chart', () => {
+  // E4's roof in A/desktop-signature: 742,4 m over a 701,3 m ground.
+  const at = { lng: -4.72591, lat: 41.58944, geoid: 53.1 };
+  it('gives the point under the chart cursor: Cota, ground and height above it', () => {
+    const r = profileReadout({ ...at, z: 742.4, ground: 701.3 });
+    expect(plain(r.position.text)).toBe('41,58944° N  4,72591° O');
+    expect(plain(r.cota.text)).toBe('742,4 m');
+    expect(plain(r.suelo.text)).toBe('701,3 m');
+    expect(plain(r.sobre.text)).toBe('+41,1 m');
+  });
+  it('reads the ground where the slab has no point, and «—» outside the DTM', () => {
+    const bare = profileReadout({ ...at, z: null, ground: 701.3 });
+    expect(plain(bare.cota.text)).toBe('701,3 m');
+    expect(plain(bare.sobre.text)).toBe('0,0 m');
+    const off = profileReadout({ ...at, z: 742.4, ground: null });
+    expect(plain(off.cota.text)).toBe('—');
+    expect(off.sobre).toEqual({ text: '—', reason: OUTSIDE });
+    expect(off.position.text).not.toBe('—');
   });
 });
 

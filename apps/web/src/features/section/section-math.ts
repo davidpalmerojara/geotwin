@@ -75,6 +75,22 @@ export function fromLine(line: Line, s: number, d = 0): LngLat {
   return { lng: line.a.lng + e / line.scale.lng, lat: line.a.lat + n / line.scale.lat };
 }
 
+/**
+ * Where the chart's cursor points: `s` along A–B, the LiDAR point under it (its altitude z and its
+ * offset d from the line) or none, and the DTM there. The place is the point's own when there is
+ * one, else the line's.
+ */
+export function chartReading(
+  line: Line,
+  s: number,
+  point: { z: number; d: number } | null,
+  ground: number | null,
+  geoid: number,
+) {
+  const at = fromLine(line, s, point?.d ?? 0);
+  return { s, lng: at.lng, lat: at.lat, z: point?.z ?? null, ground, geoid };
+}
+
 export interface DtmLine {
   /** Distances from A (every `step` metres, and B). */
   s: number[];

@@ -259,6 +259,37 @@ test('Perfil A–B, Corte and Radio on a synthetic layer', async ({ page, reques
     const readout = page.getByTestId('profile-readout');
     await expect(readout).toContainText(/Distancia desde A\s*\d+,\d m/);
     await expect(readout).toContainText(/Suelo \(MDT\)\s*\d+,\d m/);
+    // The readout plate at the bottom follows the chart's cursor too (A/desktop-signature): the
+    // same distance from A, ground and Cota as the drawer, and the point's position.
+    const plate = page.getByTestId('readout');
+    const drawerValue = async (name: string) =>
+      (
+        await readout
+          .getByText(name, { exact: true })
+          .locator('xpath=following-sibling::dd[1]')
+          .innerText()
+      ).trim();
+    await expect(plate.getByTestId('readout-along')).toHaveText(
+      await drawerValue('Distancia desde A'),
+    );
+    await expect(plate.getByTestId('readout-suelo')).toHaveText(await drawerValue('Suelo (MDT)'));
+    await expect(plate.getByTestId('readout-position')).toHaveText(/^41,\d{5}°\sN\s+4,\d{5}°\sO$/);
+    const cota = await drawerValue('Cota');
+    if (cota !== '—') await expect(plate.getByTestId('readout-cota')).toHaveText(cota);
+    // Off the chart, onto the scene: the plate reads the scene's cursor again.
+    const [sx, sy] = await page.evaluate(
+      ([x, y]) => {
+        for (let dy = 80; dy < 400; dy += 20)
+          for (const dx of [0, -80, 80, -160, 160])
+            if (document.elementFromPoint(x! + dx, y! - dy)?.matches('.cesium-widget canvas'))
+              return [x! + dx, y! - dy];
+        return [x!, y! - 120];
+      },
+      [canvas.x + canvas.width * 0.5, canvas.y],
+    );
+    await page.mouse.move(sx!, sy!, { steps: 3 });
+    await expect(plate.getByTestId('readout-along')).toHaveCount(0);
+    await expect(plate.locator('.ro-k').first()).toHaveText('Cursor');
 
     // Exportar CSV: «;» and a decimal comma, one row per point.
     const download = page.waitForEvent('download');

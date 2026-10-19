@@ -196,3 +196,23 @@ export function nextHover(current: string | null, event: HoverEvent): string | n
       return current === null ? null : event.asset;
   }
 }
+
+/**
+ * The readout for the point under the profile chart's cursor: the LiDAR point there (or the
+ * ground, where the slab has no point), with altitudes as the chart gives them (h − N).
+ */
+export function profileReadout(r: {
+  lng: number;
+  lat: number;
+  z: number | null;
+  ground: number | null;
+  geoid: number;
+}): Readout {
+  const h = r.z ?? r.ground;
+  return readout({
+    point: { lng: r.lng, lat: r.lat, h: (h ?? 0) + r.geoid },
+    ground: r.ground === null ? null : r.ground + r.geoid,
+    geoid: h === null ? null : r.geoid,
+    relief: true,
+  });
+}

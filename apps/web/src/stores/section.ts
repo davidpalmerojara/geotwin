@@ -28,6 +28,20 @@ export interface SectionSummary {
   count: number;
 }
 
+/** The point under the profile chart's cursor, for the readout plate (altitudes, h − N). */
+export interface ChartReading {
+  /** Distance from A (m). */
+  s: number;
+  lng: number;
+  lat: number;
+  /** Altitude of the LiDAR point under the cursor, or null where the slab has none. */
+  z: number | null;
+  /** Altitude of the DTM there, or null outside the ground model. */
+  ground: number | null;
+  /** N of the layer (altitude + N = ellipsoidal height). */
+  geoid: number;
+}
+
 interface SectionState {
   a: LngLat | null;
   b: LngLat | null;
@@ -41,6 +55,8 @@ interface SectionState {
   summary: SectionSummary | null;
   /** A or B is being dragged (the queries wait for the drop). */
   dragging: boolean;
+  /** What the chart's cursor reads while the pointer (or the keyboard) is on the chart. */
+  chart: ChartReading | null;
   /** Pick A, then B; a third click starts a new line from A. */
   place: (point: LngLat) => void;
   move: (which: 'a' | 'b', point: LngLat) => void;
@@ -52,6 +68,7 @@ interface SectionState {
   setCursor: (s: number | null) => void;
   setSummary: (summary: SectionSummary | null) => void;
   setDragging: (dragging: boolean) => void;
+  setChart: (chart: ChartReading | null) => void;
 }
 
 export const useSection = create<SectionState>((set, get) => ({
@@ -64,13 +81,23 @@ export const useSection = create<SectionState>((set, get) => ({
   cursor: null,
   summary: null,
   dragging: false,
+  chart: null,
   place: (point) => {
     const { a, b } = get();
-    if (!a || b) set({ a: point, b: null, cursor: null, summary: null });
+    if (!a || b) set({ a: point, b: null, cursor: null, summary: null, chart: null });
     else set({ b: point });
   },
   move: (which, point) => set({ [which]: point }),
-  clear: () => set({ a: null, b: null, cut: 'off', cursor: null, summary: null, dragging: false }),
+  clear: () =>
+    set({
+      a: null,
+      b: null,
+      cut: 'off',
+      cursor: null,
+      summary: null,
+      dragging: false,
+      chart: null,
+    }),
   widen: (direction) => {
     const { half } = get();
     const i = HALF_STEPS.findIndex((h) => h >= half - 1e-9);
@@ -83,4 +110,5 @@ export const useSection = create<SectionState>((set, get) => ({
   setCursor: (cursor) => set({ cursor }),
   setSummary: (summary) => set({ summary }),
   setDragging: (dragging) => set({ dragging }),
+  setChart: (chart) => set({ chart }),
 }));

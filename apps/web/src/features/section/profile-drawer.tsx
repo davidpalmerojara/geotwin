@@ -16,6 +16,7 @@ import {
   metres,
   plotScale,
   profileCsv,
+  chartReading,
 } from './section-math';
 import { drawProfile, pointAt, PLOT_MARGIN, sOf, type PlotFrame } from './profile-plot';
 
@@ -317,6 +318,8 @@ function ProfileBody({
     canvas = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [hover, setHover] = useState<number | null>(null);
+  // The pointer, or the keyboard, is on the chart.
+  const [onChart, setOnChart] = useState(false);
   useLayoutEffect(() => {
     const element = box.current;
     if (!element) return;
@@ -407,10 +410,29 @@ function ProfileBody({
     else if (event.key === 'ArrowLeft') setCursor(Math.max(0, at - step));
     else return;
     setHover(null);
+    setOnChart(true);
     event.preventDefault();
   };
   const ground = cursor === null ? null : dtmAt(dtm, cursor);
   const z = point === null ? null : points.z[point]!;
+  // While the pointer (or the keyboard) is on the chart, the readout plate at the bottom reads
+  // its cursor, as in A/desktop-signature; off the chart it goes back to the scene's cursor.
+  const setChart = useSection((s) => s.setChart);
+  const d = point === null ? null : points.d[point]!;
+  useEffect(() => {
+    if (!onChart || cursor === null) setChart(null);
+    else
+      setChart(
+        chartReading(
+          profile.line,
+          cursor,
+          z === null || d === null ? null : { z, d },
+          ground,
+          profile.geoid,
+        ),
+      );
+  }, [onChart, cursor, z, d, ground, profile.line, profile.geoid, setChart]);
+  useEffect(() => () => setChart(null), [setChart]);
   const scaleNote = frame ? `Escala ${exaggeration}:1 · 1 m = ${number(frame.pxm, 1)} px` : '';
   return (
     <div className="pd-body">
@@ -422,12 +444,18 @@ function ProfileBody({
           role="img"
           aria-label={`Perfil de ${metres(line.length)} con ${grouped(points.count)} puntos LiDAR. Flechas: mover el cursor.`}
           onKeyDown={onKey}
+          onFocus={() => setOnChart(true)}
+          onBlur={() => setOnChart(false)}
         >
           <canvas
             ref={canvas}
             data-testid="profile-canvas"
-            onPointerMove={move}
+            onPointerMove={(event) => {
+              setOnChart(true);
+              move(event);
+            }}
             onPointerLeave={() => {
+              setOnChart(false);
               setHover(null);
               setCursor(null);
             }}

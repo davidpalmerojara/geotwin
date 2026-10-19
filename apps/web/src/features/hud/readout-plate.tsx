@@ -3,11 +3,14 @@ import { useAssets, useLayers } from '../../hooks/data';
 import { useUI } from '../../stores/ui';
 import { useScene } from '../../stores/viewer';
 import { useTool } from '../../stores/tool';
+import { useSection } from '../../stores/section';
 import { measuredGround } from '../layers/lidar-terrain';
 import {
   assetReadout,
+  formatMetres,
   geoidAt,
   nextHover,
+  profileReadout,
   readout,
   NBSP,
   NO_GROUND,
@@ -40,6 +43,8 @@ export function ReadoutPlate() {
   const selectedId = useUI((s) => s.selectedAssetId),
     connection = useUI((s) => s.connection);
   const radius = useTool((s) => s.radius);
+  // The point under the profile chart's cursor, while the pointer is on the chart.
+  const chart = useSection((s) => s.chart);
   const values = useRef<Partial<Record<keyof Readout, HTMLSpanElement | null>>>({});
   const label = useRef<HTMLSpanElement>(null);
   const [cursor, setCursor] = useState(false);
@@ -47,9 +52,25 @@ export function ReadoutPlate() {
   // pointer leaves the scene there, but it still points at a known place.
   const [over, setOver] = useState<string | null>(null);
   // Latest inputs for the event handlers (they live as long as the viewer).
-  const inputs = useRef({ lidar, layers, relief: terrain === 'lidar', assets, selectedId, over });
+  const inputs = useRef({
+    lidar,
+    layers,
+    relief: terrain === 'lidar',
+    assets,
+    selectedId,
+    over,
+    chart,
+  });
   useEffect(() => {
-    inputs.current = { lidar, layers, relief: terrain === 'lidar', assets, selectedId, over };
+    inputs.current = {
+      lidar,
+      layers,
+      relief: terrain === 'lidar',
+      assets,
+      selectedId,
+      over,
+      chart,
+    };
   });
 
   const write = (r: Readout, first: string) => {
@@ -68,8 +89,8 @@ export function ReadoutPlate() {
       }
     }
   };
-  // While the cursor is off the scene: the asset under the pointer (its mark or tag), else the
-  // selected asset, else nothing.
+  // While the cursor is off the scene: the profile chart's cursor, else the asset under the
+  // pointer (its mark or tag), else the selected asset, else nothing.
   const showSelection = () => {
     const {
       assets: list,
@@ -78,7 +99,12 @@ export function ReadoutPlate() {
       lidar: grid,
       layers: sheets,
       relief,
+      chart: onChart,
     } = inputs.current;
+    if (onChart) {
+      write(profileReadout(onChart), 'Cursor');
+      return;
+    }
     const asset = list?.find((a) => a.id === (hovered ?? selectedId));
     if (!asset) {
       write(readout({ point: null, ground: null, geoid: null, relief }), 'Cursor');
@@ -96,8 +122,8 @@ export function ReadoutPlate() {
     showRef.current = showSelection;
   });
   useEffect(() => {
-    if (!cursor) showRef.current();
-  }, [cursor, over, selectedId, assets, lidar, terrain]);
+    if (!cursor || chart) showRef.current();
+  }, [cursor, over, selectedId, assets, lidar, terrain, chart]);
   // The asset under the pointer follows the pointer, and also the marks: one that moves away
   // from a still pointer (the camera flies) or is taken out stops being «Activo», and so does
   // everything when the pointer leaves the page. A tap never hovers (see nextHover).
@@ -159,7 +185,8 @@ export function ReadoutPlate() {
       still: ReturnType<typeof setTimeout> | undefined,
       at: { x: number; y: number } | null = null;
     const show = (surface: ReturnType<typeof api.pickSurface>) => {
-      if (!at) return;
+      // The keys move the chart's cursor: it keeps the plate while it is on.
+      if (!at || inputs.current.chart) return;
       const { lidar: grid, layers: sheets, relief } = inputs.current;
       const hit = surface?.point ?? api.pickGround(at.x, at.y);
       if (!hit) {
@@ -218,12 +245,17 @@ export function ReadoutPlate() {
   // The selection line is short (position, UTM, ground and Radio, as in A); an asset under the
   // pointer also gives its Cota and its height above the ground (its mount).
   const hovering = selection && !!over && !!assets?.some((a) => a.id === over);
+  const mode = chart ? 'profile' : selection ? (hovering ? 'hovering' : 'selection') : '';
   return (
-    <div
-      className={`plate readout-plate ${selection ? (hovering ? 'hovering' : 'selection') : ''}`}
-      data-map-overlay
-      data-testid="readout"
-    >
+    <div className={`plate readout-plate ${mode}`} data-map-overlay data-testid="readout">
+      {chart && (
+        <span className="ro-cell ro-along">
+          <span className="ro-k">Desde A</span>
+          <span className="ro-v num" data-testid="readout-along">
+            {formatMetres(chart.s)}
+          </span>
+        </span>
+      )}
       {CELLS.map(([key, name], i) => (
         <span key={key} className={`ro-cell ro-${key}`}>
           <span className="ro-k" ref={i === 0 ? label : undefined}>
@@ -240,7 +272,7 @@ export function ReadoutPlate() {
           </span>
         </span>
       ))}
-      {selection && !over && radius && (
+      {selection && !chart && !over && radius && (
         <span className="ro-cell">
           <span className="ro-k">Radio</span>
           <span className="ro-v num">

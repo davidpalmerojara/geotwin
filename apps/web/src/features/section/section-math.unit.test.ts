@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildingHeights,
+  chartReading,
   cutPlanes,
   cutRings,
   dtmAt,
@@ -40,6 +41,23 @@ describe('the A–B line', () => {
     // A→B heads west-south-west: its left is the south side.
     expect(fromLine(line, 100, 5).lat).toBeLessThan(fromLine(line, 100, 0).lat);
     expect(toLine(line, B).s).toBeCloseTo(line.length, 6);
+  });
+});
+
+describe('the point under the chart cursor', () => {
+  it('is the LiDAR point there, off the line by its own offset', () => {
+    const line = makeLine(A, B);
+    const r = chartReading(line, 245.4, { z: 742.4, d: -0.8 }, 701.3, 53.1);
+    const back = toLine(line, r);
+    expect(back.s).toBeCloseTo(245.4, 6);
+    expect(back.d).toBeCloseTo(-0.8, 6);
+    expect(r).toMatchObject({ s: 245.4, z: 742.4, ground: 701.3, geoid: 53.1 });
+  });
+  it('is on the line where the slab has no point', () => {
+    const line = makeLine(A, B);
+    const r = chartReading(line, 100, null, 700.2, 53.1);
+    expect(toLine(line, r).d).toBeCloseTo(0, 6);
+    expect(r.z).toBeNull();
   });
 });
 
