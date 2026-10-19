@@ -1,5 +1,13 @@
 // Workers and imagery assets are served from /cesium/ in dev and production.
-import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import {
   Cartesian3,
   Cartesian2,
@@ -27,7 +35,6 @@ import {
   JulianDate,
   Ellipsoid,
   SceneTransforms,
-  VerticalOrigin,
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import type { Asset, Installation } from '@geotwin/shared';
@@ -60,7 +67,14 @@ import {
   shiftedOnGround,
   viewerFov,
 } from './overlays';
-import { placeLabels, type LabelAnchor, type LabelOffset } from './labels';
+import {
+  countParts,
+  installationCounts,
+  labelText,
+  placeLabels,
+  type LabelAnchor,
+  type LabelOffset,
+} from './labels';
 import { createSceneApi } from './scene-api';
 import AssetTags from '../scene/asset-tags';
 import { useLayers } from '../../hooks/data';
@@ -76,18 +90,17 @@ import { imageryLevelFor } from '../layers/point-style';
 import { useLayerView } from '../../stores/layers';
 import { measuring } from '../../stores/measure';
 import { useScene } from '../../stores/viewer';
+import { useTool } from '../../stores/tool';
+import { Glyph } from '../hud/glyphs';
 import { flightSeconds } from '../../lib/motion';
 import { overlayBoxes, platesKey, whenSteady } from '../hud/dom';
 import { outOfSight } from '../hud/placement';
+type Size = { width: number; height: number };
 type DevWindow = Window & {
   __geotwinViewer?: Viewer;
   /** Installation labels as last placed (canvas px), for end-to-end checks. */
   __geotwinLabels?: { boxes: ScreenBox[]; blocked: ScreenBox[] };
 };
-const INSTALLATION_FONT = '500 12px "IBM Plex Sans Condensed", sans-serif';
-// Cesium's default label background padding is 7 x 5 px.
-const LABEL_PAD_X = 7,
-  LABEL_HEIGHT = 26;
 // Position (lng, lat in radians) and orientation, but not height: Cesium may lift a camera that
 // ends up below newly loaded terrain, and that is not a move by the user.
 const poseOf = (v: Viewer): Pose => {
@@ -405,7 +418,6 @@ function CesiumView({
     }
     // Installation areas are draped on the terrain, or also on the 3D tiles over the Google mesh.
     const classification = photorealOn ? ClassificationType.BOTH : ClassificationType.TERRAIN;
-    const clamp = photorealOn ? HeightReference.CLAMP_TO_GROUND : HeightReference.CLAMP_TO_TERRAIN;
     for (const i of installations) {
       const id = `installation:${i.id}`;
       ids.add(id);
@@ -413,7 +425,6 @@ function CesiumView({
       if (existing) {
         if (existing.ellipse)
           existing.ellipse.classificationType = new ConstantProperty(classification);
-        if (existing.label) existing.label.heightReference = new ConstantProperty(clamp);
       } else
         v.entities.add({
           id,
@@ -425,18 +436,7 @@ function CesiumView({
             semiMinorAxis: 210,
             material: Color.fromCssColorString('#EEECE6').withAlpha(0.06),
           },
-          label: {
-            heightReference: clamp,
-            text: i.name,
-            font: INSTALLATION_FONT,
-            fillColor: Color.fromCssColorString('#EEECE6'),
-            showBackground: true,
-            backgroundColor: Color.fromCssColorString('#0E0E0D'),
-            // Placed after each render (see placeInstallationLabels): below the area by default.
-            verticalOrigin: VerticalOrigin.CENTER,
-            pixelOffset: new Cartesian2(0, 50),
-            disableDepthTestDistance: Infinity,
-          },
+          // Its label (name and counts) is DOM, placed after each render: see the labels below.
         });
     }
     for (const entity of [...v.entities.values]) if (!ids.has(entity.id)) v.entities.remove(entity);
@@ -445,24 +445,58 @@ function CesiumView({
   const labelBoxes = useRef<ScreenBox[]>([]);
   // The same boxes by installation (canvas pixels): the edge chips leave out what is labelled.
   const labelById = useRef(new Map<string, ScreenBox>());
+  // What each installation's label says: its name and, below, its assets and alerts.
+  const counts = useMemo(
+    () => new Map(installations.map((i) => [i.id, installationCounts(assets, i.id)])),
+    [installations, assets],
+  );
+  // The labels are DOM over the canvas (like the asset tags), measured once per content change in
+  // both forms: whole, and the name alone for when the counts have no room.
+  const labelLayer = useRef<HTMLDivElement>(null);
+  const labelSizes = useRef(new Map<string, { whole: Size; name: Size }>());
+  // What was last written to each label, to touch the DOM only on changes.
+  const labelWritten = useRef(new Map<string, string>());
+  const [labelFonts, setLabelFonts] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void Promise.all([
+      document.fonts?.load('600 13px "IBM Plex Sans Condensed"'),
+      document.fonts?.load('400 11px "IBM Plex Mono"'),
+    ])
+      .catch(() => undefined)
+      .then(() => live && setLabelFonts((n) => n + 1));
+    return () => {
+      live = false;
+    };
+  }, []);
+  useLayoutEffect(() => {
+    const root = labelLayer.current;
+    if (!root) return;
+    const labels = [...root.querySelectorAll<HTMLElement>('.install-label')];
+    const read = (form: string) => {
+      for (const label of labels) label.dataset.measure = form;
+      return labels.map((label) => ({ width: label.offsetWidth, height: label.offsetHeight }));
+    };
+    const whole = read('whole'),
+      name = read('name');
+    for (const label of labels) delete label.dataset.measure;
+    // Rendered again: every label is written afresh on the next frame.
+    labelWritten.current.clear();
+    labelSizes.current = new Map(
+      labels.map((label, i) => [label.dataset.installation!, { whole: whole[i]!, name: name[i]! }]),
+    );
+    viewer.current?.scene.requestRender();
+  }, [installations, counts, labelFonts, ready]);
+  // While measuring (and with Perfil and Corte) a click on a label goes through to the scene.
+  const passive = useTool((s) => s.tool !== 'orbit' && s.tool !== 'radius');
   // Installation labels: placed after every render so they neither overlap each other nor hide
-  // under the plates of the HUD.
+  // under the plates of the HUD, nor sit on what the tools write in the scene.
   useEffect(() => {
     const v = viewer.current;
     if (!v || !ready) return;
-    const measure = document.createElement('canvas').getContext('2d');
-    if (measure) measure.font = INSTALLATION_FONT;
-    const widths = new Map<string, number>();
-    const widthOf = (text: string) => {
-      let width = widths.get(text);
-      if (width === undefined) {
-        width = Math.ceil(measure?.measureText(text).width ?? text.length * 7) + 2 * LABEL_PAD_X;
-        widths.set(text, width);
-      }
-      return width;
-    };
     const place = () => {
-      if (v.isDestroyed()) return;
+      const root = labelLayer.current;
+      if (v.isDestroyed() || !root) return;
       const rect = v.scene.canvas.getBoundingClientRect();
       // The plates of the HUD floating over the scene.
       const blocked = [
@@ -484,18 +518,13 @@ function CesiumView({
       const placement = new Map<string, LabelOffset>();
       for (const i of ordered) {
         const { lng, lat } = i.location;
+        const size = labelSizes.current.get(i.id);
         const at = SceneTransforms.worldToWindowCoordinates(
           v.scene,
           Cartesian3.fromDegrees(lng, lat, groundRef.current(lng, lat)),
         );
-        if (at)
-          anchors.push({
-            id: i.id,
-            x: at.x,
-            y: at.y,
-            width: widthOf(i.name),
-            height: LABEL_HEIGHT,
-          });
+        if (at && size?.whole.width)
+          anchors.push({ id: i.id, x: at.x, y: at.y, ...size.whole, compact: size.name });
         else placement.set(i.id, null);
       }
       // Asset markers (13 px dots) are left uncovered whenever there is another spot.
@@ -520,35 +549,37 @@ function CesiumView({
       const inset = Number.parseFloat(getComputedStyle(hud).getPropertyValue('--m')) || 12;
       for (const [id, offset] of placeLabels(anchors, blocked, rect, markers, { inset }))
         placement.set(id, offset);
-      let changed = false;
-      const now = JulianDate.now();
-      for (const [id, offset] of placement) {
-        const label = v.entities.getById(`installation:${id}`)?.label;
-        if (!label) continue;
-        if (label.show?.getValue(now) !== !!offset) {
-          label.show = new ConstantProperty(!!offset);
-          changed = true;
-        }
-        const old = label.pixelOffset?.getValue(now) as Cartesian2 | undefined;
-        if (offset && (!old || old.x !== offset.x || old.y !== offset.y)) {
-          label.pixelOffset = new ConstantProperty(new Cartesian2(offset.x, offset.y));
-          changed = true;
-        }
-      }
       labelById.current = new Map();
       const boxes = anchors.flatMap((a) => {
         const o = placement.get(a.id);
         if (!o) return [];
-        const left = a.x + o.x - a.width / 2,
-          top = a.y + o.y - a.height / 2;
-        const box = { left, right: left + a.width, top, bottom: top + a.height };
+        const { width, height } = o.compact ? a.compact! : a;
+        const left = a.x + o.x - width / 2,
+          top = a.y + o.y - height / 2;
+        const box = { left, right: left + width, top, bottom: top + height };
         labelById.current.set(a.id, box);
         return [box];
       });
+      // Write the frame into the DOM: position, and the counts dropped when only the name fits.
+      for (const element of root.querySelectorAll<HTMLElement>('.install-label')) {
+        const id = element.dataset.installation!;
+        const box = placement.get(id) && labelById.current.get(id);
+        const state = box
+          ? `${Math.round(box.left)},${Math.round(box.top)},${placement.get(id)!.compact ? 'name' : 'whole'}`
+          : 'hidden';
+        if (labelWritten.current.get(id) === state) continue;
+        labelWritten.current.set(id, state);
+        if (!box) {
+          element.style.display = 'none';
+          continue;
+        }
+        element.style.display = '';
+        element.style.transform = `translate(${Math.round(box.left)}px, ${Math.round(box.top)}px)`;
+        element.dataset.lod = placement.get(id)!.compact ? 'name' : 'whole';
+      }
       // The asset tags keep clear of these labels.
       labelBoxes.current = boxes;
       if (import.meta.env.DEV) (window as DevWindow).__geotwinLabels = { blocked, boxes };
-      if (changed) v.scene.requestRender();
     };
     const remove = v.scene.postRender.addEventListener(place);
     v.scene.requestRender();
@@ -961,6 +992,40 @@ function CesiumView({
           onSelect={onSelect}
         />
       )}
+      <div
+        className="install-labels"
+        ref={labelLayer}
+        data-testid="installation-labels"
+        data-passive={passive || undefined}
+      >
+        {installations.map((i) => {
+          const c = counts.get(i.id) ?? { total: 0, critical: 0, warning: 0 };
+          return (
+            <div
+              key={i.id}
+              className="install-label"
+              data-installation={i.id}
+              data-lod="whole"
+              data-testid="installation-label"
+              role="img"
+              aria-label={labelText(i.name, c)}
+              onClick={() => onInstallation(i.id)}
+              style={{ display: 'none' }}
+            >
+              <span className="il-name">{i.name}</span>
+              <span className="il-counts num">
+                {countParts(c).map((part, k) => (
+                  <span key={k} className={part.status ? `il-${part.status}` : undefined}>
+                    {k > 0 && <span className="il-sep"> · </span>}
+                    {part.status && <Glyph status={part.status} />}
+                    {part.text}
+                  </span>
+                ))}
+              </span>
+            </div>
+          );
+        })}
+      </div>
       <div ref={tooltip} className="scene-tooltip" style={{ display: 'none' }} aria-hidden="true">
         <span />
         <small>Haz clic para ver su ficha</small>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeLabels, type LabelAnchor } from './labels';
+import { countParts, installationCounts, labelText, placeLabels, type LabelAnchor } from './labels';
 
 const view = { width: 390, height: 430 };
 const label = (id: string, x: number, y: number, width = 200): LabelAnchor => ({
@@ -133,5 +133,78 @@ describe('Installation labels on the map', () => {
     // Only the grazed mark, by 4 px of its height: the spot 62 px above.
     expect(o.y).toBe(-62);
     expect(marks.reduce((sum, m) => sum + area(m), 0)).toBe(18 * 4);
+  });
+
+  it('drops the counts first when the whole label has no free spot', () => {
+    // Two lines (42 px) do not fit in the 40 px between the plates below the anchor; the name
+    // alone (26 px) does.
+    const whole = { ...label('a', 200, 200), height: 42, compact: { width: 160, height: 26 } };
+    const plates = [
+      { left: 0, right: 390, top: 0, bottom: 230 },
+      { left: 0, right: 390, top: 270, bottom: 430 },
+    ];
+    expect(placeLabels([{ ...whole, compact: undefined }], plates, view).get('a')).toBeNull();
+    const placed = placeLabels([whole], plates, view).get('a')!;
+    expect(placed.compact).toBe(true);
+    const top = 200 + placed.y - 13;
+    expect(top).toBeGreaterThanOrEqual(230);
+    expect(top + 26).toBeLessThanOrEqual(270);
+    // With room, the whole label, as far below its anchor as a one-line label (a 37 px gap).
+    const free = placeLabels([whole], [], view).get('a')!;
+    expect(free.compact).toBeUndefined();
+    expect(200 + free.y - 21).toBe(200 + 37);
+  });
+
+  it('drops the counts rather than cover a mark the name alone leaves clear', () => {
+    // At each of its spots the whole label covers a mark (100 px wide, it cannot slide off it and
+    // still span its anchor) that the name alone, at its own spot, leaves clear.
+    const whole = { ...label('a', 200, 200), height: 42, compact: { width: 200, height: 26 } };
+    const marks = [270, 140, 300, 112, 330].map((y) => ({
+      left: 150,
+      right: 250,
+      top: y - 4,
+      bottom: y + 4,
+    }));
+    expect(
+      placeLabels([{ ...whole, compact: undefined }], [], view, marks).get('a'),
+    ).not.toBeNull();
+    const placed = placeLabels([whole], [], view, marks).get('a')!;
+    expect(placed.compact).toBe(true);
+  });
+});
+
+describe('What an installation label says', () => {
+  const assets = [
+    { installation_id: 'i', status: 'healthy' as const },
+    { installation_id: 'i', status: 'critical' as const },
+    { installation_id: 'i', status: 'warning' as const },
+    { installation_id: 'i', status: 'warning' as const },
+    { installation_id: 'j', status: 'critical' as const },
+  ];
+  it('counts its assets and their alerts', () => {
+    expect(installationCounts(assets, 'i')).toEqual({ total: 4, critical: 1, warning: 2 });
+    expect(installationCounts(assets, 'k')).toEqual({ total: 0, critical: 0, warning: 0 });
+  });
+  it('says the counts with the word of each alert, as the mockups do', () => {
+    expect(countParts({ total: 6, critical: 1, warning: 1 })).toEqual([
+      { text: '6 activos' },
+      { text: '1 crítico', status: 'critical' },
+      { text: '1 advertencia', status: 'warning' },
+    ]);
+    expect(countParts({ total: 6, critical: 2, warning: 0 }).map((p) => p.text)).toEqual([
+      '6 activos',
+      '2 críticos',
+    ]);
+    expect(countParts({ total: 1, critical: 0, warning: 3 }).map((p) => p.text)).toEqual([
+      '1 activo',
+      '3 advertencias',
+    ]);
+    expect(countParts({ total: 6, critical: 0, warning: 0 })).toEqual([
+      { text: '6 activos' },
+      { text: 'sin alertas' },
+    ]);
+    expect(
+      labelText('Torrelago · torres residenciales', { total: 6, critical: 1, warning: 0 }),
+    ).toBe('Torrelago · torres residenciales: 6 activos, 1 crítico');
   });
 });

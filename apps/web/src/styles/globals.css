@@ -618,6 +618,73 @@ textarea {
 .scene-tag.occluded .tag-value {
   color: var(--fg-1);
 }
+/* Installation labels (A's overview): the name and, below it, the assets and their alerts in mono,
+   each alert with its glyph, colour and word. Placed after every frame, over the canvas. */
+.install-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.install-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 3px 7px 4px;
+  border: 1px solid var(--rule-2);
+  border-radius: 2px;
+  background: var(--ink-0);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+  color: var(--fg-0);
+  font: 600 13px/16px var(--sans);
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.install-label .il-counts {
+  display: flex;
+  align-items: center;
+  color: var(--fg-1);
+  font: 400 11px/14px var(--mono);
+}
+.install-label .il-counts > span {
+  display: inline-flex;
+  align-items: center;
+  white-space: pre;
+}
+.install-label .il-sep {
+  color: var(--fg-1);
+}
+.install-label .glyph {
+  margin-right: 4px;
+}
+.install-label .il-critical {
+  color: var(--alarm);
+}
+.install-label .il-warning {
+  color: var(--warn);
+}
+/* Space is tight: the name alone. */
+.install-label[data-lod='name'] .il-counts {
+  display: none;
+}
+.install-labels[data-passive] .install-label {
+  pointer-events: none;
+}
+.install-label[data-measure] {
+  display: flex !important;
+  visibility: hidden;
+}
+.install-label[data-measure='whole'] .il-counts {
+  display: flex;
+}
+.install-label[data-measure='name'] .il-counts {
+  display: none;
+}
 /* Measured off screen once per change, at both levels of detail. */
 .scene-tag[data-measure] {
   display: flex !important;

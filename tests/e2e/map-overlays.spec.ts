@@ -362,3 +362,59 @@ test.describe('without the orthophoto', () => {
       expect(covered).toEqual([]);
     });
 });
+
+test('installation labels say how many assets each has and their alerts, and keep apart', async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/gemelo');
+  await expect(page.getByTestId('cesium-view')).toHaveAttribute('data-ready', 'true', {
+    timeout: 30000,
+  });
+  await settle(page);
+  const assets = (await (await request.get('/api/assets')).json()) as {
+    installation_id: string;
+    status: string;
+  }[];
+  const installations = (await (await request.get('/api/installations')).json()) as {
+    id: string;
+    name: string;
+  }[];
+  const labels = page.locator('[data-testid="installation-label"]:visible');
+  await expect.poll(() => labels.count()).toBeGreaterThanOrEqual(2);
+  for (const label of await labels.all()) {
+    const id = (await label.getAttribute('data-installation'))!;
+    const own = assets.filter((a) => a.installation_id === id);
+    const critical = own.filter((a) => a.status === 'critical').length,
+      warning = own.filter((a) => a.status === 'warning').length;
+    const name = installations.find((i) => i.id === id)!.name;
+    await expect(label.locator('.il-name')).toHaveText(name);
+    // «6 activos · 1 crítico · 1 advertencia», or «… · sin alertas»; the alerts with their glyph.
+    const counts = label.locator('.il-counts');
+    await expect(counts).toContainText(`${own.length} ${own.length === 1 ? 'activo' : 'activos'}`);
+    if (critical) await expect(counts.locator('.il-critical .glyph-critical')).toBeVisible();
+    if (warning) await expect(counts.locator('.il-warning .glyph-warning')).toBeVisible();
+    if (!critical && !warning) await expect(counts).toContainText('sin alertas');
+    await expect(label).toHaveAttribute(
+      'aria-label',
+      new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: ${own.length} activo`),
+    );
+  }
+  // Placed apart from each other and from the plates (canvas px, as the viewer placed them).
+  const { boxes, blocked } = await page.evaluate(
+    () =>
+      (window as Window & { __geotwinLabels?: { boxes: Box[]; blocked: Box[] } }).__geotwinLabels!,
+  );
+  const apart = (a: Box, b: Box) =>
+    a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+  for (let i = 0; i < boxes.length; i++) {
+    for (const b of blocked) expect(apart(boxes[i]!, b)).toBe(true);
+    for (let j = i + 1; j < boxes.length; j++) expect(apart(boxes[i]!, boxes[j]!)).toBe(true);
+  }
+  // A click on a label chooses its installation.
+  const first = labels.first();
+  const id = (await first.getAttribute('data-installation'))!;
+  await first.click();
+  await expect(page.getByLabel('Seleccionar instalación')).toHaveValue(id);
+});
