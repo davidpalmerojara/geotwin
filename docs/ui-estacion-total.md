@@ -331,6 +331,8 @@ Cada paso dejó verdes lint, formato, tipos, unitarias, integración, pytest, bu
 - **Móvil, ficha al 45 %**: Histórico, Cercanos y radio y Laboratorio quedaban cortados por el borde de la hoja, justo encima de la barra. Ahora se pegan a ese borde, enteros, y el resto de la hoja pasa por debajo.
 - **Encuadres**: ver [Encuadre de cámara](#escritorio-1024-px-o-más-maqueta-de-referencia-a-1440--900). Un enlace a Torrelago ponía la cámara a 1,6 km (Torrelago ocupaba una sexta parte del ancho; ahora, a 760 m) y el móvil encuadraba también el depósito del cerro, con la nube en una esquina.
 
+- **Dos más, vistos en las capturas**: con una instalación elegida, los rótulos de las demás decían «0 activos · sin alertas» (contaban solo los activos cargados) y ahora cuentan sobre toda la red; y los chips de borde se apartan de las marcas de los activos cuando su borde tiene sitio (en el móvil, el chip del depósito tapaba la marca crítica de la pasarela de Torrelago).
+
 **Pendiente o distinto del diseño.**
 
 - **Ortofoto real.** Ninguna captura la lleva: la release `data-laguna` no trae `pnoa-laguna-z13-19.zip` y el entorno no llega a IDEE ni al IGN. Que esos servidores acepten las peticiones del navegador (CORS) sigue sin comprobarse.
