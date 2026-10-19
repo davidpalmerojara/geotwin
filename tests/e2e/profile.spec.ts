@@ -28,10 +28,16 @@ async function screen(page: Page, p: { lng: number; lat: number }) {
       [p.lng, p.lat],
     );
   // The camera's matrices follow a setView on the next frame, which a slow renderer may not have
-  // drawn yet: ask again until the point projects.
+  // drawn yet: ask again until the point projects inside the page (a point off screen can never
+  // be picked, however long the wait).
+  const view = page.viewportSize()!;
+  const onScreen = async () => {
+    const at = await project();
+    return !!at && at.x >= 0 && at.x <= view.width && at.y >= 0 && at.y <= view.height;
+  };
   await expect
-    .poll(project, { message: `${p.lng}, ${p.lat} is in front of the camera`, timeout: 30000 })
-    .not.toBeNull();
+    .poll(onScreen, { message: `${p.lng}, ${p.lat} is on screen`, timeout: 30000 })
+    .toBe(true);
   const at = (await project())!;
   return [at.x, at.y] as [number, number];
 }
@@ -119,17 +125,24 @@ test('Perfil A–B, Corte and Radio on a synthetic layer', async ({ page, reques
     await expect(map).toHaveAttribute('data-terrain', 'lidar', { timeout: 60000 });
     await expect(map).toHaveAttribute('data-pointclouds', '1', { timeout: 60000 });
     await stillCamera(page);
-    // Look at the middle of the line from the south, 450 m away.
+    // Look at the middle of the line from the south, 450 m away. The target's height is the
+    // app's ground model (the LiDAR DTM), not globe.getHeight: that reads whatever terrain tile
+    // happens to be drawn, and right after the relief arrives that can still be the ellipsoid, at
+    // height 0, so the camera went 750 m under the ground and was pushed up to 1 m over it, with
+    // A and B far off screen (the flaky «pickable» timeout on CI).
     await page.evaluate(
-      ([lng, lat]) => {
+      async ([lng, lat]) => {
         const v = (window as unknown as { __geotwinViewer: V }).__geotwinViewer;
+        const { useScene } = (await import('/src/stores/viewer.ts' as string)) as {
+          useScene: { getState(): { api: import('../../apps/web/src/stores/viewer').SceneApi } };
+        };
         const r = Math.PI / 180,
           e = v.scene.globe.ellipsoid;
-        const h = v.scene.globe.getHeight({ longitude: lng! * r, latitude: lat! * r } as never);
+        const h = useScene.getState().api.groundAt(lng!, lat!);
         const target = e.cartographicToCartesian({
           longitude: lng! * r,
           latitude: lat! * r,
-          height: h ?? 753,
+          height: h,
         } as never);
         // Across the line (it runs west-north-west), 600 m away and 50° down onto its middle.
         const up = e.geodeticSurfaceNormal(target, {} as never);
