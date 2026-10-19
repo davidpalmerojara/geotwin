@@ -62,7 +62,9 @@ function ElsewhereCell({
     >
       <Glyph status={elsewhere.severity} />
       <span className="num">+{elsewhere.count}</span>
-      <span className="annun-where">en otras instalaciones</span>
+      <span className="annun-where">
+        en otras<span className="annun-where-long"> instalaciones</span>
+      </span>
     </button>
   );
 }

@@ -1009,6 +1009,13 @@ textarea {
 .annun-elsewhere:hover {
   color: var(--fg-0);
 }
+/* Up to a wide desktop the alarm's asset needs the room: «+1 en otras» (the whole phrase stays in
+   the name and the title). */
+@container place (max-width: 1099px) {
+  .annun-where-long {
+    display: none;
+  }
+}
 .tool-bar {
   display: flex;
   align-items: center;
@@ -2647,6 +2654,11 @@ table.data {
     display: none;
   }
 }
+/* Reading the profile's chart the line gains «Desde A»: UTM gives way so «Tiempo real» and the
+   credits keep their room. */
+.readout-plate.profile .ro-utm {
+  display: none;
+}
 @media (max-width: 1023px) {
   /* Tablet: the keys keep their number and lose their name (the name is in the title). */
   .soft-label {
@@ -3139,8 +3151,9 @@ table.data {
   position: sticky;
   bottom: 0;
   z-index: 1;
-  margin: 0;
+  margin: 10px 0 0;
   padding: 10px 12px 12px;
+  border-top: 1px solid var(--rule);
   background: var(--ink-1);
 }
 .asset-sheet .card-sec:first-of-type {
