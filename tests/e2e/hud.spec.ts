@@ -167,9 +167,11 @@ function placePlateLayout(page: Page) {
   });
 }
 
-// The documented desktop minimum (1024) and the tablet range (640–1023): the place plate gives way
-// in steps and never draws its parts over each other, with the longest installation name chosen.
+// A laptop (1280), the documented desktop minimum (1024) and the tablet range (640–1023): the place
+// plate gives way in steps and never draws its parts over each other, with the longest installation
+// name chosen.
 for (const size of [
+  { width: 1280, height: 800 },
   { width: 1024, height: 768 },
   { width: 900, height: 700 },
   { width: 700, height: 700 },
@@ -209,6 +211,10 @@ for (const size of [
         // The asset of the alarm shows, whole or at least its first 60 px before the ellipsis.
         expect(layout.name.length).toBeGreaterThan(0);
         expect(layout.nameShown).toBeGreaterThanOrEqual(Math.min(layout.nameWidth, 60) - 0.5);
+        // From a laptop up the installation's name gives way first: the alarm's asset is whole,
+        // beside «+1 en otras».
+        if (size.width >= 1280)
+          expect(layout.nameShown).toBeGreaterThanOrEqual(layout.nameWidth - 0.5);
         await expect(alarm.getByText(/Advertencia|Crítico/)).toBeVisible();
         if (choice === longest)
           await expect(page.getByTestId('annunciator-elsewhere')).toContainText(

@@ -822,9 +822,13 @@ textarea {
   gap: 8px;
   padding: 0 10px;
   min-width: 0;
-  /* When the row is short of room the installation's name gives way before the alarm's. */
-  flex: 0 6 auto;
+  /* When the row is short of room the installation's name gives way first, down to a few letters,
+     and only then the alarm's asset (the scene's label names the installation too). */
+  flex: 0 10000 auto;
   color: var(--fg-1);
+}
+.place-context .select-plain {
+  min-width: 96px;
 }
 .workspace {
   color: var(--fg-0);
