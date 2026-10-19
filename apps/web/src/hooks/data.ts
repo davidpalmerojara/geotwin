@@ -12,6 +12,17 @@ export const useAssets = () => {
     placeholderData: keepPreviousData,
   });
 };
+/**
+ * Every asset of the network, whatever installation is chosen: the installations' labels count
+ * their own assets and alerts even when another installation is the one shown. Same query as
+ * useAssets with no installation, so they share the cache (and its realtime updates).
+ */
+export const useNetworkAssets = () =>
+  useQuery({
+    queryKey: ['geo', 'assets', ''],
+    queryFn: () => api.assets(''),
+    placeholderData: keepPreviousData,
+  });
 export const useInstallations = () =>
   useQuery({ queryKey: ['geo', 'installations'], queryFn: api.installations, staleTime: 60000 });
 export const useOrganization = () =>

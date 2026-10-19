@@ -383,23 +383,28 @@ test('installation labels say how many assets each has and their alerts, and kee
   }[];
   const labels = page.locator('[data-testid="installation-label"]:visible');
   await expect.poll(() => labels.count()).toBeGreaterThanOrEqual(2);
-  for (const label of await labels.all()) {
-    const id = (await label.getAttribute('data-installation'))!;
-    const own = assets.filter((a) => a.installation_id === id);
-    const critical = own.filter((a) => a.status === 'critical').length,
-      warning = own.filter((a) => a.status === 'warning').length;
-    const name = installations.find((i) => i.id === id)!.name;
-    await expect(label.locator('.il-name')).toHaveText(name);
-    // «6 activos · 1 crítico · 1 advertencia», or «… · sin alertas»; the alerts with their glyph.
-    const counts = label.locator('.il-counts');
-    await expect(counts).toContainText(`${own.length} ${own.length === 1 ? 'activo' : 'activos'}`);
-    if (critical) await expect(counts.locator('.il-critical .glyph-critical')).toBeVisible();
-    if (warning) await expect(counts.locator('.il-warning .glyph-warning')).toBeVisible();
-    if (!critical && !warning) await expect(counts).toContainText('sin alertas');
-    await expect(label).toHaveAttribute(
-      'aria-label',
-      new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: ${own.length} activo`),
-    );
+  await countsAreOwn();
+  async function countsAreOwn() {
+    for (const label of await labels.all()) {
+      const id = (await label.getAttribute('data-installation'))!;
+      const own = assets.filter((a) => a.installation_id === id);
+      const critical = own.filter((a) => a.status === 'critical').length,
+        warning = own.filter((a) => a.status === 'warning').length;
+      const name = installations.find((i) => i.id === id)!.name;
+      await expect(label.locator('.il-name')).toHaveText(name);
+      // «6 activos · 1 crítico · 1 advertencia», or «… · sin alertas»; the alerts with their glyph.
+      const counts = label.locator('.il-counts');
+      await expect(counts).toContainText(
+        `${own.length} ${own.length === 1 ? 'activo' : 'activos'}`,
+      );
+      if (critical) await expect(counts.locator('.il-critical .glyph-critical')).toBeVisible();
+      if (warning) await expect(counts.locator('.il-warning .glyph-warning')).toBeVisible();
+      if (!critical && !warning) await expect(counts).toContainText('sin alertas');
+      await expect(label).toHaveAttribute(
+        'aria-label',
+        new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: ${own.length} activo`),
+      );
+    }
   }
   // Placed apart from each other and from the plates (canvas px, as the viewer placed them).
   const { boxes, blocked } = await page.evaluate(
@@ -417,4 +422,22 @@ test('installation labels say how many assets each has and their alerts, and kee
   const id = (await first.getAttribute('data-installation'))!;
   await first.click();
   await expect(page.getByLabel('Seleccionar instalación')).toHaveValue(id);
+  // With one installation chosen the others' labels still count their own assets and alerts
+  // (the scene then holds only the chosen one's): seen from high above, all of them.
+  await page.evaluate(() => {
+    const v = (window as unknown as { __geotwinViewer: import('cesium').Viewer }).__geotwinViewer;
+    const r = Math.PI / 180;
+    v.camera.cancelFlight();
+    v.camera.setView({
+      destination: v.scene.globe.ellipsoid.cartographicToCartesian({
+        longitude: -4.7185 * r,
+        latitude: 41.5865 * r,
+        height: 4500,
+      } as import('cesium').Cartographic),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+    });
+    v.scene.requestRender();
+  });
+  await expect.poll(() => labels.count()).toBeGreaterThanOrEqual(2);
+  await countsAreOwn();
 });

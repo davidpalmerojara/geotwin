@@ -78,7 +78,7 @@ import {
 } from './labels';
 import { createSceneApi } from './scene-api';
 import AssetTags from '../scene/asset-tags';
-import { useLayers } from '../../hooks/data';
+import { useLayers, useNetworkAssets } from '../../hooks/data';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
 import { renderUntil } from '../measure/render-until';
 import { dimensionLabelBoxes } from '../measure/dimension-lines';
@@ -498,10 +498,13 @@ function CesiumView({
   const labelBoxes = useRef<ScreenBox[]>([]);
   // The same boxes by installation (canvas pixels): the edge chips leave out what is labelled.
   const labelById = useRef(new Map<string, ScreenBox>());
-  // What each installation's label says: its name and, below, its assets and alerts.
+  // What each installation's label says: its name and, below, its assets and alerts, counted on
+  // the whole network (with one installation chosen, `assets` holds only its own).
+  const networkAssets = useNetworkAssets().data;
   const counts = useMemo(
-    () => new Map(installations.map((i) => [i.id, installationCounts(assets, i.id)])),
-    [installations, assets],
+    () =>
+      new Map(installations.map((i) => [i.id, installationCounts(networkAssets ?? assets, i.id)])),
+    [installations, assets, networkAssets],
   );
   // The labels are DOM over the canvas (like the asset tags), measured once per content change in
   // both forms: whole, and the name alone for when the counts have no room.
