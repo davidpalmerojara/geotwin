@@ -62,13 +62,21 @@ describe('the radius label', () => {
     expect(ringAnchorOffset('below-left')).toMatchObject({ horizontal: 'right', vertical: 'top' });
   });
 
-  it('falls back to the lowest point on screen when every one is under a plate', () => {
+  it('is left out when every spot is under a plate, or no point is on screen', () => {
     const points = [
       { x: 300, y: 330 },
       { x: 300, y: 530 },
     ];
+    // The Radio panel over the only part of the ring in view (radio-sonda-500-1280): the label
+    // would sit under it, or half out of its edge.
     const plate = { left: 0, right: 1440, top: 0, bottom: 900 };
-    expect(labelSpot(points, text, view, [plate])?.index).toBe(1);
+    expect(labelSpot(points, text, view, [plate])).toBeNull();
+    const panel = { left: 12, right: 341, top: 104, bottom: 543 };
+    const inPanel = [{ x: 170, y: 160 }];
+    expect(labelSpot(inPanel, text, view, [panel])).toBeNull();
+    // With room beside the panel it shows there, clear of it.
+    const spot = labelSpot([...inPanel, { x: 520, y: 300 }], text, view, [panel]);
+    expect(spot?.index).toBe(1);
     expect(labelSpot([null, { x: -150, y: 300 }], text, view, [])).toBeNull();
   });
 

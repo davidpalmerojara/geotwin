@@ -107,8 +107,9 @@ export function segmentHitsBox(a: { x: number; y: number }, b: { x: number; y: n
  * that point by one of RING_ANCHORS (above it first, then below, then off a corner), stays inside
  * the view, clear of the plates and of the ring's own dashes (`path`, the ring on screen: where the
  * ring runs steeply or at a slant on screen a box centred above it would be crossed by it). Failing
- * that, one clear of the plates only; failing that, the lowest inside the view. Returns the point's
- * index and the anchor, or null when no point is on screen.
+ * that, one clear of the plates only. Returns the point's index and the anchor, or null when no
+ * point is on screen or every spot is under a plate: the label is then left out rather than half
+ * hidden at a plate's edge (the Radio panel and the readout give the radius and the count).
  */
 export function labelSpot(
   points: Screen[],
@@ -120,8 +121,7 @@ export function labelSpot(
 ): { index: number; anchor: RingAnchor } | null {
   type Spot = { index: number; anchor: RingAnchor; y: number };
   let best: Spot | null = null,
-    plain: Spot | null = null,
-    fallback: Spot | null = null;
+    plain: Spot | null = null;
   const crossed = (box: Box) =>
     path.some((p, i) => {
       const q = path[i + 1];
@@ -140,7 +140,6 @@ export function labelSpot(
         box.bottom <= view.height - margin;
       if (!inside) continue;
       const spot = { index, anchor, y: p.y };
-      if (lower(fallback, p.y)) fallback = spot;
       const clear = plates.every(
         (r) =>
           box.right + margin <= r.left ||
@@ -153,7 +152,7 @@ export function labelSpot(
       if (lower(best, p.y) && !crossed(box)) best = spot;
     }
   }
-  const spot: Spot | null = best ?? plain ?? fallback;
+  const spot: Spot | null = best ?? plain;
   return spot ? { index: spot.index, anchor: spot.anchor } : null;
 }
 
@@ -269,6 +268,7 @@ export class RadiusRing {
       bottom: r.bottom - frame.top,
     }));
     const spot = labelSpot(points, text, size, plates, 8, path);
+    if (label.label) label.label.show = new ConstantProperty(!!spot);
     if (spot) {
       this.anchor = spot.anchor;
       const o = ringAnchorOffset(spot.anchor);
