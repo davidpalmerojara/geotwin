@@ -307,6 +307,14 @@ Cada paso dejó verdes lint, formato, tipos, unitarias, integración, pytest, bu
 - **Capas**: la barra y la etapa («descargando») de una hoja en proceso van en la columna del texto, debajo del nombre.
 - **E2E de Perfil**: la prueba ponía la cámara sobre `globe.getHeight`, que justo al llegar el relieve aún puede ser el elipsoide; la cámara quedaba bajo el suelo y A no llegaba a la pantalla (el fallo intermitente de CI). Ahora usa el MDT de la aplicación y espera a que el punto esté dentro de la página.
 
+**Tras las notas menores de la cuarta verificación (escena).**
+
+- **Rótulos de instalación con recuentos**: debajo del nombre, en Plex Mono, «6 activos · ◆ 1 crítico · ▲ 1 advertencia» o «6 activos · sin alertas», cada aviso con su forma, su color y su palabra, como las etiquetas de los activos. Los rótulos son ahora DOM sobre el lienzo (como las etiquetas) y no etiquetas de Cesium; cuando no hay sitio para las dos líneas, o solo lo hay encima de las marcas, el rótulo pierde primero los recuentos y se queda con el nombre (`placeLabels` con `compact`).
+- **Radio**: las distancias de cada resultado y «r = 300 m · n activos dentro» cuentan como obstáculo para los rótulos de instalación, las etiquetas de los activos y los chips de borde (`addSceneLabels` en `scene-marks.ts`), como ya lo eran los valores de Medir y del perfil. Antes «136 m» quedaba debajo del rótulo de Torrelago y «171 m», bajo un chip.
+- **Perfil visto de lejos**: la línea A–B, las cifras de sus marcas de distancia y las cotas de los demás edificios son obstáculo para E1…En, que suben un escalón en lugar de quedar cruzados. El contorno discontinuo del plano no cuenta: un valor puede quedar sobre su borde superior, y se lee entero.
+- **Gráfico del perfil**: la cifra amarilla del cursor no se sale del gráfico en A ni en B (antes «336,2» quedaba cortada por el borde derecho), y los nombres y las alturas de los edificios («E2», «37,9») van sobre una pequeña placa del color del cajón para que los puntos del edificio no los crucen.
+- **Etiqueta del activo elegido**: se coloca antes que ninguna otra y, si entera (nombre, valor y palabra) no cabe en ninguno de los ocho sitios, se queda con el valor y su forma en lugar de desaparecer. A 1280 × 800 con Alertas y la ficha abiertas, la pasarela crítica de la torre sur salía solo con su marca.
+
 **Pendiente o distinto del diseño.**
 
 - **Ortofoto real.** Ninguna captura la lleva: la release `data-laguna` no trae `pnoa-laguna-z13-19.zip` y el entorno no llega a IDEE ni al IGN. Que esos servidores acepten las peticiones del navegador (CORS) sigue sin comprobarse.
@@ -314,11 +322,8 @@ Cada paso dejó verdes lint, formato, tipos, unitarias, integración, pytest, bu
 - **El vídeo de 40 s** es de la interfaz anterior; no se ha vuelto a grabar.
 - **Tecla `F` «Centrar activo»** de la maqueta A: no existe. Para volver a un activo están «Ir a» (`/`) y un clic en su marca o en su chip de borde.
 - **Anunciador**: los recuentos siguen a la instalación elegida y la alarma es la de toda la red (decisión de B1), así que con una instalación elegida la alarma puede nombrar un activo de otra.
-- **Rótulos de instalación** sin los recuentos de las maquetas («6 activos · 1 crítico»).
 - **Leyenda de Altura** en Capas: una barra de «baja» a «alta», no la regla vertical con cotas de `A/desktop-capas.png`; con varias hojas cada una usa su propio rango.
 - **Perfil**: la placa de lectura de abajo no sigue al cursor del perfil, como sí hace la maqueta (la lectura del cursor está en el cajón). Con el perfil abierto la franja superior de la escena cuenta entera como tapada para el encuadre, pero desde la segunda verificación los chips de borde solo salen para lo que está fuera de la pantalla o bajo una placa.
-- **Perfil visto de lejos** (a unos 500 m): E1…En ya no se pisan entre sí, ni con los rótulos, ni con las marcas A y B, pero la propia línea A–B y sus marcas de distancia pueden cruzar un valor, porque no cuentan como obstáculo.
 - **Móvil, vista de toda la red**: el encuadre abarca todas las instalaciones, también el depósito del cerro, y con cuatro hojas cargadas la nube ocupa una parte pequeña de la pantalla. Los rótulos de instalación ya no quedan bajo las marcas; el encuadre no se ha cambiado.
-- **Radio**: un chip de borde puede tapar en parte la distancia de un resultado (por ejemplo «180 m» bajo el chip de la Pasarela LoRa): los chips evitan las placas y la ficha, pero no las distancias que dibuja Cesium.
 - **Lectura sobre una marca**: da la posición y el suelo (MDT) del activo, como la selección, pero no su cota ni la altura sobre el suelo.
 - **Móvil**: con la ficha al 45 % los tres botones de abajo (Histórico, Cercanos y radio, Laboratorio) quedan en parte bajo la barra de herramientas y se alcanzan desplazando la hoja.
