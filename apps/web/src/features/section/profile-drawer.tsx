@@ -480,9 +480,13 @@ function ProfileBody({
         </div>
         <p className="pd-legend">
           <Kbd signal>A</Kbd>
-          <span className="pd-key-line" aria-hidden="true" /> Terreno (MDT del LiDAR, malla 2 m)
-          <span className="pd-key-dots" aria-hidden="true" /> Puntos de la franja{' '}
-          {color === 'rgb' ? 'en su color RGB' : 'por clase'}; más tenues cuanto más lejos del plano
+          {/* One row on desktop; on a phone A and B stay at the ends of the axis, the key below. */}
+          <span className="pd-legend-text">
+            <span className="pd-key-line" aria-hidden="true" /> Terreno (MDT del LiDAR, malla 2 m)
+            <span className="pd-key-dots" aria-hidden="true" /> Puntos de la franja{' '}
+            {color === 'rgb' ? 'en su color RGB' : 'por clase'}; más tenues cuanto más lejos del
+            plano
+          </span>
           <span className="pd-scale num">{scaleNote}</span>
           <Kbd signal>B</Kbd>
         </p>

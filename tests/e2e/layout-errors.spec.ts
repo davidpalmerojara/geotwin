@@ -183,6 +183,14 @@ for (const size of sizes)
     await page.mouse.click(...(await onGround(page, view.width * 0.6, view.height * 0.5)));
     const drawer = page.getByTestId('profile-drawer');
     await expect(drawer).toBeVisible();
+    // Under the chart, A at the left end of the axis and B at the right end, on one row.
+    const ends = drawer.locator('.pd-legend kbd');
+    await expect(ends).toHaveText(['A', 'B']);
+    const [a, b] = await Promise.all([ends.nth(0).boundingBox(), ends.nth(1).boundingBox()]);
+    const legend = (await drawer.locator('.pd-legend').boundingBox())!;
+    expect(Math.abs(a!.y - b!.y)).toBeLessThan(2);
+    expect(a!.x - legend.x).toBeLessThan(24);
+    expect(legend.x + legend.width - (b!.x + b!.width)).toBeLessThan(24);
     await creditsChange(page);
     await page.keyboard.press('Escape');
     await expect(drawer).toBeHidden();
