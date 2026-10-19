@@ -33,10 +33,13 @@ export function ReadoutPlate() {
   const values = useRef<Partial<Record<keyof Readout, HTMLSpanElement | null>>>({});
   const label = useRef<HTMLSpanElement>(null);
   const [cursor, setCursor] = useState(false);
+  // The asset whose mark or tag is under the pointer: the marks sit over the canvas, so the
+  // pointer leaves the scene there, but it still points at a known place.
+  const [over, setOver] = useState<string | null>(null);
   // Latest inputs for the event handlers (they live as long as the viewer).
-  const inputs = useRef({ lidar, layers, relief: terrain === 'lidar', assets, selectedId });
+  const inputs = useRef({ lidar, layers, relief: terrain === 'lidar', assets, selectedId, over });
   useEffect(() => {
-    inputs.current = { lidar, layers, relief: terrain === 'lidar', assets, selectedId };
+    inputs.current = { lidar, layers, relief: terrain === 'lidar', assets, selectedId, over };
   });
 
   const write = (r: Readout, first: string) => {
@@ -55,10 +58,18 @@ export function ReadoutPlate() {
       }
     }
   };
-  // The selected asset (or nothing) while the cursor is off the scene.
+  // While the cursor is off the scene: the asset under the pointer (its mark or tag), else the
+  // selected asset, else nothing.
   const showSelection = () => {
-    const { assets: list, selectedId: id, lidar: grid, layers: sheets, relief } = inputs.current;
-    const asset = list?.find((a) => a.id === id);
+    const {
+      assets: list,
+      selectedId,
+      over: hovered,
+      lidar: grid,
+      layers: sheets,
+      relief,
+    } = inputs.current;
+    const asset = list?.find((a) => a.id === (hovered ?? selectedId));
     if (!asset) {
       write(readout({ point: null, ground: null, geoid: null, relief }), 'Cursor');
       return;
@@ -72,7 +83,7 @@ export function ReadoutPlate() {
         geoid: geoidAt(sheets ?? [], lng, lat),
         relief,
       }),
-      'Selección',
+      hovered && asset.id === hovered ? 'Activo' : 'Selección',
     );
   };
   const showRef = useRef(showSelection);
@@ -81,7 +92,15 @@ export function ReadoutPlate() {
   });
   useEffect(() => {
     if (!cursor) showRef.current();
-  }, [cursor, selectedId, assets, lidar, terrain]);
+  }, [cursor, over, selectedId, assets, lidar, terrain]);
+  useEffect(() => {
+    const enter = (event: PointerEvent) => {
+      const mark = (event.target as Element | null)?.closest?.('.scene-tags [data-asset]');
+      setOver(mark?.getAttribute('data-asset') ?? null);
+    };
+    document.addEventListener('pointerover', enter);
+    return () => document.removeEventListener('pointerover', enter);
+  }, []);
 
   useEffect(() => {
     if (!api) return;
@@ -145,7 +164,7 @@ export function ReadoutPlate() {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-  const selection = !cursor && !!selectedId;
+  const selection = !cursor && !!(over ?? selectedId);
   return (
     <div
       className={`plate readout-plate ${selection ? 'selection' : ''}`}
@@ -168,7 +187,7 @@ export function ReadoutPlate() {
           </span>
         </span>
       ))}
-      {selection && radius && (
+      {selection && !over && radius && (
         <span className="ro-cell">
           <span className="ro-k">Radio</span>
           <span className="ro-v num">

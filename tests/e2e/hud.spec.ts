@@ -412,3 +412,55 @@ test('the readout gives position, UTM, altitude and height above the ground over
     expect((await request.delete(`/api/layers/${id}`)).status()).toBe(204);
   }
 });
+
+test('over an asset mark the readout gives that asset’s position, not dashes', async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openScene(page);
+  const readout = page.getByTestId('readout');
+  const value = (key: string) => readout.getByTestId(`readout-${key}`);
+  // A mark the layout shows and nothing covers (the marks sit over the canvas).
+  await expect(page.locator('.scene-mark i:visible').first()).toBeVisible({ timeout: 30000 });
+  const found = () =>
+    page.evaluate(() => {
+      for (const ring of document.querySelectorAll('.scene-mark i')) {
+        const r = ring.getBoundingClientRect();
+        if (!r.width) continue;
+        const [x, y] = [r.left + r.width / 2, r.top + r.height / 2];
+        if (document.elementFromPoint(x, y)?.closest('.scene-mark') === ring.parentElement)
+          return { id: ring.parentElement!.getAttribute('data-asset')!, x, y };
+      }
+      return null;
+    });
+  await expect.poll(found).not.toBeNull();
+  const { id, x, y } = (await found())!;
+  const asset = (await (await request.get(`/api/assets/${id}`)).json()) as {
+    location: { lat: number; lng: number };
+  };
+  const lat = asset.location.lat.toFixed(5).replace('.', ','),
+    lng = Math.abs(asset.location.lng).toFixed(5).replace('.', ',');
+  // From the scene onto the mark: the pointer leaves the canvas, the readout keeps a place.
+  // A point of bare scene near the mark (no other mark, tag, label or plate on it).
+  const [sx, sy] = await page.evaluate(
+    ([x, y]) => {
+      for (let r = 40; r < 400; r += 20)
+        for (let a = 0; a < 360; a += 30) {
+          const px = x! + r * Math.cos((a * Math.PI) / 180),
+            py = y! + r * Math.sin((a * Math.PI) / 180);
+          if (document.elementFromPoint(px, py)?.tagName === 'CANVAS') return [px, py];
+        }
+      return [x! + 40, y! + 40];
+    },
+    [x, y],
+  );
+  await page.mouse.move(sx!, sy!, { steps: 2 });
+  await page.mouse.move(x, y, { steps: 4 });
+  await expect(readout.locator('.ro-k').first()).toHaveText('Activo');
+  await expect(value('position')).toHaveText(new RegExp(`^${lat}°\\sN\\s+${lng}°\\sO$`));
+  await expect(value('utm')).toHaveText(/^\d{3}\s\d{3},\d\s+4\s\d{3}\s\d{3},\d$/);
+  // Back on the scene, it reads the cursor again.
+  await page.mouse.move(sx!, sy!, { steps: 4 });
+  await expect(readout.locator('.ro-k').first()).toHaveText('Cursor');
+});
