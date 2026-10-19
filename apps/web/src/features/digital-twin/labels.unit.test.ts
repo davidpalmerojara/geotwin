@@ -62,7 +62,8 @@ describe('Installation labels on the map', () => {
     const marker = { left: 192, right: 208, top: 242, bottom: 258 };
     const free = placeLabels([label('a', 200, 200)], [], view, [marker]).get('a')!;
     expect(free.y).not.toBe(50);
-    const full = { left: 0, right: 390, top: 140, bottom: 300 };
+    // Marks everywhere a label could go: it covers them rather than disappear.
+    const full = { left: 0, right: 390, top: 0, bottom: 430 };
     expect(placeLabels([label('a', 200, 200)], [], view, [full]).get('a')).toEqual({
       x: 0,
       y: 50,
@@ -81,5 +82,56 @@ describe('Installation labels on the map', () => {
     const box = { left: 100 + placed.x, right: 300 + placed.x, top: 126, bottom: 150 };
     for (const m of marks)
       expect(box.right <= m.left || m.right <= box.left || box.bottom <= m.top).toBe(true);
+  });
+
+  it('keeps every label the HUD inset away from the edges of the view', () => {
+    // An installation near the left edge (the Medir close-up) and one near the bottom.
+    const inset = 12;
+    const anchors = [label('a', 4, 200, 180), label('b', 380, 400, 180)];
+    const placed = placeLabels(anchors, [], view, [], { inset });
+    for (const a of anchors) {
+      const o = placed.get(a.id)!;
+      expect(o).not.toBeNull();
+      const left = a.x + o.x - a.width / 2,
+        top = a.y + o.y - a.height / 2;
+      expect(left).toBeGreaterThanOrEqual(inset);
+      expect(left + a.width).toBeLessThanOrEqual(view.width - inset);
+      expect(top).toBeGreaterThanOrEqual(inset);
+      expect(top + a.height).toBeLessThanOrEqual(view.height - inset);
+    }
+  });
+
+  it('slides a label sideways off a mark when it can still span its anchor', () => {
+    // A mark right where the centred label would go, below the anchor.
+    const mark = { left: 191, right: 209, top: 241, bottom: 259 };
+    const o = placeLabels([label('a', 200, 200, 120)], [], view, [mark]).get('a')!;
+    const box = { left: 200 + o.x - 60, right: 200 + o.x + 60, top: 200 + o.y - 12 };
+    const clear =
+      box.right <= mark.left ||
+      mark.right <= box.left ||
+      box.top + 24 <= mark.top ||
+      mark.bottom <= box.top;
+    expect(clear).toBe(true);
+  });
+
+  it('covers as little as it can of the marks and the profile when nothing is clear', () => {
+    // Marks under every spot (centred and slid) except a far one that only grazes one of them.
+    const marks = [50, -34, 78, 106].flatMap((dy) =>
+      [100, 200, 300].map((x) => ({
+        left: x - 9,
+        right: x + 9,
+        top: 200 + dy - 9,
+        bottom: 200 + dy + 9,
+      })),
+    );
+    marks.push({ left: 191, right: 209, top: 146, bottom: 164 });
+    const o = placeLabels([label('a', 200, 200)], [], view, marks).get('a')!;
+    const box = { left: 100 + o.x, right: 300 + o.x, top: 200 + o.y - 12, bottom: 200 + o.y + 12 };
+    const area = (m: (typeof marks)[number]) =>
+      Math.max(0, Math.min(box.right, m.right) - Math.max(box.left, m.left)) *
+      Math.max(0, Math.min(box.bottom, m.bottom) - Math.max(box.top, m.top));
+    // Only the grazed mark, by 4 px of its height: the spot 62 px above.
+    expect(o.y).toBe(-62);
+    expect(marks.reduce((sum, m) => sum + area(m), 0)).toBe(18 * 4);
   });
 });

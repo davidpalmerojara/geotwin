@@ -67,6 +67,7 @@ import { useLayers } from '../../hooks/data';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
 import { renderUntil } from '../measure/render-until';
 import { dimensionLabelBoxes } from '../measure/dimension-lines';
+import { sceneMarks } from '../scene/scene-marks';
 import { useLidarTerrain } from '../layers/lidar-terrain-provider';
 import { terrainHeight, type LidarTerrain } from '../layers/lidar-terrain';
 import { usePnoaImagery } from '../layers/pnoa-imagery';
@@ -510,7 +511,13 @@ function CesiumView({
         );
         if (at) markers.push({ left: at.x - 9, right: at.x + 9, top: at.y - 9, bottom: at.y + 9 });
       }
-      for (const [id, offset] of placeLabels(anchors, blocked, rect, markers))
+      // A and B, the line and the outline of a profile are soft obstacles too.
+      markers.push(...sceneMarks());
+      // Kept the HUD's inset from the edges of the view, like the plates (--m: 12 px, 10 on a
+      // phone).
+      const hud = document.querySelector('.hud-phone') ?? document.documentElement;
+      const inset = Number.parseFloat(getComputedStyle(hud).getPropertyValue('--m')) || 12;
+      for (const [id, offset] of placeLabels(anchors, blocked, rect, markers, { inset }))
         placement.set(id, offset);
       let changed = false;
       const now = JulianDate.now();

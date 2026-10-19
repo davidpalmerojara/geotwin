@@ -214,6 +214,12 @@ test('on a phone the installation labels keep clear of each other and of the pla
   const apart = (a: Box, b: Box) =>
     a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
   for (let i = 0; i < boxes.length; i++) {
+    // The phone's HUD inset (10 px) from every edge, like the plates.
+    const b = boxes[i]!;
+    expect(
+      [b.left, b.top, 390 - b.right, 844 - b.bottom].every((gap) => gap >= 10 - 0.5),
+      `label ${i} within 10 px of an edge`,
+    ).toBe(true);
     expect(apart(boxes[i]!, controls), `label ${i} under the controls`).toBe(true);
     for (const b of blocked) expect(apart(boxes[i]!, b)).toBe(true);
     for (let j = i + 1; j < boxes.length; j++)

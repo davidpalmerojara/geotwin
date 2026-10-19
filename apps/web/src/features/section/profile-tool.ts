@@ -29,6 +29,7 @@ import type { LngLat, SectionSummary } from '../../stores/section';
 import { DimensionLabels, drawDimensions, type Dimension } from '../measure/dimension-lines';
 import { renderUntil } from '../measure/render-until';
 import { clearForRedraw } from '../measure/entities';
+import { addSceneMarks, boxesAlong } from '../scene/scene-marks';
 import { fromLine, makeLine, refineOnGround, toLine } from './section-math';
 
 const SIG = Color.fromCssColorString('#FFD21A'),
@@ -68,6 +69,9 @@ export class ProfileScene {
   private stopRendering: (() => void) | undefined;
   /** E1…En laid out on screen so two close buildings never write over each other. */
   private readonly labels: DimensionLabels;
+  /** The line on the ground and the plane's outline as drawn, for `screenMarks`. */
+  private outline: Cartesian3[][] = [];
+  private readonly removeMarks: () => void;
 
   constructor(
     private readonly viewer: Viewer,
@@ -79,6 +83,8 @@ export class ProfileScene {
     const scene = viewer.scene;
     // The heights' labels keep off the A and B markers (their point and letter).
     this.labels = new DimensionLabels(scene, () => this.markerBoxes());
+    // The installation labels keep off A, B, the line and the outline when they can.
+    this.removeMarks = addSceneMarks(() => this.screenMarks());
     this.handler = new ScreenSpaceEventHandler(scene.canvas);
     this.handler.setInputAction(
       (e: { position: Cartesian2 }) => this.press(e.position),
@@ -197,6 +203,18 @@ export class ProfileScene {
     });
   }
 
+  /** A and B, the line and the plane's outline on screen (canvas px), as small boxes. */
+  private screenMarks() {
+    if (this.viewer.isDestroyed()) return [];
+    const scene = this.viewer.scene;
+    return [
+      ...this.markerBoxes(),
+      ...this.outline.flatMap((points) =>
+        boxesAlong(points.map((p) => SceneTransforms.worldToWindowCoordinates(scene, p))),
+      ),
+    ];
+  }
+
   private position(p: LngLat, above = 0) {
     return Cartesian3.fromDegrees(p.lng, p.lat, this.ground(p.lng, p.lat) + above);
   }
@@ -206,6 +224,7 @@ export class ProfileScene {
     const entities = this.source.entities;
     clearForRedraw(entities);
     this.labels.set([]);
+    this.outline = [];
     const { a, b, summary, cursor } = this.view;
     const mark = (id: string, p: LngLat, text: string) =>
       entities.add({
@@ -255,10 +274,13 @@ export class ProfileScene {
       });
     if (line) {
       // The line on the ground, every 2 m on the DTM; dashed where the cloud hides it.
+      const ground = along(0, line.length, 0.3);
+      // Every tenth point is enough to follow it on screen.
+      this.outline.push(ground.filter((_, i) => i % 10 === 0 || i === ground.length - 1));
       entities.add({
         id: 'perfil:linea',
         polyline: {
-          positions: along(0, line.length, 0.3),
+          positions: ground,
           width: 3.5,
           arcType: ArcType.NONE,
           material: new PolylineOutlineMaterialProperty({
@@ -300,10 +322,12 @@ export class ProfileScene {
       if (summary?.top != null) {
         const n = summary.geoid;
         const top = (p: LngLat) => Cartesian3.fromDegrees(p.lng, p.lat, summary.top! + n + 2);
+        const plane = [this.position(a!, 0), top(a!), top(b!), this.position(b!, 0)];
+        this.outline.push(plane);
         entities.add({
           id: 'perfil:plano',
           polyline: {
-            positions: [this.position(a!, 0), top(a!), top(b!), this.position(b!, 0)],
+            positions: plane,
             width: 1.5,
             arcType: ArcType.NONE,
             material: new PolylineDashMaterialProperty({ color: SIG, dashLength: 10 }),
@@ -376,6 +400,7 @@ export class ProfileScene {
   destroy() {
     cancelAnimationFrame(this.frame);
     this.stopRendering?.();
+    this.removeMarks();
     this.labels.destroy();
     this.handler.destroy();
     if (this.viewer.isDestroyed()) return;
