@@ -228,6 +228,24 @@ export function rulerScale(min: number, max: number, majors = 6): RulerScale {
   return { low, high, step, ticks };
 }
 
+/** Half the height of the ruler's yellow cursor chip, and of a value label, in pixels. */
+export const RULER_CHIP_HALF = 9,
+  RULER_LABEL_HALF = 6;
+
+/**
+ * Where the ruler writes the ground's value (its line stays at `ground`): at the ground, unless the
+ * cursor chip would cover it, then just clear of the chip on the ground's side, or on the other side
+ * when the ruler ends there. All in SVG pixels, y growing down; `top`/`bottom` bound the labels.
+ */
+export function groundLabelY(cursor: number | null, ground: number, top: number, bottom: number) {
+  const gap = RULER_CHIP_HALF + RULER_LABEL_HALF + 1;
+  if (cursor === null || Math.abs(ground - cursor) >= gap) return ground;
+  const below = cursor + gap,
+    above = cursor - gap;
+  if (ground >= cursor) return below <= bottom ? below : above;
+  return above >= top ? above : below;
+}
+
 /** Upper bounds of the height bins: HEIGHT_RAMP[i] colours heights below bounds[i]. */
 export function rampBounds(min: number, max: number, steps = HEIGHT_RAMP.length) {
   const span = Math.max(max - min, 0.01);

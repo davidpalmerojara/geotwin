@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { useLayers } from '../../hooks/data';
 import { number } from '../../lib/format';
 import { useLayerView } from '../../stores/layers';
-import { HEIGHT_RAMP, heightLegend, rulerScale } from './point-style';
+import { groundLabelY, HEIGHT_RAMP, heightLegend, rulerScale } from './point-style';
 
 /**
  * The Cota and the ground under the scene cursor, as the readout plate measures them (metres,
@@ -52,10 +52,12 @@ export function HeightRuler({
   const span = (range.max - range.min) / HEIGHT_RAMP.length;
   const cursor = within(cota) ? y(cota) : null,
     ground = within(suelo) ? y(suelo) : null;
+  // The ground's value steps clear of the cursor chip (a few metres apart is the usual case).
+  const groundText = ground === null ? null : groundLabelY(cursor, ground, TOP - 4, height - 6);
   // Tick labels give way to the cursor's and the ground's values.
   const clear = (at: number) =>
     (cursor === null || Math.abs(at - cursor) > 13) &&
-    (ground === null || Math.abs(at - ground) > 13);
+    (groundText === null || Math.abs(at - groundText) > 13);
   const label = `Escala de color de Altura: de ${metres(range.min)} m (azul) a ${metres(range.max)} m (rojo) de cota, la misma en ${sheets === 1 ? 'la hoja' : `las ${sheets} hojas`}`;
   return (
     <svg
@@ -104,7 +106,13 @@ export function HeightRuler({
         {ground !== null && (
           <>
             <line x1={48} x2={76} y1={ground} y2={ground} className="ruler-ground" />
-            <text x={46} y={ground + 4} textAnchor="end" className="tick-label ground-label">
+            <text
+              x={46}
+              y={groundText! + 4}
+              textAnchor="end"
+              className="tick-label ground-label"
+              data-testid="ruler-ground-value"
+            >
               {metres(suelo!)}
             </text>
           </>

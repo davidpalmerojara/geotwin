@@ -6,6 +6,9 @@ import {
   classFilter,
   cotaRange,
   ellipsoidalRange,
+  groundLabelY,
+  RULER_CHIP_HALF,
+  RULER_LABEL_HALF,
   heightLegend,
   rulerScale,
   sharedCotaRange,
@@ -226,6 +229,27 @@ describe('Point-cloud style builders', () => {
     const flat = rulerScale(700.2, 700.4);
     expect(flat.high - flat.low).toBeGreaterThan(0);
     expect(flat.ticks.filter((t) => t.major).length).toBeGreaterThanOrEqual(2);
+  });
+  it('the ground value on the ruler steps clear of the cursor chip', () => {
+    const gap = RULER_CHIP_HALF + RULER_LABEL_HALF;
+    const clearOf = (cursor: number, label: number) => Math.abs(label - cursor) > gap;
+    // Far apart: each value stays at its own height.
+    expect(groundLabelY(200, 260, 36, 414)).toBe(260);
+    expect(groundLabelY(null, 205, 36, 414)).toBe(205);
+    // Cursor 701,0 m over ground 698,9 m, a few pixels apart (the case seen): below the chip.
+    const below = groundLabelY(200, 206, 36, 414);
+    expect(below).toBeGreaterThan(200);
+    expect(clearOf(200, below)).toBe(true);
+    // Ground above the cursor (under a bridge or eave): above the chip.
+    const above = groundLabelY(200, 196, 36, 414);
+    expect(above).toBeLessThan(200);
+    expect(clearOf(200, above)).toBe(true);
+    // At the bottom end of the ruler there is no room below: it goes above instead.
+    const end = groundLabelY(408, 412, 36, 414);
+    expect(end).toBeLessThan(408);
+    expect(clearOf(408, end)).toBe(true);
+    // Same height: still readable.
+    expect(clearOf(120, groundLabelY(120, 120, 36, 414))).toBe(true);
   });
   it('shading attenuates up to the chosen point size, with optional soft eye-dome lighting', () => {
     expect(shadingFor(3)).toMatchObject({
