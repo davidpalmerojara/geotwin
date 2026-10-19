@@ -2753,8 +2753,10 @@ table.data {
 .hud-phone {
   --m: 10px;
   --bar-h: 58px;
+  /* The home indicator's strip, where the browser reports one (0 otherwise). */
+  --safe-b: env(safe-area-inset-bottom, 0px);
   /* Where the bottom things rest: the top of the open sheet, or of the tool bar. */
-  --sheet-top: calc(100% - var(--m) - var(--bar-h));
+  --sheet-top: calc(100% - var(--m) - var(--safe-b) - var(--bar-h));
 }
 .phone-top {
   position: absolute;
@@ -2927,7 +2929,7 @@ table.data {
 .phone-tools {
   left: var(--m);
   right: var(--m);
-  bottom: var(--m);
+  bottom: calc(var(--m) + var(--safe-b));
   z-index: 5;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -3032,7 +3034,7 @@ table.data {
   position: absolute;
   left: var(--m);
   right: var(--m);
-  bottom: calc(var(--m) + var(--bar-h) + var(--g));
+  bottom: calc(var(--m) + var(--safe-b) + var(--bar-h) + var(--g));
   z-index: 4;
   display: flex;
   flex-direction: column;
@@ -3048,7 +3050,7 @@ table.data {
 }
 /* At 90 % the sheet is modal and runs over the tool bar. */
 .bottom-sheet[role='dialog'] {
-  bottom: var(--m);
+  bottom: calc(var(--m) + var(--safe-b));
   z-index: 6;
 }
 .sheet-drag {
@@ -3129,6 +3131,17 @@ table.data {
   white-space: normal;
   text-align: center;
   line-height: 1.15;
+}
+/* Above the lowest snap the three jumps (Histórico, Cercanos y radio, Laboratorio) stay whole
+   in reach: when the sheet's edge, above the tool bar, would cut them they stick to it, and the
+   rest of the sheet scrolls under them. */
+.asset-sheet:not([data-snap='25']) .card-acts {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 10px 12px 12px;
+  background: var(--ink-1);
 }
 .asset-sheet .card-sec:first-of-type {
   border-top: 1px solid var(--rule);

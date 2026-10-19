@@ -51,6 +51,29 @@ async function rests(sheet: Locator, snap: number) {
 }
 const handle = (sheet: Locator) => sheet.getByRole('slider', { name: /Altura de la hoja/ });
 
+/**
+ * The asset sheet's jumps (Histórico, Cercanos y radio, Laboratorio) that are whole inside the
+ * sheet, above the tool bar, and the first thing under their own middle (nothing over them).
+ */
+function jumpsInReach(page: Page) {
+  return page.evaluate(() => {
+    const sheet = document.querySelector('[data-testid="asset-card"]')!.getBoundingClientRect();
+    const bar = document.querySelector('.phone-tools')!.getBoundingClientRect();
+    return [...document.querySelectorAll<HTMLElement>('.asset-sheet .card-acts .btn')]
+      .filter((b) => {
+        const r = b.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return (
+          r.top >= sheet.top &&
+          r.bottom <= sheet.bottom &&
+          r.bottom <= bar.top &&
+          (hit === b || b.contains(hit))
+        );
+      })
+      .map((b) => b.textContent!.trim());
+  });
+}
+
 test('the scene, the sheets and Capas fit the width of a phone', async ({ page }) => {
   await openScene(page);
   await expect(page.getByTestId('place-plate')).toBeVisible();
@@ -80,6 +103,10 @@ test('the asset sheet rests at 25, 45 and 90 %, and is modal only at 90 %', asyn
   await expect(sheet.getByTestId('meter').first()).toBeVisible();
   await rests(sheet, 45);
   await expect(sheet).not.toHaveAttribute('role', 'dialog');
+  // At 45 % its three jumps are whole and in reach, above the sheet's edge and the tool bar.
+  await expect
+    .poll(() => jumpsInReach(page))
+    .toEqual(['Histórico', 'Cercanos y radio', 'Laboratorio']);
   // The keyboard: arrows on the handle.
   await handle(sheet).focus();
   await page.keyboard.press('ArrowUp');
