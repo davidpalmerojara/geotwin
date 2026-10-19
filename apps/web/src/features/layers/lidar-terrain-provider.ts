@@ -9,6 +9,7 @@ import {
   EllipsoidTerrainProvider,
   GeographicTilingScheme,
   Math as CesiumMath,
+  type Scene,
   type TerrainProvider,
   type Viewer,
 } from 'cesium';
@@ -21,6 +22,12 @@ import {
   type DtmGrid,
   type LidarTerrain,
 } from './lidar-terrain';
+import {
+  refreshStep,
+  type SurfaceTileLike,
+  type TileLike,
+  type VertexArrayLike,
+} from './terrain-refresh';
 
 const TILE_SIZE = 65;
 // Decoded grids are kept per URL: the URLs are immutable (one folder per processing run).
@@ -44,16 +51,26 @@ function cachedGrid(url: string) {
   return grid;
 }
 
+/** The heights a provider draws from: replaced in place, numbered so tiles know their age. */
+interface Source {
+  terrain: LidarTerrain;
+  generation: number;
+}
+const sources = new WeakMap<TerrainProvider, Source>();
+// The generation of the heights each terrain tile was made from (Cesium's HeightmapTerrainData).
+const generations = new WeakMap<object, number>();
+
 export function createLidarTerrainProvider(terrain: LidarTerrain): TerrainProvider {
   const tilingScheme = new GeographicTilingScheme();
-  return new CustomHeightmapTerrainProvider({
+  const source: Source = { terrain, generation: 1 };
+  const provider = new CustomHeightmapTerrainProvider({
     width: TILE_SIZE,
     height: TILE_SIZE,
     tilingScheme,
     callback: (x, y, level) => {
       const r = tilingScheme.tileXYToRectangle(x, y, level);
       return tileHeights(
-        terrain,
+        source.terrain,
         {
           west: CesiumMath.toDegrees(r.west),
           south: CesiumMath.toDegrees(r.south),
@@ -64,6 +81,96 @@ export function createLidarTerrainProvider(terrain: LidarTerrain): TerrainProvid
       );
     },
   });
+  // Tag each tile's data with the generation of the heights it was cut from.
+  const request = provider.requestTileGeometry.bind(provider);
+  provider.requestTileGeometry = (x, y, level, req) => {
+    const generation = source.generation;
+    return request(x, y, level, req)?.then((data) => {
+      if (data) generations.set(data, generation);
+      return data;
+    });
+  };
+  sources.set(provider, source);
+  return provider;
+}
+
+interface TerrainVertexArray extends VertexArrayLike {
+  destroy(): void;
+  indexBuffer?: { isDestroyed(): boolean; destroy(): void; referenceCount?: number };
+}
+/**
+ * Frees a terrain tile's vertex array as Cesium does (GlobeSurfaceTile._freeVertexArray): tiles of
+ * one size share a reference-counted index buffer, which goes with its last user.
+ */
+function freeVertexArray(vertexArray: VertexArrayLike) {
+  const array = vertexArray as TerrainVertexArray;
+  const index = array.indexBuffer;
+  if (!array.isDestroyed()) array.destroy();
+  if (index && !index.isDestroyed() && index.referenceCount !== undefined) {
+    index.referenceCount -= 1;
+    if (index.referenceCount === 0) index.destroy();
+  }
+}
+
+// Cesium's globe surface (a QuadtreePrimitive), private but stable within the pinned version.
+interface Surface {
+  forEachLoadedTile(callback: (tile: TileLike) => void): void;
+}
+// The refresh running on a scene, and the vertex arrays its tiles still draw from old heights.
+const refreshing = new WeakMap<
+  Scene,
+  { stop: () => void; kept: Map<SurfaceTileLike, VertexArrayLike> }
+>();
+
+/**
+ * Puts new heights under the globe without freeing its tiles (see terrain-refresh.ts): the
+ * provider stays, its heights change, and every loaded tile reloads while it keeps drawing the
+ * ground it had. False when this is not our provider or the globe is not as expected; the caller
+ * then gives the globe a new provider.
+ */
+export function refreshLidarTerrain(
+  viewer: Viewer,
+  provider: TerrainProvider,
+  terrain: LidarTerrain,
+) {
+  const source = sources.get(provider);
+  const scene = viewer.scene;
+  const surface = (scene.globe as unknown as { _surface?: Partial<Surface> })._surface;
+  if (
+    !source ||
+    viewer.terrainProvider !== provider ||
+    typeof surface?.forEachLoadedTile !== 'function'
+  )
+    return false;
+  source.terrain = terrain;
+  source.generation += 1;
+  // A refresh still running gives way to this one, which also frees what it kept.
+  const previous = refreshing.get(scene);
+  previous?.stop();
+  const kept = previous?.kept ?? new Map<SurfaceTileLike, VertexArrayLike>();
+  const step = () => {
+    if (viewer.isDestroyed()) return stop();
+    const tiles: TileLike[] = [];
+    surface.forEachLoadedTile!((tile) => tiles.push(tile));
+    const { reset, loading } = refreshStep(
+      tiles,
+      (data) => generations.get(data),
+      source.generation,
+      kept,
+      freeVertexArray,
+    );
+    // Keep frames coming while tiles reload (the scene renders on request).
+    if (reset || loading) scene.requestRender();
+    else if (!kept.size) stop();
+  };
+  const off = scene.postRender.addEventListener(step);
+  const stop = () => {
+    off();
+    if (refreshing.get(scene)?.stop === stop) refreshing.delete(scene);
+  };
+  refreshing.set(scene, { stop, kept });
+  scene.requestRender();
+  return true;
 }
 
 export type LidarTerrainState = 'off' | 'loading' | 'on' | 'error';
@@ -108,9 +215,13 @@ export function useLidarTerrain(viewer: Viewer | null, ready: boolean, enabled: 
         setState({ state: 'error' });
         return;
       }
-      const provider = createLidarTerrainProvider(terrain);
-      ours.current = provider;
-      viewer.terrainProvider = provider;
+      // A sheet more or less: the same provider takes the new heights, so the ground stays on
+      // screen while the tiles reload (a new provider would blank the globe until they do).
+      if (!ours.current || !refreshLidarTerrain(viewer, ours.current, terrain)) {
+        const provider = createLidarTerrainProvider(terrain);
+        ours.current = provider;
+        viewer.terrainProvider = provider;
+      }
       viewer.scene.requestRender();
       setState({ state: loaded.length < results.length ? 'error' : 'on', terrain });
     });
