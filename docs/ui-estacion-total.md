@@ -86,9 +86,9 @@ El ámbar se usa solo para las advertencias, siempre con un triángulo. El rojo,
 
 **Encuadre de cámara.** `coveredByOverlays` (en `overlays.ts`) se amplía a los cuatro bordes y a todas las placas marcadas con `data-map-overlay`. Así, los encuadres dejan el objetivo en la zona libre.
 
-- Se mira al norte desde 45° (como la vista cercana de un activo) y se encaja la caja de terreno de los puntos, con margen para las etiquetas, no una esfera: el borde cercano, el que se ve más grande, es el que tiene que caber (`fitGround`).
-- Una instalación (enlace `?instalacion=…` o el selector) llena casi toda la zona libre: Torrelago, con la cámara a unos 540 m sobre el suelo y 760 m de distancia (antes, 1 580 m).
-- Toda la red, con nubes cargadas, encuadra las instalaciones que caen dentro de ellas y están juntas (a menos de 700 m unas de otras, `networkFrame`); la que queda lejos, como el depósito del cerro a 1 km, se queda con su chip de borde. Con las cuatro hojas, la cámara queda a unos 1 090 m sobre el suelo en escritorio (944 m en `A/desktop-overview.png`, que mira desde −30°) y a unos 1 230 m en el móvil; antes, a 3 540 y 3 910 m. Sin nubes se encuadran todas.
+- Se mira al norte desde 45° (como la vista cercana de un activo) y se encaja lo que se va a ver, tal como lo ve la cámara: la marca de cada activo a su altura de montaje, su pie y el centro de cada instalación (`fitPoints`). Lo cercano se ve más grande y una marca en un mástil de 40 m queda más arriba que su pie, así que la cámara apunta donde el punto más alto y el más bajo quedan a la misma distancia del borde de arriba y del de abajo de la zona libre, y se coloca donde llenan esa zona, menos un margen para las etiquetas (80 × 40 px en escritorio, 40 × 32 en el móvil).
+- Una instalación (enlace `?instalacion=…` o el selector) llena la zona libre: Torrelago, con la cámara a unos 400 m sobre el suelo a 1440 × 900 (antes, 1 580 m; en la cuarta verificación, 537 m), y sus marcas, de la torre norte al pie de la del oeste, ocupan unos tres cuartos del alto libre (antes, la mitad).
+- Toda la red, con nubes cargadas, encuadra las instalaciones que caen dentro de ellas y están juntas (a menos de 700 m unas de otras, `networkFrame`); la que queda lejos, como el depósito del cerro a 1 km, se queda con su chip de borde. Con las cuatro hojas, la cámara queda a unos 740 m sobre el suelo en escritorio (944 m en `A/desktop-overview.png`, que mira desde −30°) y a unos 990 m en el móvil; antes, a 1 090 y 1 230 m, y al principio a 3 540 y 3 910 m. Sin nubes se encuadran todas.
 
 ### Tableta (de 640 a 1023 px)
 
@@ -340,6 +340,16 @@ Cada paso dejó verdes lint, formato, tipos, unitarias, integración, pytest, bu
 - **Pruebas**: la guarda de «ResizeObserver loop» de las E2E escucha todas las páginas del contexto (también el observador de `demo.spec.ts`).
 - **Perfil**: con el puntero en el gráfico, la línea A–B, el contorno del plano y las cotas de los edificios desaparecían de la escena: cada movimiento del cursor la redibujaba entera. Ahora solo se mueve la marca del cursor.
 - **Capturas** de `docs/screenshots/` repetidas con las ocho hojas reales y el fondo neutro (con la web de `b643995`; el perfil, con `2684544`; ver [verification.md](verification.md)).
+
+**Tras la quinta verificación.**
+
+- **Encuadres que llenan la zona libre**: ver [Encuadre de cámara](#escritorio-1024-px-o-más-maqueta-de-referencia-a-1440--900). Con un enlace a Torrelago los activos ocupaban la mitad del alto libre y una quinta parte del ancho; la caja de terreno se encajaba por su borde cercano y se apuntaba a su centro, así que el fondo, que se ve más pequeño, y los mástiles dejaban la instalación flotando arriba. Ahora se encajan las marcas a su altura y la cámara baja de 537 a unos 400 m.
+- **Anunciador a 1280 px**: con una instalación elegida y «+1 en otras», el activo de la alarma salía cortado («Pasarela LoRa · torre…»). Ahora cede antes el nombre de la instalación en el selector, que también dice el rótulo de la escena.
+- **Regla «Cota m»**: con la cota del cursor a pocos metros del suelo (lo normal sobre el terreno, coches o matorral) la cifra amarilla del cursor tapaba la cifra blanca del suelo; ahora la del suelo se aparta (`groundLabelY`).
+- **Radio**: la etiqueta del radio prueba debajo de su punto y sus cuatro esquinas cuando los trazos del anillo cruzarían la caja centrada encima; cada distancia cuelga a la izquierda de su guía cuando a la derecha hay una placa o el borde de la vista, y no se escribe si no cabe en ningún lado (el panel de Radio las lista todas).
+- **Chips de borde durante un vuelo**: se recolocaban un fotograma después de que se movieran los rótulos y las etiquetas, y durante ese fotograma podían quedar encima («Depósito elevado del cerro» sobre los recuentos de Torrelago, en la tableta). Ahora se colocan en el mismo fotograma de la escena, antes de que el navegador lo pinte, y se apartan también de las etiquetas de los activos si su borde tiene sitio.
+- **Rótulos de instalación con teclado**: son botones; con Tab se llega a ellos y Enter elige la instalación.
+- **Perfil en el móvil**: el pie del gráfico tenía «A» pero no «B»; ahora A y B quedan en los dos extremos del eje, la escala entre ellas y la leyenda debajo.
 
 **Pendiente.**
 
