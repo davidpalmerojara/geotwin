@@ -99,7 +99,7 @@ type Size = { width: number; height: number };
 type DevWindow = Window & {
   __geotwinViewer?: Viewer;
   /** Installation labels as last placed (canvas px), for end-to-end checks. */
-  __geotwinLabels?: { boxes: ScreenBox[]; blocked: ScreenBox[] };
+  __geotwinLabels?: { boxes: ScreenBox[]; blocked: ScreenBox[]; values: ScreenBox[] };
 };
 // Position (lng, lat in radians) and orientation, but not height: Cesium may lift a camera that
 // ends up below newly loaded terrain, and that is not a move by the user.
@@ -579,7 +579,8 @@ function CesiumView({
       }
       // The asset tags keep clear of these labels.
       labelBoxes.current = boxes;
-      if (import.meta.env.DEV) (window as DevWindow).__geotwinLabels = { blocked, boxes };
+      if (import.meta.env.DEV)
+        (window as DevWindow).__geotwinLabels = { blocked, boxes, values: sceneLabels() };
     };
     const remove = v.scene.postRender.addEventListener(place);
     v.scene.requestRender();

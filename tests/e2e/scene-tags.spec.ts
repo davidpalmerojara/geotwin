@@ -132,3 +132,34 @@ test('Alertas acknowledges a row and keeps it active', async ({ page, request })
   await expect(map(page)).toHaveAttribute('data-pulses', '0', slow);
   await expect(map(page)).toHaveAttribute('data-beams', '1');
 });
+
+test('at 1280 × 800 with Alertas and the card open, the selected critical asset keeps its tag', async ({
+  page,
+  request,
+}) => {
+  await request.post('/api/demo/anomalies', { data: { sensor_id: sensorId, mode: 'critical' } });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openScene(page, `/alertas?activo=${assetId}`);
+  await expect(page.getByTestId('section-sheet')).toBeVisible();
+  await expect(card(page).getByRole('heading', { level: 2 })).toHaveText(
+    'Pasarela LoRa · torre sur',
+  );
+  // Between the sheet and the card the whole tag (name, value and word) may not fit: the selected
+  // asset's tag is placed first and, if need be, keeps its value alone, but it is never hidden.
+  await expect(tag(page)).toHaveAttribute('data-status', 'critical', slow);
+  await expect(tag(page)).toBeVisible(slow);
+  await expect(tag(page).locator('.tag-value')).toHaveText(/^\d+,\d °C$/);
+  await expect(tag(page).locator('.glyph-critical')).toBeVisible();
+  const clear = () =>
+    page.evaluate((id) => {
+      const t = document.querySelector(`[data-testid="scene-tag"][data-asset="${id}"]`)!;
+      const a = t.getBoundingClientRect();
+      return [...document.querySelectorAll('[data-map-overlay]')]
+        .map((p) => p.getBoundingClientRect())
+        .filter((b) => b.width > 0 && b.height > 0)
+        .every(
+          (b) => a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top,
+        );
+    }, assetId);
+  await expect.poll(clear, slow).toBe(true);
+});

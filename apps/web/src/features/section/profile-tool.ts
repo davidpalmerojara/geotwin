@@ -97,6 +97,12 @@ export class ProfileScene {
     this.labels = new DimensionLabels(scene, () => [...this.markerBoxes(), ...this.lineBoxes()]);
     // The installation labels keep off A, B, the line and the outline when they can.
     this.removeMarks = addSceneMarks(() => this.screenMarks());
+    // Development builds expose the heights' labels and the line as laid out, for checks.
+    if (import.meta.env.DEV)
+      (window as Window & { __geotwinProfile?: unknown }).__geotwinProfile = {
+        labels: () => this.labels.boxes,
+        line: () => this.lineBoxes(),
+      };
     this.handler = new ScreenSpaceEventHandler(scene.canvas);
     this.handler.setInputAction(
       (e: { position: Cartesian2 }) => this.press(e.position),

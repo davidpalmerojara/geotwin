@@ -231,6 +231,26 @@ test('Perfil A–B, Corte and Radio on a synthetic layer', async ({ page, reques
         expect.stringMatching(/^E1 · \d+,\d m$/),
         expect.stringMatching(/^E2 · \d+,\d m$/),
       ]);
+    // Seen from 600 m the heights' labels keep off the line A–B and the labels of its ticks.
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          type B = { left: number; top: number; right: number; bottom: number };
+          const v = (window as unknown as { __geotwinViewer: V }).__geotwinViewer;
+          v.scene.requestRender();
+          const p = (window as unknown as { __geotwinProfile?: { labels(): B[]; line(): B[] } })
+            .__geotwinProfile!;
+          const line = p.line();
+          return p
+            .labels()
+            .filter((a) =>
+              line.some(
+                (b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom,
+              ),
+            ).length;
+        }),
+      )
+      .toBe(0);
     // The cursor over the plot reads a distance and the ground under it.
     const canvas = (await page.getByTestId('profile-canvas').boundingBox())!;
     await page.mouse.move(canvas.x + canvas.width * 0.5, canvas.y + canvas.height * 0.6, {
@@ -305,6 +325,48 @@ test('Perfil A–B, Corte and Radio on a synthetic layer', async ({ page, reques
     await expect(radio.getByTestId('radius-count')).toContainText(
       `${count} activos a menos de 5 km`,
     );
+    // The distances and the radius it writes in the scene are not covered by an installation
+    // label, an asset's tag or an edge chip.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            type B = { left: number; top: number; right: number; bottom: number };
+            const v = (window as unknown as { __geotwinViewer: V }).__geotwinViewer;
+            v.scene.requestRender();
+            const { values, boxes } = (
+              window as unknown as { __geotwinLabels: { values: B[]; boxes: B[] } }
+            ).__geotwinLabels;
+            const canvas = v.scene.canvas.getBoundingClientRect();
+            const onCanvas = (r: DOMRect): B => ({
+              left: r.left - canvas.left,
+              right: r.right - canvas.left,
+              top: r.top - canvas.top,
+              bottom: r.bottom - canvas.top,
+            });
+            const shown = (selector: string) =>
+              [...document.querySelectorAll<HTMLElement>(selector)]
+                .filter((e) => e.style.display !== 'none')
+                .map((e) => onCanvas(e.getBoundingClientRect()))
+                .filter((b) => b.right > b.left);
+            const others = [
+              ...boxes,
+              ...shown('[data-testid="scene-tag"]'),
+              ...shown('[data-testid="edge-chip"]'),
+            ];
+            const hit = (a: B, b: B) =>
+              a.left < b.right - 1 &&
+              b.left < a.right - 1 &&
+              a.top < b.bottom - 1 &&
+              b.top < a.bottom - 1;
+            return {
+              values: values.length,
+              covered: values.filter((a) => others.some((b) => hit(a, b))).length,
+            };
+          }),
+        { timeout: 30000 },
+      )
+      .toEqual({ values: expect.any(Number), covered: 0 });
     await page.keyboard.press('Escape');
     await expect(map).not.toHaveAttribute('data-radius');
   } finally {
