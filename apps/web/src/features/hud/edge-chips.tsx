@@ -191,11 +191,16 @@ export function EdgeChips() {
           const { left: x, top: y } = m.getBoundingClientRect();
           return { left: x - 13, right: x + 13, top: y - 13, bottom: y + 13 };
         });
+      // The installation labels on screen: a chip slides off them too while it has room.
+      const labels = [...document.querySelectorAll<HTMLElement>('.install-label')]
+        .filter((l) => l.style.display !== 'none')
+        .map((l) => l.getBoundingClientRect());
       const placed = placeChips(
         extra ? [...shown, extra] : shown,
         free,
         [...plates, ...values],
         marks,
+        labels,
       );
       const tail = extra ? placed.pop() : null;
       setChips(placed.filter((c): c is Chip => !!c));

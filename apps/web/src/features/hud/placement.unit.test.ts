@@ -297,6 +297,35 @@ describe('edge chips', () => {
     const [kept] = placeChips([{ ...chip, ...size }], free, [], marks);
     expect(kept).toMatchObject({ left: chip.left, top: chip.top });
   });
+  it('slides a chip off an installation label, but gives the label up before a mark', () => {
+    const chip = edgeChip(free, size, { x: 2000, y: 400 }, 0)!;
+    const box = (c: { left: number; top: number }) => ({
+      left: c.left,
+      top: c.top,
+      right: c.left + size.width,
+      bottom: c.top + size.height,
+    });
+    // An installation label reaching to the right edge, where the chip would go (the counts line
+    // of Torrelago under the depósito's chip while the camera flew).
+    const label: Box = {
+      left: chip.left - 80,
+      right: chip.left + 120,
+      top: chip.top - 10,
+      bottom: chip.top + 26,
+    };
+    const [clear] = placeChips([{ ...chip, ...size }], free, [], [], [label]);
+    expect(intersects(box(clear!), label)).toBe(false);
+    // With marks filling the rest of the edge, the mark wins: the chip stays on the label.
+    const marks = Array.from({ length: 60 }, (_, i) => ({
+      left: chip.left,
+      right: chip.left + size.width,
+      top: free.top + i * 15,
+      bottom: free.top + i * 15 + 22,
+    })).filter((m) => !intersects(m, label));
+    const [onLabel] = placeChips([{ ...chip, ...size }], free, [], marks, [label]);
+    expect(onLabel).not.toBeNull();
+    expect(marks.some((m) => intersects(box(onLabel!), m, 3))).toBe(false);
+  });
   it('leaves a chip out when its whole edge is covered', () => {
     const wall: Box = { left: 1000, top: 0, right: 1440, bottom: 900 };
     const chip = edgeChip(free, size, { x: 2000, y: 400 }, 0)!;

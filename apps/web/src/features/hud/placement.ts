@@ -279,19 +279,24 @@ export function pickChips<T extends { distance: number }>(
  * floating inside the free area (a card beside its asset): a chip that would land on one slides
  * along its edge to the nearest free spot, and is left out (null) when there is none. `marks`
  * (the assets' marks in the scene) are avoided too when the edge has room; a chip never goes
- * missing for one.
+ * missing for one. `labels` (the installation labels in the scene) likewise, but given up first:
+ * a label moves off a chip by itself on the next frame, a mark cannot. Avoiding them here keeps a
+ * chip off a label while the camera flies, when the label is placed a frame behind the chips.
  */
 export function placeChips<T extends EdgeChip & Size>(
   chips: T[],
   free: Box,
   plates: Box[],
   marks: Box[] = [],
+  labels: Box[] = [],
 ) {
   const placed: T[] = [];
   return chips.map((chip) => {
+    const hard = [...plates, ...placed.map((p) => boxOf(p.left, p.top, p))];
     const next =
-      placeChip(chip, free, [...plates, ...placed.map((p) => boxOf(p.left, p.top, p)), ...marks]) ??
-      placeChip(chip, free, [...plates, ...placed.map((p) => boxOf(p.left, p.top, p))]);
+      placeChip(chip, free, [...hard, ...marks, ...labels]) ??
+      placeChip(chip, free, [...hard, ...marks]) ??
+      placeChip(chip, free, hard);
     if (next) placed.push(next);
     return next;
   });
