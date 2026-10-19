@@ -440,4 +440,15 @@ test('installation labels say how many assets each has and their alerts, and kee
   });
   await expect.poll(() => labels.count()).toBeGreaterThanOrEqual(2);
   await countsAreOwn();
+  // The labels are buttons: from the keyboard, Enter on another one chooses that installation.
+  let other = labels.first();
+  for (const label of await labels.all())
+    if ((await label.getAttribute('data-installation')) !== id) other = label;
+  const otherId = (await other.getAttribute('data-installation'))!;
+  expect(otherId).not.toBe(id);
+  await expect(other).toHaveRole('button');
+  await other.focus();
+  await expect(other).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByLabel('Seleccionar instalación')).toHaveValue(otherId);
 });

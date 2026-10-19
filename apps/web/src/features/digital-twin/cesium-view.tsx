@@ -1068,14 +1068,15 @@ function CesiumView({
         {installations.map((i) => {
           const c = counts.get(i.id) ?? { total: 0, critical: 0, warning: 0 };
           return (
-            <div
+            // A button: reached with Tab while it is on screen, Enter or Space choose it.
+            <button
               key={i.id}
+              type="button"
               className="install-label"
               data-installation={i.id}
               data-lod="whole"
               data-testid="installation-label"
-              role="img"
-              aria-label={labelText(i.name, c)}
+              aria-label={`${labelText(i.name, c)}. Elegir esta instalación.`}
               onClick={() => onInstallation(i.id)}
               style={{ display: 'none' }}
             >
@@ -1089,7 +1090,7 @@ function CesiumView({
                   </span>
                 ))}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>

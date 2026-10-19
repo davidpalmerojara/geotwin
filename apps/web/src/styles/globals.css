@@ -641,6 +641,7 @@ textarea {
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
   color: var(--fg-0);
   font: 600 13px/16px var(--sans);
+  text-align: left;
   white-space: nowrap;
   pointer-events: auto;
   cursor: pointer;
