@@ -151,16 +151,22 @@ export function ProfileDrawer() {
     setSummary = useSection((s) => s.setSummary);
   const tool = useTool((s) => s.tool);
 
-  // The scene draws the buildings and the plane from this summary.
+  // The scene draws the buildings and the plane from this summary. It changes only with the
+  // profile's data: useProfile gives a new object on every render (a cursor move re-renders the
+  // drawer), and a new summary made the scene redraw the line, the plane and the heights.
+  const status = profile?.status,
+    points = profile?.points,
+    buildings = profile?.buildings,
+    geoid = profile?.geoid;
   useEffect(() => {
-    if (!profile || profile.status !== 'ready') {
+    if (status !== 'ready' || !points || !buildings || geoid === undefined) {
       setSummary(null);
       return;
     }
     let top = -Infinity;
-    for (let i = 0; i < profile.points.count; i++) top = Math.max(top, profile.points.z[i]!);
+    for (let i = 0; i < points.count; i++) top = Math.max(top, points.z[i]!);
     setSummary({
-      buildings: profile.buildings.map(({ label, at, roof, ground, height }) => ({
+      buildings: buildings.map(({ label, at, roof, ground, height }) => ({
         label,
         at,
         roof,
@@ -168,10 +174,10 @@ export function ProfileDrawer() {
         height,
       })),
       top: Number.isFinite(top) ? top : null,
-      geoid: profile.geoid,
-      count: profile.points.count,
+      geoid,
+      count: points.count,
     });
-  }, [profile?.status, profile?.points, profile?.buildings, profile?.geoid, setSummary, profile]);
+  }, [status, points, buildings, geoid, setSummary]);
 
   // The live region: one polite sentence when a profile is ready.
   const [announce, setAnnounce] = useState('');

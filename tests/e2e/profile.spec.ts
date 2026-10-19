@@ -251,7 +251,20 @@ test('Perfil A–B, Corte and Radio on a synthetic layer', async ({ page, reques
         }),
       )
       .toBe(0);
-    // The cursor over the plot reads a distance and the ground under it.
+    // The cursor over the plot reads a distance and the ground under it. Moving it moves only its
+    // mark in the scene: the line stays the same entity (a full redraw emptied the polyline
+    // batches and the line, the plane and the heights vanished until rebuilt, on every move).
+    const lineEntity = () =>
+      page.evaluate(() => {
+        const v = (window as unknown as { __geotwinViewer: import('cesium').Viewer })
+          .__geotwinViewer;
+        const line = v.dataSources.getByName('perfil')[0]?.entities.getById('perfil:linea');
+        const w = window as unknown as { __e2eLine?: unknown };
+        const same = !!line && w.__e2eLine === line;
+        w.__e2eLine = line;
+        return same;
+      });
+    await lineEntity();
     const canvas = (await page.getByTestId('profile-canvas').boundingBox())!;
     await page.mouse.move(canvas.x + canvas.width * 0.5, canvas.y + canvas.height * 0.6, {
       steps: 3,
@@ -259,6 +272,7 @@ test('Perfil A–B, Corte and Radio on a synthetic layer', async ({ page, reques
     const readout = page.getByTestId('profile-readout');
     await expect(readout).toContainText(/Distancia desde A\s*\d+,\d m/);
     await expect(readout).toContainText(/Suelo \(MDT\)\s*\d+,\d m/);
+    expect(await lineEntity(), 'the line was redrawn when the cursor moved').toBe(true);
     // The readout plate at the bottom follows the chart's cursor too (A/desktop-signature): the
     // same distance from A, ground and Cota as the drawer, and the point's position.
     const plate = page.getByTestId('readout');

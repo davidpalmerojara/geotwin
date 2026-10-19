@@ -207,8 +207,23 @@ export class ProfileScene {
   }
 
   update(view: ProfileView) {
+    const before = this.view;
     this.view = view;
     this.preview = view.a && !view.b ? this.preview : null;
+    // Only the cursor moved (the pointer on the chart or near the line): move its mark alone.
+    // Redrawing everything emptied Cesium's polyline batches, so the line, the plane and the
+    // heights vanished until the new geometry was built, on every pointer move.
+    if (
+      before.a === view.a &&
+      before.b === view.b &&
+      before.summary === view.summary &&
+      before.cursor !== view.cursor &&
+      !this.viewer.isDestroyed()
+    ) {
+      this.drawCursor();
+      this.viewer.scene.requestRender();
+      return;
+    }
     this.draw();
   }
 
@@ -272,7 +287,7 @@ export class ProfileScene {
     this.trace = [];
     this.ticks = [];
     this.heights = [];
-    const { a, b, summary, cursor } = this.view;
+    const { a, b, summary } = this.view;
     const mark = (id: string, p: LngLat, text: string) =>
       entities.add({
         id,
@@ -420,25 +435,7 @@ export class ProfileScene {
         this.heights = dims.map((d) => d.line);
         this.labels.set(drawDimensions(this.source, dims, 'perfil:altura'));
       }
-      if (cursor !== null) {
-        const p = fromLine(line, Math.min(line.length, Math.max(0, cursor)));
-        const height = summary?.top != null ? summary.top + summary.geoid + 2 : undefined;
-        entities.add({
-          id: 'perfil:cursor',
-          polyline: {
-            positions: [
-              this.position(p, 0),
-              height !== undefined
-                ? Cartesian3.fromDegrees(p.lng, p.lat, height)
-                : this.position(p, 40),
-            ],
-            width: 1.5,
-            arcType: ArcType.NONE,
-            material: SIG,
-            depthFailMaterial: new PolylineDashMaterialProperty({ color: SIG.withAlpha(0.7) }),
-          },
-        });
-      }
+      this.drawCursor(line);
     }
     entities.resumeEvents();
     this.viewer.scene.requestRender();
@@ -447,6 +444,33 @@ export class ProfileScene {
       () => !this.viewer.isDestroyed() && this.viewer.scene.requestRender(),
       () => this.viewer.isDestroyed() || this.viewer.dataSourceDisplay.ready,
     );
+  }
+
+  /** The cursor's vertical mark on the line, replaced on its own (see update). */
+  private drawCursor(
+    line = this.view.a && this.view.b ? makeLine(this.view.a, this.view.b) : null,
+  ) {
+    const entities = this.source.entities;
+    entities.removeById('perfil:cursor');
+    const { summary, cursor } = this.view;
+    if (!line || cursor === null) return;
+    const p = fromLine(line, Math.min(line.length, Math.max(0, cursor)));
+    const height = summary?.top != null ? summary.top + summary.geoid + 2 : undefined;
+    entities.add({
+      id: 'perfil:cursor',
+      polyline: {
+        positions: [
+          this.position(p, 0),
+          height !== undefined
+            ? Cartesian3.fromDegrees(p.lng, p.lat, height)
+            : this.position(p, 40),
+        ],
+        width: 1.5,
+        arcType: ArcType.NONE,
+        material: SIG,
+        depthFailMaterial: new PolylineDashMaterialProperty({ color: SIG.withAlpha(0.7) }),
+      },
+    });
   }
 
   destroy() {
