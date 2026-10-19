@@ -53,7 +53,8 @@ import {
   aimOffsets,
   flyOnOwn,
   extentOf,
-  fitGround,
+  fitPoints,
+  localOf,
   networkFrame,
   samePose,
   type AutoFlight,
@@ -120,13 +121,15 @@ const colors = { healthy: '#EEECE6', warning: '#FF9F1A', critical: '#FF5A4C' };
 // The framings look down at 45°, like an asset's close-up: low enough for the towers to read as
 // towers (A/desktop-overview), high enough for the labels not to stack.
 const FRAME_PITCH = CesiumMath.toRadians(-45);
-// Oblique view, looking north, that fits the points' box of ground in the part of the scene that
-// the HUD's plates leave visible, on every edge.
+// Oblique view, looking north, that fits the assets (their marks at their mounting height, and
+// their feet) and the installations' centres in the part of the scene that the HUD's plates leave
+// visible, on every edge, with room beside them for the tags and labels.
 function flyToPoints(
   v: Viewer,
   points: LatLng[],
   duration: number,
   ground: Ground,
+  mountOf: (p: LatLng) => number,
   complete?: () => void,
   cancel?: () => void,
 ) {
@@ -135,29 +138,33 @@ function flyToPoints(
   const canvas = v.scene.canvas;
   const width = canvas.clientWidth || 1,
     height = canvas.clientHeight || 1;
-  const view = fitGround(
-    frame.halfE,
-    frame.halfN,
+  const { center } = frame;
+  const base = ground(center.lng, center.lat);
+  const local = points.flatMap((p) => {
+    const foot = ground(p.lng, p.lat) - base,
+      mount = mountOf(p);
+    return mount > 0
+      ? [localOf(center, p, foot), localOf(center, p, foot + mount)]
+      : [localOf(center, p, foot)];
+  });
+  // A phone has less room beside the marks; its tags are smaller too.
+  const room = width < 640 ? { x: 40, y: 32 } : { x: 80, y: 40 };
+  const view = fitPoints(
+    local,
     FRAME_PITCH,
     viewerFov(v),
     width,
     height,
     coveredByOverlays(v),
+    room,
   );
   const heading = 0;
   v.camera.flyToBoundingSphere(
     shiftedOnGround(
-      new BoundingSphere(
-        Cartesian3.fromDegrees(
-          frame.center.lng,
-          frame.center.lat,
-          ground(frame.center.lng, frame.center.lat),
-        ),
-        Math.hypot(frame.halfE, frame.halfN),
-      ),
+      new BoundingSphere(Cartesian3.fromDegrees(center.lng, center.lat, base), 1),
       heading,
-      view.shift,
-      liftToGround(view.lift, FRAME_PITCH),
+      view.east + view.shift,
+      view.ahead + liftToGround(view.lift, FRAME_PITCH),
     ),
     {
       offset: new HeadingPitchRange(heading, FRAME_PITCH, view.distance),
@@ -292,6 +299,13 @@ function CesiumView({
   useEffect(() => {
     assetsRef.current = assets;
   }, [assets]);
+  // The mounting height of the asset at a framed point (0 for an installation's centre, or with
+  // the relief off, when the marks sit on the ground).
+  const mountOf = (p: LatLng) =>
+    reliefRef.current
+      ? (assetsRef.current.find((a) => a.location.lat === p.lat && a.location.lng === p.lng)
+          ?.mount_height_m ?? 0)
+      : 0;
   const installationsRef = useRef(installations),
     installationIdRef = useRef(installationId);
   useEffect(() => {
@@ -704,7 +718,7 @@ function CesiumView({
     // The first framing is instant; later ones (another place, the real ground) fly for 1 s.
     let duration = framed.current ? 1 : 0;
     flyOnOwn(autoFlight, v, poseOf, (complete, cancel) => {
-      flyToPoints(v, framePoints, duration, groundRef.current, complete, cancel);
+      flyToPoints(v, framePoints, duration, groundRef.current, mountOf, complete, cancel);
       duration = 1;
     });
     framed.current = true;
@@ -1001,7 +1015,7 @@ function CesiumView({
       api: createSceneApi(v, {
         ground: (lng, lat) => groundRef.current(lng, lat),
         labelBox: (id) => labelById.current.get(id) ?? null,
-        home: () => flyToPoints(v, actions.current.framePoints, 1, groundRef.current),
+        home: () => flyToPoints(v, actions.current.framePoints, 1, groundRef.current, mountOf),
         // «Centrar activo» (F): the same close-up as a selection, keeping the camera's heading.
         centreAsset: (id) => {
           const asset = assetsRef.current.find((a) => a.id === id);

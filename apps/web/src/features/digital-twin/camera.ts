@@ -54,31 +54,102 @@ export function extentOf(points: LatLng[]) {
   return { center, halfE: halfE + pad, halfN: halfN + pad };
 }
 
+/** A point of a framing, in metres from its reference: east, north and up. */
+export interface Local {
+  e: number;
+  n: number;
+  u: number;
+}
+/** Metres east, north and up of `p` from `ref` (a local flat approximation, fine for a few km). */
+export function localOf(ref: LatLng, p: LatLng, up = 0): Local {
+  return {
+    e: (p.lng - ref.lng) * M_PER_DEG_LAT * Math.cos(toRad(ref.lat)),
+    n: (p.lat - ref.lat) * M_PER_DEG_LAT,
+    u: up,
+  };
+}
+
 /**
- * Camera distance that fits a box of the ground (`halfE` by `halfN` metres around its middle),
- * seen looking north at `pitch` (radians, negative down), in the part of a `width` x `height`
- * canvas that the HUD leaves visible, and the aim offsets that centre it there. Unlike a sphere,
- * the box is foreshortened along the line of sight, so a framing fills the free area: the near
- * edge, the closest to the camera, is the one that must fit.
+ * Camera distance and aim that fit what a framing shows (`points`: the assets' marks at their
+ * mounting height, their feet and the installations' centres, in metres from the reference), seen
+ * looking north at `pitch` (radians, negative down), in the part of a `width` x `height` canvas
+ * that the HUD leaves visible, less `room` px on each side for the tags and labels drawn beside
+ * the marks. The points are projected as the camera sees them: the near ones look larger, and a
+ * mark on a 40 m mast stands higher on screen than its foot. The camera aims `ahead` metres north
+ * of the reference and `east` metres east of it, so that the highest and the lowest point on
+ * screen sit at the same distance from the top and the bottom of the free area, and stands at the
+ * distance where the content fills it (A/desktop-overview); `shift` and `lift` then centre the
+ * free area, as in `aimOffsets`.
  */
-export function fitGround(
-  halfE: number,
-  halfN: number,
+export function fitPoints(
+  points: Local[],
   pitch: number,
   fov: number,
   width: number,
   height: number,
   covered: number | Partial<Edges> = 0,
-  margin = 1.1,
+  room = { x: 80, y: 40 },
+  margin = 1.05,
 ) {
   const edges = clampEdges(toEdges(covered), width, height);
   const half = halfTangents(fov, width, height);
-  const tanX = (half.x * (width - edges.left - edges.right)) / width,
-    tanY = (half.y * (height - edges.top - edges.bottom)) / height;
+  const freeW = Math.max(width * 0.2, width - edges.left - edges.right - 2 * room.x),
+    freeH = Math.max(height * 0.2, height - edges.top - edges.bottom - 2 * room.y);
+  const tanX = (half.x * freeW) / width / margin,
+    tanY = (half.y * freeH) / height / margin;
   const down = Math.abs(Math.sin(pitch)),
     along = Math.abs(Math.cos(pitch));
-  const distance = (Math.max((halfN * down) / tanY, halfE / tanX) + halfN * along) * margin;
-  return { distance, ...aimOffsets(distance, fov, width, height, edges) };
+  const list = points.length ? points : [{ e: 0, n: 0, u: 0 }];
+  const east = (Math.min(...list.map((p) => p.e)) + Math.max(...list.map((p) => p.e))) / 2;
+  // Tangents of the highest and lowest point above the aim (up on screen) and of the widest
+  // beside it, or null when a point is at or behind the camera.
+  const seen = (d: number, ahead: number) => {
+    let top = -Infinity,
+      bottom = Infinity,
+      side = 0;
+    for (const p of list) {
+      const n = p.n - ahead;
+      const depth = d + n * along - p.u * down;
+      if (depth <= 1) return null;
+      const up = (n * down + p.u * along) / depth;
+      top = Math.max(top, up);
+      bottom = Math.min(bottom, up);
+      side = Math.max(side, Math.abs(p.e - east) / depth);
+    }
+    return { top, bottom, side };
+  };
+  const extent = Math.max(50, ...list.map((p) => Math.hypot(p.e - east, p.n, p.u)));
+  // The aim, for a camera `d` away, that balances the top and the bottom: moving it north lowers
+  // every point on screen, so a bisection finds it.
+  const balance = (d: number) => {
+    let lo = -2 * extent,
+      hi = 2 * extent;
+    for (let i = 0; i < 50; i++) {
+      const mid = (lo + hi) / 2;
+      const s = seen(d, mid);
+      if (s && s.top + s.bottom > 0) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  };
+  // How much of the free area the content takes from `d` away (1: it just fills it).
+  const fill = (d: number) => {
+    const s = seen(d, balance(d));
+    return s ? Math.max(Math.max(s.top, -s.bottom) / tanY, s.side / tanX) : Infinity;
+  };
+  let lo = 1,
+    hi = 1e6;
+  for (let i = 0; i < 60; i++) {
+    const mid = Math.sqrt(lo * hi);
+    if (fill(mid) > 1) lo = mid;
+    else hi = mid;
+  }
+  return {
+    distance: hi,
+    ahead: balance(hi),
+    east,
+    ...aimOffsets(hi, fov, width, height, edges),
+  };
 }
 
 /**

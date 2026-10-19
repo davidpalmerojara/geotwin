@@ -9,9 +9,10 @@ import {
   distanceM,
   extentOf,
   fitDistance,
-  fitGround,
+  fitPoints,
   fitInView,
   frameOf,
+  localOf,
   freeCentre,
   networkFrame,
   samePose,
@@ -264,18 +265,37 @@ const sheets: [number, number, number, number][] = [
 const DESKTOP = { width: 1440, height: 900, covered: { top: 96, bottom: 70 } };
 const PHONE = { width: 390, height: 844, covered: { top: 170, bottom: 150 } };
 const PITCH = (-45 * Math.PI) / 180;
-const heightOf = (points: { lat: number; lng: number }[], view: typeof DESKTOP) => {
-  const box = extentOf(points)!;
-  const d = fitGround(
-    box.halfE,
-    box.halfN,
+// The masts of the seeded towers (m): the west tower's roof tank and the north tower's gateway.
+const MASTS: Record<string, number> = { '41.587724': 41.5, '41.590574': 41.7 };
+/** The points a framing fits: every point on the ground and, on a mast, its mark too. */
+const localsOf = (points: { lat: number; lng: number }[]) => {
+  const centre = extentOf(points)!.center;
+  return points.flatMap((p) => {
+    const mast = MASTS[String(p.lat)] ?? 0;
+    return mast ? [localOf(centre, p), localOf(centre, p, mast)] : [localOf(centre, p)];
+  });
+};
+const fitOf = (points: { lat: number; lng: number }[], view: typeof DESKTOP) =>
+  fitPoints(
+    localsOf(points),
     PITCH,
     Math.PI / 3,
     view.width,
     view.height,
     view.covered,
-  ).distance;
-  return d * Math.sin(-PITCH);
+    view.width < 640 ? { x: 40, y: 32 } : { x: 80, y: 40 },
+  );
+const heightOf = (points: { lat: number; lng: number }[], view: typeof DESKTOP) =>
+  fitOf(points, view).distance * Math.sin(-PITCH);
+/** Tangents above (+) and below (−) the aim of the highest and lowest point, and the widest. */
+const spread = (points: ReturnType<typeof localsOf>, d: number, ahead: number) => {
+  const down = Math.sin(-PITCH),
+    along = Math.cos(PITCH);
+  const ups = points.map(
+    (p) => ((p.n - ahead) * down + p.u * along) / (d + (p.n - ahead) * along - p.u * down),
+  );
+  const sides = points.map((p) => Math.abs(p.e) / (d + (p.n - ahead) * along - p.u * down));
+  return { top: Math.max(...ups), bottom: Math.min(...ups), side: Math.max(...sides) };
 };
 
 describe('Framing the network and an installation', () => {
@@ -299,15 +319,16 @@ describe('Framing the network and an installation', () => {
     expect(box.halfN).toBeCloseTo(158.6 + 50, 0);
     expect(box.halfE).toBeCloseTo(87 + 50, 0);
   });
-  it('puts the camera about 900 m up for the network on a desktop, as A/desktop-overview', () => {
+  it('puts the camera about 700 m up for the network on a desktop, as A/desktop-overview', () => {
     const h = heightOf(networkFrame([torrelago, laguna, deposito], sheets), DESKTOP);
-    expect(h).toBeGreaterThan(800);
-    expect(h).toBeLessThan(1050);
+    expect(h).toBeGreaterThan(600);
+    expect(h).toBeLessThan(800);
   });
   it('brings an installation close enough to fill the free area', () => {
     const h = heightOf([torrelago.location, ...torrelago.points], DESKTOP);
-    expect(h).toBeGreaterThan(400);
-    expect(h).toBeLessThan(600);
+    // About 360 m up (the padded box of the last round stood about 530 m up).
+    expect(h).toBeGreaterThan(300);
+    expect(h).toBeLessThan(420);
     // The old framing (a padded sphere at −55°) stood about 1 250 m up.
     const old = fitInView(
       frameOf([torrelago.location, ...torrelago.points])!.radius,
@@ -318,18 +339,58 @@ describe('Framing the network and an installation', () => {
     );
     expect(old.distance * Math.sin((55 * Math.PI) / 180)).toBeGreaterThan(2 * h);
   });
-  it('on a phone fits the narrow width: the network about 1 km up, not 3', () => {
+  it('on a phone fits the narrow width: the network under 1 km up, not 3', () => {
     const h = heightOf(networkFrame([torrelago, laguna, deposito], sheets), PHONE);
-    expect(h).toBeGreaterThan(800);
-    expect(h).toBeLessThan(1200);
+    expect(h).toBeGreaterThan(600);
+    expect(h).toBeLessThan(1000);
   });
-  it('fits the near edge of the box, which the camera sees largest', () => {
-    const near = fitGround(100, 300, PITCH, Math.PI / 3, 1440, 900);
-    const flat = fitGround(100, 0, PITCH, Math.PI / 3, 1440, 900);
-    expect(near.distance).toBeGreaterThan(flat.distance);
-    expect(fitGround(400, 100, PITCH, Math.PI / 3, 390, 844).distance).toBeGreaterThan(
-      fitGround(400, 100, PITCH, Math.PI / 3, 1440, 900).distance,
+  it('puts the highest and lowest point evenly in the free height, and fills it', () => {
+    const { width, height, covered } = DESKTOP;
+    const points = localsOf([torrelago.location, ...torrelago.points]);
+    const view = fitOf([torrelago.location, ...torrelago.points], DESKTOP);
+    const { top, bottom, side } = spread(points, view.distance, view.ahead);
+    expect(top).toBeCloseTo(-bottom, 6);
+    // Free height less 40 px for the tags at each end, and the 5 % margin.
+    const tanY = Math.tan(Math.PI / 6) / (width / height);
+    const free = (tanY * (height - covered.top - covered.bottom - 80)) / height / 1.05;
+    expect(top).toBeCloseTo(free, 4);
+    expect(side).toBeLessThan((tanY * (width - 160)) / height / 1.05);
+  });
+  it('a mark on a mast stands higher on screen: the camera aims further north for it', () => {
+    const flat = [
+      { e: 0, n: -200, u: 0 },
+      { e: 0, n: 200, u: 0 },
+    ];
+    const mast = [...flat, { e: 0, n: 200, u: 42 }];
+    const a = fitPoints(flat, PITCH, Math.PI / 3, 1440, 900),
+      b = fitPoints(mast, PITCH, Math.PI / 3, 1440, 900);
+    expect(b.ahead).toBeGreaterThan(a.ahead);
+    expect(b.distance).toBeGreaterThan(a.distance);
+    // Ground only: the near half looks larger, so the aim is short of the middle.
+    expect(a.ahead).toBeLessThan(0);
+  });
+  it('looking straight down aims at the middle', () => {
+    const view = fitPoints(
+      [
+        { e: -100, n: -300, u: 0 },
+        { e: 100, n: 300, u: 0 },
+      ],
+      -Math.PI / 2,
+      Math.PI / 3,
+      1440,
+      900,
     );
+    expect(view.ahead).toBeCloseTo(0, 3);
+  });
+  it('lets a wide row of points be fitted by its width, and a phone stand further off', () => {
+    const row = [
+      { e: -400, n: -50, u: 0 },
+      { e: 400, n: 50, u: 0 },
+    ];
+    const desk = fitPoints(row, PITCH, Math.PI / 3, 1440, 900);
+    const { side } = spread(row, desk.distance, desk.ahead);
+    expect(side).toBeCloseTo((Math.tan(Math.PI / 6) * (1440 - 160)) / 1440 / 1.05, 4);
+    expect(fitPoints(row, PITCH, Math.PI / 3, 390, 844).distance).toBeGreaterThan(desk.distance);
   });
 });
 
