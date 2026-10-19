@@ -27,6 +27,30 @@ export const sOf = (f: PlotFrame, x: number) => (x - PLOT_MARGIN.left) / f.pxm;
 export const zOf = (f: PlotFrame, y: number) =>
   f.lo + (f.height - PLOT_MARGIN.bottom - y) / (f.pxm * f.exaggeration);
 
+/**
+ * Left edge of the cursor's distance chip (`width` px wide, centred on the cursor at `x`), kept
+ * inside the plot between `lo` and `hi`: at A or B a centred chip would hang off the plot and be
+ * cut by the canvas edge.
+ */
+export function chipLeft(x: number, width: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(x - width / 2, hi - width));
+}
+
+/** Padding (px) of the dark plate under a value written over the points. */
+export const VALUE_PAD = { x: 3, y: 2 };
+
+/**
+ * Writes a value over the plot on a plate of the drawer's ink, so the points behind (a building's
+ * roof and walls) never run through its digits. The text is left aligned at `x`, its middle at `y`.
+ */
+function plateText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number) {
+  const width = ctx.measureText(text).width;
+  ctx.fillStyle = TOKENS['ink-1'];
+  ctx.fillRect(x - VALUE_PAD.x, y - 7 - VALUE_PAD.y, width + 2 * VALUE_PAD.x, 14 + 2 * VALUE_PAD.y);
+  ctx.fillStyle = TOKENS['fg-1'];
+  ctx.fillText(text, x, y);
+}
+
 const classColor = (cls: number) => ASPRS_CLASSES[cls]?.color ?? '#9aa5b1';
 const rgbCss = (rgb: number, alpha: number) =>
   `rgba(${(rgb >> 16) & 255},${(rgb >> 8) & 255},${rgb & 255},${alpha.toFixed(2)})`;
@@ -143,10 +167,9 @@ export function drawProfile(ctx: CanvasRenderingContext2D, input: PlotInput) {
     ctx.lineTo(x, top + 0.5);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = TOKENS['fg-1'];
     ctx.textAlign = 'left';
-    ctx.fillText(b.label, xOf(f, b.s0), Math.max(plotTop + 6, top - 9));
-    ctx.fillText(number(b.height, 1), x + 6, (top + bottom) / 2);
+    plateText(ctx, b.label, xOf(f, b.s0), Math.max(plotTop + 6, top - 9));
+    plateText(ctx, number(b.height, 1), x + 6, (top + bottom) / 2);
   }
 
   // The cursor: a yellow line, the distance on a yellow label and a ring on the point.
@@ -161,11 +184,13 @@ export function drawProfile(ctx: CanvasRenderingContext2D, input: PlotInput) {
     const text = number(cursor.s, 1);
     ctx.font = '500 12px "IBM Plex Mono", monospace';
     const w = ctx.measureText(text).width + 10;
+    // Over the cursor, but inside the plot at either end of the line.
+    const left = chipLeft(x, w, PLOT_MARGIN.left, plotRight);
     ctx.fillStyle = TOKENS.sig;
-    ctx.fillRect(x - w / 2, 2, w, 17);
+    ctx.fillRect(left, 2, w, 17);
     ctx.fillStyle = TOKENS['sig-ink'];
     ctx.textAlign = 'center';
-    ctx.fillText(text, x, 11);
+    ctx.fillText(text, left + w / 2, 11);
     if (cursor.point !== null) {
       const y = yOf(f, points.z[cursor.point]!);
       ctx.strokeStyle = TOKENS.sig;
