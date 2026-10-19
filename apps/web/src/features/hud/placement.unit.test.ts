@@ -270,6 +270,33 @@ describe('edge chips', () => {
     expect(placed!.side).toBe('left');
     expect(intersects(box(placed!), label)).toBe(false);
   });
+  it('slides a chip off an asset’s mark, but never goes missing for one', () => {
+    // A critical asset's mark (22 px) right where the chip of a far installation would land.
+    const chip = edgeChip(free, size, { x: 2000, y: 400 }, 0)!;
+    const mark: Box = {
+      left: chip.left + 40,
+      top: chip.top,
+      right: chip.left + 62,
+      bottom: chip.top + 22,
+    };
+    const box = (c: { left: number; top: number }) => ({
+      left: c.left,
+      top: c.top,
+      right: c.left + size.width,
+      bottom: c.top + size.height,
+    });
+    const [placed] = placeChips([{ ...chip, ...size }], free, [], [mark]);
+    expect(intersects(box(placed!), mark)).toBe(false);
+    // An edge full of marks: the chip stays where it was, over them.
+    const marks = Array.from({ length: 60 }, (_, i) => ({
+      left: chip.left,
+      right: chip.left + size.width,
+      top: free.top + i * 15,
+      bottom: free.top + i * 15 + 22,
+    }));
+    const [kept] = placeChips([{ ...chip, ...size }], free, [], marks);
+    expect(kept).toMatchObject({ left: chip.left, top: chip.top });
+  });
   it('leaves a chip out when its whole edge is covered', () => {
     const wall: Box = { left: 1000, top: 0, right: 1440, bottom: 900 };
     const chip = edgeChip(free, size, { x: 2000, y: 400 }, 0)!;

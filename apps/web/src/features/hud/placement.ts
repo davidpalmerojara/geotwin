@@ -277,31 +277,43 @@ export function pickChips<T extends { distance: number }>(
 /**
  * Lays chips out along their edges (in the given order) clear of each other and of the plates
  * floating inside the free area (a card beside its asset): a chip that would land on one slides
- * along its edge to the nearest free spot, and is left out (null) when there is none.
+ * along its edge to the nearest free spot, and is left out (null) when there is none. `marks`
+ * (the assets' marks in the scene) are avoided too when the edge has room; a chip never goes
+ * missing for one.
  */
-export function placeChips<T extends EdgeChip & Size>(chips: T[], free: Box, plates: Box[]) {
+export function placeChips<T extends EdgeChip & Size>(
+  chips: T[],
+  free: Box,
+  plates: Box[],
+  marks: Box[] = [],
+) {
   const placed: T[] = [];
   return chips.map((chip) => {
-    const obstacles = [...plates, ...placed.map((p) => boxOf(p.left, p.top, p))];
-    const fits = (left: number, top: number) =>
-      left >= free.left - 0.5 &&
-      left + chip.width <= free.right + 0.5 &&
-      top >= free.top - 0.5 &&
-      top + chip.height <= free.bottom + 0.5 &&
-      !obstacles.some((o) => intersects(boxOf(left, top, chip), o, 3));
-    const along = chip.side === 'left' || chip.side === 'right';
-    const start = along ? chip.top : chip.left;
-    const size = along ? chip.height : chip.width;
-    const spots = [
-      start,
-      ...obstacles.flatMap((o) =>
-        along ? [o.top - 4 - size, o.bottom + 4] : [o.left - 4 - size, o.right + 4],
-      ),
-    ].sort((a, b) => Math.abs(a - start) - Math.abs(b - start));
-    const spot = spots.find((s) => (along ? fits(chip.left, s) : fits(s, chip.top)));
-    if (spot === undefined) return null;
-    const next = along ? { ...chip, top: spot } : { ...chip, left: spot };
-    placed.push(next);
+    const next =
+      placeChip(chip, free, [...plates, ...placed.map((p) => boxOf(p.left, p.top, p)), ...marks]) ??
+      placeChip(chip, free, [...plates, ...placed.map((p) => boxOf(p.left, p.top, p))]);
+    if (next) placed.push(next);
     return next;
   });
+}
+
+function placeChip<T extends EdgeChip & Size>(chip: T, free: Box, obstacles: Box[]): T | null {
+  const fits = (left: number, top: number) =>
+    left >= free.left - 0.5 &&
+    left + chip.width <= free.right + 0.5 &&
+    top >= free.top - 0.5 &&
+    top + chip.height <= free.bottom + 0.5 &&
+    !obstacles.some((o) => intersects(boxOf(left, top, chip), o, 3));
+  const along = chip.side === 'left' || chip.side === 'right';
+  const start = along ? chip.top : chip.left;
+  const size = along ? chip.height : chip.width;
+  const spots = [
+    start,
+    ...obstacles.flatMap((o) =>
+      along ? [o.top - 4 - size, o.bottom + 4] : [o.left - 4 - size, o.right + 4],
+    ),
+  ].sort((a, b) => Math.abs(a - start) - Math.abs(b - start));
+  const spot = spots.find((s) => (along ? fits(chip.left, s) : fits(s, chip.top)));
+  if (spot === undefined) return null;
+  return along ? { ...chip, top: spot } : { ...chip, left: spot };
 }

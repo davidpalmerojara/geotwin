@@ -182,7 +182,18 @@ export function EdgeChips() {
         top: b.top + (canvas?.top ?? 0),
         bottom: b.bottom + (canvas?.top ?? 0),
       }));
-      const placed = placeChips(extra ? [...shown, extra] : shown, free, [...plates, ...values]);
+      // The assets' marks, which a chip slides off when its edge has room (a critical asset's
+      // mark under a chip would hide it).
+      const marks = [...document.querySelectorAll<HTMLElement>('.scene-tags .scene-mark')]
+        .filter((m) => m.style.display !== 'none')
+        .map((m) => m.getBoundingClientRect())
+        .filter((b) => b.width > 0);
+      const placed = placeChips(
+        extra ? [...shown, extra] : shown,
+        free,
+        [...plates, ...values],
+        marks,
+      );
       const tail = extra ? placed.pop() : null;
       setChips(placed.filter((c): c is Chip => !!c));
       setMore(tail ? { count: picked.more, left: tail.left, top: tail.top } : null);
