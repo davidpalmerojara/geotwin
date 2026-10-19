@@ -7,6 +7,8 @@ import {
   SIDE_GAP,
   type LabelItem,
 } from './label-layout';
+import { boxesAlong } from '../scene/scene-marks';
+import { tickLabelBox } from '../section/section-math';
 
 const box = (item: LabelItem, place: { dx: number; dy: number; compact: boolean }) => {
   const width = place.compact ? item.shortWidth! : item.width;
@@ -40,6 +42,25 @@ describe('dimension label layout', () => {
     const [p] = layoutLabels([item], [marker]);
     expect(p!.dy).not.toBe(0);
     expect(overlap(box(item, p!), marker)).toBe(false);
+  });
+  it('keeps off the line A–B and its distance ticks, seen from afar', () => {
+    // About 500 m away a 38 m building is some 30 px tall on screen: E2's value, beside the middle
+    // of its dimension, lands across the line running behind it and on the «150» of its tick.
+    const e2 = { x: 700, y: 452, ...labelSize('E2 · 37,9 m'), side: 'right' as const };
+    const item = { ...e2, shortWidth: labelSize('E2').width };
+    const line = boxesAlong([
+      { x: 420, y: 470 },
+      { x: 980, y: 445 },
+    ]);
+    const tick = tickLabelBox({ x: 760, y: 455 }, '150');
+    const [free] = layoutLabels([item]);
+    expect(line.some((b) => overlap(box(item, free!), b))).toBe(true);
+    expect(overlap(box(item, free!), tick)).toBe(true);
+    const [p] = layoutLabels([item], [...line, tick]);
+    for (const b of [...line, tick]) expect(overlap(box(item, p!), b)).toBe(false);
+    // It steps up, above the line, and keeps its value.
+    expect(p!.dy).toBeLessThan(0);
+    expect(p!.compact).toBe(false);
   });
   it('steps a label that would land on another (Torrelago: E3 and E4 side by side)', () => {
     const e3 = { x: 600, y: 420, ...labelSize('E3 · 38,0 m'), side: 'right' as const };

@@ -9,6 +9,8 @@ import {
   isClipped,
   makeLine,
   mergeSections,
+  tickDistances,
+  tickLabelBox,
   grouped,
   percentile,
   plotScale,
@@ -246,5 +248,19 @@ describe('refineOnGround', () => {
     expect(refineOnGround(() => 3, 420)).toBe(420);
     // A step that would move the point further than allowed.
     expect(refineOnGround((t) => (t - 900) * 0.01, 420)).toBe(420);
+  });
+});
+
+describe('distance ticks along the line in the scene', () => {
+  it('goes every 50 m, every 100 m on long lines, never right at B', () => {
+    expect(tickDistances(336.2)).toEqual([50, 100, 150, 200, 250, 300]);
+    expect(tickDistances(310)).toEqual([50, 100, 150, 200, 250]);
+    expect(tickDistances(750)).toEqual([100, 200, 300, 400, 500, 600, 700]);
+  });
+  it('has its label centred under the tick', () => {
+    const b = tickLabelBox({ x: 100, y: 200 }, '150');
+    expect((b.left + b.right) / 2).toBe(100);
+    expect(b.top).toBeGreaterThan(200);
+    expect(b.right - b.left).toBeGreaterThanOrEqual(3 * 6.6);
   });
 });

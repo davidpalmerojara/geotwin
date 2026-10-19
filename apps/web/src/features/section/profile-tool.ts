@@ -30,7 +30,14 @@ import { DimensionLabels, drawDimensions, type Dimension } from '../measure/dime
 import { renderUntil } from '../measure/render-until';
 import { clearForRedraw } from '../measure/entities';
 import { addSceneMarks, boxesAlong } from '../scene/scene-marks';
-import { fromLine, makeLine, refineOnGround, toLine } from './section-math';
+import {
+  fromLine,
+  makeLine,
+  refineOnGround,
+  tickDistances,
+  tickLabelBox,
+  toLine,
+} from './section-math';
 
 const SIG = Color.fromCssColorString('#FFD21A'),
   SIG_INK = Color.fromCssColorString('#191500'),
@@ -71,6 +78,9 @@ export class ProfileScene {
   private readonly labels: DimensionLabels;
   /** The line on the ground and the plane's outline as drawn, for `screenMarks`. */
   private outline: Cartesian3[][] = [];
+  /** The line on the ground (a point every 20 m) and its distance ticks, for `lineBoxes`. */
+  private trace: Cartesian3[] = [];
+  private ticks: { at: Cartesian3; text: string }[] = [];
   private readonly removeMarks: () => void;
 
   constructor(
@@ -81,8 +91,10 @@ export class ProfileScene {
   ) {
     this.added = viewer.dataSources.add(this.source);
     const scene = viewer.scene;
-    // The heights' labels keep off the A and B markers (their point and letter).
-    this.labels = new DimensionLabels(scene, () => this.markerBoxes());
+    // The heights' labels keep off the A and B markers (their point and letter), and off the line
+    // and its distance ticks: seen from afar a building's height is short on screen and its value
+    // would sit across the line.
+    this.labels = new DimensionLabels(scene, () => [...this.markerBoxes(), ...this.lineBoxes()]);
     // The installation labels keep off A, B, the line and the outline when they can.
     this.removeMarks = addSceneMarks(() => this.screenMarks());
     this.handler = new ScreenSpaceEventHandler(scene.canvas);
@@ -203,7 +215,20 @@ export class ProfileScene {
     });
   }
 
-  /** A and B, the line and the plane's outline on screen (canvas px), as small boxes. */
+  /** The line on the ground and the labels of its distance ticks on screen (canvas px). */
+  private lineBoxes() {
+    if (this.viewer.isDestroyed()) return [];
+    const scene = this.viewer.scene;
+    return [
+      ...boxesAlong(this.trace.map((p) => SceneTransforms.worldToWindowCoordinates(scene, p))),
+      ...this.ticks.flatMap(({ at, text }) => {
+        const p = SceneTransforms.worldToWindowCoordinates(scene, at);
+        return p ? [tickLabelBox(p, text)] : [];
+      }),
+    ];
+  }
+
+  /** A and B, the line, its ticks and the plane's outline on screen (canvas px), as small boxes. */
   private screenMarks() {
     if (this.viewer.isDestroyed()) return [];
     const scene = this.viewer.scene;
@@ -212,6 +237,10 @@ export class ProfileScene {
       ...this.outline.flatMap((points) =>
         boxesAlong(points.map((p) => SceneTransforms.worldToWindowCoordinates(scene, p))),
       ),
+      ...this.ticks.flatMap(({ at, text }) => {
+        const p = SceneTransforms.worldToWindowCoordinates(scene, at);
+        return p ? [tickLabelBox(p, text)] : [];
+      }),
     ];
   }
 
@@ -225,6 +254,8 @@ export class ProfileScene {
     clearForRedraw(entities);
     this.labels.set([]);
     this.outline = [];
+    this.trace = [];
+    this.ticks = [];
     const { a, b, summary, cursor } = this.view;
     const mark = (id: string, p: LngLat, text: string) =>
       entities.add({
@@ -276,7 +307,8 @@ export class ProfileScene {
       // The line on the ground, every 2 m on the DTM; dashed where the cloud hides it.
       const ground = along(0, line.length, 0.3);
       // Every tenth point is enough to follow it on screen.
-      this.outline.push(ground.filter((_, i) => i % 10 === 0 || i === ground.length - 1));
+      this.trace = ground.filter((_, i) => i % 10 === 0 || i === ground.length - 1);
+      this.outline.push(this.trace);
       entities.add({
         id: 'perfil:linea',
         polyline: {
@@ -296,13 +328,15 @@ export class ProfileScene {
         },
       });
       // Distance ticks every 50 m (100 m on long lines).
-      const step = line.length > 700 ? 100 : 50;
-      for (let s = step; s < line.length - step / 3; s += step)
+      for (const s of tickDistances(line.length)) {
+        const at = this.position(fromLine(line, s), 0.3),
+          text = number(s, 0);
+        this.ticks.push({ at, text });
         entities.add({
           id: `perfil:marca:${s}`,
-          position: this.position(fromLine(line, s), 0.3),
+          position: at,
           label: {
-            text: number(s, 0),
+            text,
             font: TICK_FONT,
             fillColor: FG,
             outlineColor: INK,
@@ -318,6 +352,7 @@ export class ProfileScene {
             disableDepthTestDistance: Number.POSITIVE_INFINITY,
           },
         });
+      }
       // The section plane: a dashed outline up to just over the highest point.
       if (summary?.top != null) {
         const n = summary.geoid;

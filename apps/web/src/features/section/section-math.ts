@@ -12,6 +12,24 @@ const A_WGS84 = 6378137;
 const E2 = 0.00669437999014;
 const DEG = Math.PI / 180;
 
+/** Distance ticks along the line in the scene: every 50 m, every 100 m on lines over 700 m. */
+export function tickDistances(length: number) {
+  const step = length > 700 ? 100 : 50;
+  const out: number[] = [];
+  for (let s = step; s < length - step / 3; s += step) out.push(s);
+  return out;
+}
+
+/**
+ * Screen box (canvas px) of a distance tick's label: its metres in 11 px mono with a 3 px dark
+ * outline, centred 8 px below the tick at `at`. The E1…En heights keep off it.
+ */
+export function tickLabelBox(at: { x: number; y: number }, text: string) {
+  const width = text.length * 6.7 + 4,
+    top = at.y + 8 - 2;
+  return { left: at.x - width / 2, right: at.x + width / 2, top, bottom: top + 18 };
+}
+
 /** Metres per degree of longitude and latitude at a latitude (WGS 84). */
 export function metresPerDegree(lat: number) {
   const sin = Math.sin(lat * DEG);
