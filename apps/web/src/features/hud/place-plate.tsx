@@ -1,25 +1,70 @@
 import { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
-import type { Alert } from '@geotwin/shared';
-import { useInstallations, useNetworkAlerts, useOrganization, useSummary } from '../../hooks/data';
+import {
+  useAlerts,
+  useInstallations,
+  useNetworkAlerts,
+  useOrganization,
+  useSummary,
+} from '../../hooks/data';
 import { useUI } from '../../stores/ui';
 import { useTool } from '../../stores/tool';
 import { useScene } from '../../stores/viewer';
 import { count } from '../../lib/format';
+import { useAlertsScope } from '../alerts/alerts-scope';
 import { Brand, Caret, Glyph, Sim } from './glyphs';
 import { GeoTwinMenu } from './geotwin-menu';
+import { annunciatorAlarm, type Elsewhere } from './annunciator';
 
-/** The most severe active alert, the most recent among equals, and how many others there are. */
-export function activeAlarm(alerts: Alert[] | undefined) {
-  const active = (alerts ?? []).filter((a) => a.status === 'active');
-  if (!active.length) return null;
-  const sorted = [...active].sort(
-    (a, b) =>
-      Number(b.severity === 'critical') - Number(a.severity === 'critical') ||
-      b.triggered_at.localeCompare(a.triggered_at),
+export { activeAlarm } from './annunciator';
+
+/** The annunciator's alarm: the chosen installation's, or the network's (see annunciator.ts). */
+function useAlarm() {
+  const chosen = !!useUI((s) => s.installationId);
+  const own = useAlerts(undefined, 'active').data,
+    network = useNetworkAlerts('active').data;
+  return annunciatorAlarm(chosen, own, network);
+}
+
+/** Opens Alertas for the whole network (from «+n en otras instalaciones»), or as it is. */
+function useOpenAlerts() {
+  const setPage = useUI((s) => s.setPage),
+    setScope = useAlertsScope((s) => s.setScope);
+  return (scope: 'installation' | 'network') => {
+    setScope(scope);
+    setPage('alerts');
+  };
+}
+
+const elsewhereLabel = (e: Elsewhere) =>
+  `${count(e.count, 'alerta activa', 'alertas activas')} en otras instalaciones${
+    e.severity === 'critical' ? ', alguna crítica' : ''
+  }. Abre Alertas de toda la red.`;
+
+/** «+n en otras instalaciones»: the active alerts of the installations not chosen. */
+function ElsewhereCell({
+  elsewhere,
+  phone = false,
+  onOpen,
+}: {
+  elsewhere: Elsewhere;
+  phone?: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={phone ? 'link-plain annun-elsewhere' : 'annun-cell annun-elsewhere'}
+      data-testid="annunciator-elsewhere"
+      title="Abre Alertas de toda la red"
+      aria-label={elsewhereLabel(elsewhere)}
+      onClick={onOpen}
+    >
+      <Glyph status={elsewhere.severity} />
+      <span className="num">+{elsewhere.count}</span>
+      <span className="annun-where">en otras instalaciones</span>
+    </button>
   );
-  const same = active.filter((a) => a.severity === sorted[0]!.severity).length;
-  return { alert: sorted[0]!, others: sorted.length - 1, same };
 }
 
 /** The installation of the URL, or none when a shared link names one that no longer exists. */
@@ -59,8 +104,9 @@ function InstallationSelect() {
 /**
  * Top-left plate: the GeoTwin menu, the workspace with its «demo» tag, the installation selector
  * and the annunciator (asset counts, which open Activos, and the active alarm, which opens
- * Alertas). The alarm is the network's, whatever installation is chosen: an operator looking at
- * one installation still hears about another. On narrower screens the plate gives way in steps
+ * Alertas). Counts and alarm follow the chosen installation; the alerts of the others are
+ * counted in «+n en otras instalaciones», which opens Alertas for the whole network, so an
+ * operator looking at one installation still hears about another. On narrower screens the plate gives way in steps
  * (container queries on the top-left column, see globals.css): the workspace name goes first,
  * then the annunciator moves to a second row, then the alarm to a third, so the parts never
  * overprint each other and the alarm's asset stays readable.
@@ -69,7 +115,8 @@ export function PlacePlate() {
   const setPage = useUI((s) => s.setPage);
   const summary = useSummary().data,
     region = useOrganization().data?.region,
-    alarm = activeAlarm(useNetworkAlerts('active').data);
+    { alarm, elsewhere } = useAlarm(),
+    openAlerts = useOpenAlerts();
   const [menu, setMenu] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const workspace = region?.split(' (')[0] ?? '—';
@@ -129,7 +176,7 @@ export function PlacePlate() {
             className={`annun-cell annun-alarm annun-${alarm.alert.severity}`}
             data-testid="annunciator-alarm"
             title="Abre Alertas"
-            onClick={() => setPage('alerts')}
+            onClick={() => openAlerts('installation')}
           >
             <Glyph status={alarm.alert.severity} />
             <b>{alarm.alert.severity === 'critical' ? 'Crítico' : 'Advertencia'}</b>
@@ -138,6 +185,7 @@ export function PlacePlate() {
             {alarm.others > 0 && <span className="num annun-more">+{alarm.others}</span>}
           </button>
         )}
+        {elsewhere && <ElsewhereCell elsewhere={elsewhere} onOpen={() => openAlerts('network')} />}
       </div>
     </div>
   );
@@ -171,7 +219,8 @@ export function PhonePlate() {
   const { installationId, installations } = useInstallationChoice();
   const summary = useSummary().data,
     region = useOrganization().data?.region,
-    alarm = activeAlarm(useNetworkAlerts('active').data);
+    { alarm, elsewhere } = useAlarm(),
+    openAlerts = useOpenAlerts();
   const setPalette = useTool((s) => s.setPalette);
   const api = useScene((s) => s.api);
   const [menu, setMenu] = useState(false);
@@ -259,7 +308,7 @@ export function PhonePlate() {
           className={`phone-annun annun-${alarm.alert.severity}`}
           data-testid="annunciator-alarm"
           title="Abre Alertas"
-          onClick={() => setPage('alerts')}
+          onClick={() => openAlerts('installation')}
         >
           <Glyph status={alarm.alert.severity} />
           <b>
@@ -279,6 +328,11 @@ export function PhonePlate() {
           )}
           <span className="annun-go">Ver</span>
         </button>
+      )}
+      {elsewhere && (
+        <div className={`phone-annun phone-elsewhere ${alarm ? '' : 'alone'}`}>
+          <ElsewhereCell elsewhere={elsewhere} phone onOpen={() => openAlerts('network')} />
+        </div>
       )}
     </div>
   );

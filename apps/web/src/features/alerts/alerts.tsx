@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import type { Alert } from '@geotwin/shared';
-import { useAlerts, useAssets, useSync } from '../../hooks/data';
+import { useAlerts, useAssets, useNetworkAlerts, useSync } from '../../hooks/data';
+import { useAlertsScope } from './alerts-scope';
 import { useUI } from '../../stores/ui';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../components/ui/dialog';
@@ -18,9 +19,16 @@ export function Alerts() {
     [incident, setIncident] = useState<Alert | null>(null),
     [creating, setCreating] = useState(false);
   const selected = useUI((s) => s.selectedAssetId),
+    installationId = useUI((s) => s.installationId),
     assets = useAssets(),
-    alerts = useAlerts(undefined, status),
     sync = useSync();
+  // With an installation chosen, its alerts or the whole network's (see alerts-scope.ts).
+  const scope = useAlertsScope((s) => s.scope),
+    setScope = useAlertsScope((s) => s.setScope);
+  const network = !installationId || scope === 'network';
+  const own = useAlerts(undefined, status),
+    all = useNetworkAlerts(status);
+  const alerts = network ? all : own;
   const [assetId, setAssetId] = useState(''),
     [severity, setSeverity] = useState<'warning' | 'critical'>('warning'),
     [message, setMessage] = useState('');
@@ -57,6 +65,16 @@ export function Alerts() {
             Resueltas
           </button>
         </div>
+        {installationId && (
+          <div className="segmented" role="group" aria-label="Alcance">
+            <button type="button" aria-pressed={!network} onClick={() => setScope('installation')}>
+              Esta instalación
+            </button>
+            <button type="button" aria-pressed={network} onClick={() => setScope('network')}>
+              Toda la red
+            </button>
+          </div>
+        )}
         <span className="f1" role="status">
           {total === undefined
             ? '—'

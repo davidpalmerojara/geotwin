@@ -15,6 +15,8 @@ const sizes = [
 ];
 // A fixture asset used by no other spec, with one active incident while the test runs.
 const assetId = '20000000-0000-4000-8000-000000000010';
+// An asset of Torrelago (the installation with the longest name); assetId is the laguna's.
+const torrelagoAsset = '20000000-0000-4000-8000-000000000004';
 
 /** Pairs of plates (every element marked data-map-overlay) whose boxes overlap. */
 function overlaps(page: Page) {
@@ -177,13 +179,18 @@ for (const size of [
     request,
   }) => {
     test.setTimeout(150000);
-    const current = await request.get(`/api/alerts?asset_id=${assetId}&status=active`);
-    for (const old of await current.json()) await request.patch(`/api/alerts/${old.id}/resolve`);
-    const created = await request.post('/api/alerts', {
-      data: { asset_id: assetId, severity: 'warning', message: 'Revisión de la interfaz (E2E)' },
-    });
-    expect(created.status()).toBe(201);
-    const alert = (await created.json()) as { id: string };
+    // One alert in the laguna and one in Torrelago: with Torrelago chosen the plate holds its
+    // alarm and «+1 en otras instalaciones» at once.
+    const alerts: { id: string }[] = [];
+    for (const asset of [assetId, torrelagoAsset]) {
+      const current = await request.get(`/api/alerts?asset_id=${asset}&status=active`);
+      for (const old of await current.json()) await request.patch(`/api/alerts/${old.id}/resolve`);
+      const created = await request.post('/api/alerts', {
+        data: { asset_id: asset, severity: 'warning', message: 'Revisión de la interfaz (E2E)' },
+      });
+      expect(created.status()).toBe(201);
+      alerts.push((await created.json()) as { id: string });
+    }
     try {
       await page.setViewportSize(size);
       await openScene(page);
@@ -203,6 +210,10 @@ for (const size of [
         expect(layout.name.length).toBeGreaterThan(0);
         expect(layout.nameShown).toBeGreaterThanOrEqual(Math.min(layout.nameWidth, 60) - 0.5);
         await expect(alarm.getByText(/Advertencia|Crítico/)).toBeVisible();
+        if (choice === longest)
+          await expect(page.getByTestId('annunciator-elsewhere')).toContainText(
+            /\+\d+\s*en otras instalaciones/,
+          );
         expect(await overlaps(page)).toEqual([]);
         expect(await noScroll(page)).toEqual({ x: true, y: true, scrolled: true });
         expect((await coveredCredits(page)).covered).toEqual([]);
@@ -213,9 +224,72 @@ for (const size of [
       // The keys keep their names for screen readers at every width.
       await expect(page.getByRole('button', { name: 'Medir', exact: true })).toBeVisible();
     } finally {
-      await request.patch(`/api/alerts/${alert.id}/resolve`);
+      for (const alert of alerts) await request.patch(`/api/alerts/${alert.id}/resolve`);
     }
   });
+
+test('with an installation chosen the alarm is its own, and the others’ open Alertas for the whole network', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(150000);
+  const made: { id: string }[] = [];
+  for (const [asset, severity, message] of [
+    [torrelagoAsset, 'warning', 'Aviso de Torrelago (E2E)'],
+    [assetId, 'critical', 'Fallo en la laguna (E2E)'],
+  ] as const) {
+    const current = await request.get(`/api/alerts?asset_id=${asset}&status=active`);
+    for (const old of await current.json()) await request.patch(`/api/alerts/${old.id}/resolve`);
+    const created = await request.post('/api/alerts', {
+      data: { asset_id: asset, severity, message },
+    });
+    expect(created.status()).toBe(201);
+    made.push((await created.json()) as { id: string });
+  }
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openScene(page);
+    const alarm = page.getByTestId('annunciator-alarm'),
+      elsewhere = page.getByTestId('annunciator-elsewhere');
+    // The whole network: the laguna's critical alert is the alarm, nothing is «elsewhere».
+    await expect(alarm).toContainText('Crítico');
+    await expect(alarm).toContainText('Pasarela · cubierta del pabellón');
+    await expect(elsewhere).toHaveCount(0);
+    // Torrelago: its own warning, never the laguna's asset, and the laguna counted apart.
+    await page
+      .getByLabel('Seleccionar instalación')
+      .selectOption({ label: 'Torrelago · torres residenciales' });
+    await expect(alarm).toContainText('Pasarela LoRa · torre norte');
+    await expect(alarm).not.toContainText('cubierta del pabellón');
+    await expect(elsewhere).toContainText(/\+\d+\s*en otras instalaciones/);
+    await expect(elsewhere.locator('.glyph-critical')).toBeVisible();
+    await expect(elsewhere).toHaveAttribute('aria-label', /en otras instalaciones, alguna crítica/);
+    // It opens Alertas for the whole network; «Esta instalación» narrows it to Torrelago.
+    await elsewhere.click();
+    const sheet = page.getByTestId('section-sheet');
+    await expect(sheet).toHaveAttribute('data-sheet', 'alerts');
+    const scope = sheet.getByRole('group', { name: 'Alcance' });
+    await expect(scope.getByRole('button', { name: 'Toda la red' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(sheet).toContainText('Fallo en la laguna (E2E)');
+    await expect(sheet).toContainText('Aviso de Torrelago (E2E)');
+    await scope.getByRole('button', { name: 'Esta instalación' }).click();
+    await expect(sheet).not.toContainText('Fallo en la laguna (E2E)');
+    await expect(sheet).toContainText('Aviso de Torrelago (E2E)');
+    // The alarm itself opens Alertas for the chosen installation.
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+    await alarm.click();
+    await expect(sheet.getByRole('button', { name: 'Esta instalación' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  } finally {
+    for (const alert of made) await request.patch(`/api/alerts/${alert.id}/resolve`);
+  }
+});
 
 /** Whether the asset's mark is on screen and outside every plate (a docked card, a sheet). */
 function markInSight(page: Page, id: string) {

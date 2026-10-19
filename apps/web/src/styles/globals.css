@@ -994,6 +994,21 @@ textarea {
   color: var(--fg-1);
   font-size: 11.5px;
 }
+/* «+n en otras instalaciones»: the alerts of the installations not chosen (opens Alertas for the
+   whole network). Quieter than the alarm: no alarm background, the glyph gives the severity. */
+.annun-elsewhere {
+  flex: none;
+  gap: 6px;
+  color: var(--fg-1);
+  font-size: 12.5px;
+}
+.annun-elsewhere .num {
+  color: var(--fg-0);
+  font: 500 12px var(--mono);
+}
+.annun-elsewhere:hover {
+  color: var(--fg-0);
+}
 .tool-bar {
   display: flex;
   align-items: center;
@@ -2868,6 +2883,14 @@ table.data {
 .annun-go {
   margin-left: auto;
   color: var(--fg-1);
+}
+.phone-elsewhere .annun-elsewhere {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  width: 100%;
+  text-decoration: none;
 }
 .phone-row {
   display: flex;
