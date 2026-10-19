@@ -231,3 +231,63 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   expect(remaining.some((l: { name: string }) => l.name === name)).toBe(false);
   expect(errors).toEqual([]);
 });
+
+test('a sheet being processed shows its bar and stage under its name, in the text column', async ({
+  page,
+}) => {
+  // A sheet caught downloading, added to the list the API gives (the worker is too quick on the
+  // synthetic file to catch this state).
+  const processing = {
+    id: '30000000-0000-4000-8000-0000000000aa',
+    organization_id: '00000000-0000-4000-8000-000000000001',
+    name: 'PNOA_2025_CYL_357-4606_H30_NPC01',
+    kind: 'pointcloud',
+    status: 'processing',
+    stage: 'downloading',
+    progress: 1,
+    error: null,
+    source: {
+      filename: 'PNOA_2025_CYL_357-4606_H30_NPC01.LAZ',
+      format: 'laz',
+      size_bytes: 1,
+      sha256: 'e2e',
+    },
+    crs_in: 'EPSG:25830',
+    vertical: { datum: 'orthometric', override_m: null, geoid_offset_m: null, method: null },
+    point_count: null,
+    point_format: null,
+    bbox: null,
+    center: null,
+    height_range_m: null,
+    excluded: null,
+    tileset_url: null,
+    terrain_url: null,
+    attribution: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  await page.route(
+    (url) => url.pathname === '/api/layers',
+    async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      const response = await route.fetch();
+      const list = (await response.json()) as unknown[];
+      await route.fulfill({ response, json: [processing, ...list] });
+    },
+  );
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/gemelo');
+  const panel = await openCapas(page);
+  const row = panel.locator('.layer-row', { has: page.getByText('357-4606') });
+  await expect(row).toHaveAttribute('data-status', 'processing');
+  const stage = row.locator('.layer-meta', { hasText: 'descargando' });
+  await expect(stage).toBeVisible();
+  const [name, text, bar] = await Promise.all([
+    row.locator('strong').boundingBox(),
+    stage.boundingBox(),
+    row.locator('progress').boundingBox(),
+  ]);
+  // The stage and the bar start where the name does, past the eye's place.
+  expect(Math.abs(text!.x - name!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(bar!.x - name!.x)).toBeLessThanOrEqual(1);
+});

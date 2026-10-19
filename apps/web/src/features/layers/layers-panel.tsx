@@ -667,7 +667,8 @@ function LayerRow({ layer, onDelete }: { layer: Layer; onDelete: () => void }) {
         </button>
       </div>
       {layer.status === 'processing' && (
-        <>
+        // Under the name, in the row's text column (past the eye's place), like the details.
+        <div className="layer-progress">
           <progress
             max={100}
             value={layer.progress}
@@ -680,7 +681,7 @@ function LayerRow({ layer, onDelete }: { layer: Layer; onDelete: () => void }) {
               reintentará cuando vuelva a estar en marcha.
             </small>
           )}
-        </>
+        </div>
       )}
       {layer.status === 'failed' && <p className="layer-error">{layer.error}</p>}
       {isReady && render === 'error' && (

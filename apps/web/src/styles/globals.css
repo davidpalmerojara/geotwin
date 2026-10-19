@@ -1200,6 +1200,12 @@ progress::-moz-progress-bar {
 .layer-details[hidden] {
   display: none;
 }
+/* While a sheet is processing: its bar and stage under the name, as the details. */
+.layer-progress {
+  display: grid;
+  gap: 2px;
+  padding-left: 26px;
+}
 .layer-status {
   display: inline-flex;
   font-family: var(--mono);
