@@ -1,5 +1,5 @@
 /**
- * One-key shortcuts of the viewer (1–5, C, 0, N, /, R, [ and ]) and the rule that keeps them out of the way
+ * One-key shortcuts of the viewer (1–5, C, 0, F, N, /, R, [ and ]) and the rule that keeps them out of the way
  * (WCAG 2.1.4): never while typing in a field, never with Ctrl, ⌘ or Alt, never behind a modal
  * dialog, and never when the user has switched them off in Ajustes. Ctrl/⌘+K and Esc always work.
  */
@@ -11,6 +11,7 @@ export type ShortcutAction =
   | 'radius'
   | 'layers'
   | 'home'
+  | 'centre'
   | 'north'
   | 'palette'
   | 'acknowledge'
@@ -27,6 +28,7 @@ export const SHORTCUTS: [string, string][] = [
   ['5', 'Radio'],
   ['C', 'Capas'],
   ['0', 'Encuadre inicial'],
+  ['F', 'Centrar el activo de la ficha'],
   ['N', 'Norte arriba'],
   ['/', 'Ir a…'],
   ['[ ]', 'Estrecha o ensancha la franja del perfil'],
@@ -43,6 +45,7 @@ const KEYS: Record<string, ShortcutAction> = {
   '5': 'radius',
   c: 'layers',
   '0': 'home',
+  f: 'centre',
   n: 'north',
   '/': 'palette',
   r: 'acknowledge',

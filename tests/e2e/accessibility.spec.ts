@@ -186,10 +186,12 @@ async function noShortcut(page: Page, field: Locator) {
   // By id: a modal dialog hides the rest of the page from the accessibility tree.
   const measure = page.locator('#tool-measure'),
     capas = page.locator('#tool-layers');
-  await page.keyboard.type('2c5');
-  await expect(field).toHaveValue(/2c5$/);
+  await page.keyboard.type('2c5f');
+  await expect(field).toHaveValue(/2c5f$/);
   await expect(measure).toHaveAttribute('aria-pressed', 'false');
   await expect(capas).toHaveAttribute('aria-expanded', 'false');
+  // F «Centrar activo» did not fire either: no flight, and no note.
+  await expect(page.getByTestId('hint')).toHaveCount(0);
 }
 
 test('shortcuts never fire in the rename field or the palette, and do nothing when switched off', async ({

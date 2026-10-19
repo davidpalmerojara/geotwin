@@ -157,6 +157,48 @@ function flyToPoints(
   );
   v.scene.requestRender();
 }
+/**
+ * Close-up of an asset at its mounting height: 650 m away at −45°, looking along `heading`, aimed
+ * so the asset lands in the middle of what the plates leave visible.
+ */
+function flyToAsset(
+  v: Viewer,
+  asset: Asset,
+  ground: Ground,
+  relief: boolean,
+  heading: number,
+  complete?: () => void,
+  cancel?: () => void,
+) {
+  const { lng, lat } = asset.location;
+  const position = Cartesian3.fromDegrees(
+    lng,
+    lat,
+    ground(lng, lat) + (relief ? asset.mount_height_m : 0),
+  );
+  const pitch = CesiumMath.toRadians(-45);
+  const canvas = v.scene.canvas;
+  const aim = aimOffsets(
+    650,
+    viewerFov(v),
+    canvas.clientWidth,
+    canvas.clientHeight,
+    coveredByOverlays(v),
+  );
+  const sphere = shiftedOnGround(
+    new BoundingSphere(position, 60),
+    heading,
+    aim.shift,
+    liftToGround(aim.lift, pitch),
+  );
+  v.camera.flyToBoundingSphere(sphere, {
+    duration: flightSeconds(1),
+    offset: new HeadingPitchRange(heading, pitch, 650),
+    complete,
+    cancel,
+  });
+  v.scene.requestRender();
+}
 interface Props {
   assets: Asset[];
   installations: Installation[];
@@ -677,38 +719,18 @@ function CesiumView({
     flyOnOwn(autoFlight, v, poseOf, (complete, cancel) => {
       const asset = assetsRef.current.find((a) => a.id === selectedId);
       if (!asset) return;
-      const { lng, lat } = asset.location;
-      const position = Cartesian3.fromDegrees(
-        lng,
-        lat,
-        groundRef.current(lng, lat) + (reliefRef.current ? asset.mount_height_m : 0),
-      );
-      // Aimed so the asset lands in the middle of what the plates leave visible.
-      const pitch = CesiumMath.toRadians(-45);
-      const canvas = v.scene.canvas;
-      const aim = aimOffsets(
-        650,
-        viewerFov(v),
-        canvas.clientWidth,
-        canvas.clientHeight,
-        coveredByOverlays(v),
-      );
-      const sphere = shiftedOnGround(
-        new BoundingSphere(position, 60),
+      flyToAsset(
+        v,
+        asset,
+        groundRef.current,
+        reliefRef.current,
         0,
-        aim.shift,
-        liftToGround(aim.lift, pitch),
-      );
-      v.camera.flyToBoundingSphere(sphere, {
-        duration: flightSeconds(1),
-        offset: new HeadingPitchRange(0, pitch, 650),
-        complete: () => {
+        () => {
           complete();
           checkFraming();
         },
         cancel,
-      });
-      v.scene.requestRender();
+      );
     });
     return () => stopWaiting?.();
   }, [selectedId, ready, selectedLoaded]);
@@ -946,6 +968,16 @@ function CesiumView({
         ground: (lng, lat) => groundRef.current(lng, lat),
         labelBox: (id) => labelById.current.get(id) ?? null,
         home: () => flyToPoints(v, actions.current.framePoints, 1, groundRef.current),
+        // «Centrar activo» (F): the same close-up as a selection, keeping the camera's heading.
+        centreAsset: (id) => {
+          const asset = assetsRef.current.find((a) => a.id === id);
+          if (!asset || v.isDestroyed()) return false;
+          const heading = v.camera.heading;
+          flyOnOwn(autoFlight, v, poseOf, (complete, cancel) =>
+            flyToAsset(v, asset, groundRef.current, reliefRef.current, heading, complete, cancel),
+          );
+          return true;
+        },
         togglePhotoreal: () => void actions.current.togglePhotoreal(),
         toggleBuildings: () => void actions.current.toggleBuildings(),
       }),

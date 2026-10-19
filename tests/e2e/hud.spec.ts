@@ -258,6 +258,50 @@ test('a shared link to an asset with a sheet frames it between the sheet and its
   await expect(page.getByTestId('cesium-view')).toBeFocused();
 });
 
+test('F «Centrar activo» flies back to the asset of the card, and says so when there is none', async ({
+  page,
+}) => {
+  test.setTimeout(150000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openScene(page, `/gemelo?activo=${assetId}`);
+  await expect(card(page)).toBeVisible();
+  await expect.poll(() => markInSight(page, assetId), { timeout: 90000 }).toBe('in sight');
+  const centre = page.getByRole('button', { name: 'Centrar activo' });
+  await expect(centre).toBeVisible();
+  await expect(centre).toHaveAttribute('aria-keyshortcuts', 'F');
+  // The camera goes 3 km east, looking further east: the asset is behind it...
+  await page.evaluate(() => {
+    const v = (window as unknown as { __geotwinViewer: import('cesium').Viewer }).__geotwinViewer;
+    const at = v.camera.positionCartographic;
+    v.camera.setView({
+      destination: v.scene.globe.ellipsoid.cartographicToCartesian({
+        longitude: at.longitude + 0.0006,
+        latitude: at.latitude,
+        height: 600,
+      } as import('cesium').Cartographic),
+      orientation: { heading: Math.PI / 2, pitch: -0.4, roll: 0 },
+    });
+    v.scene.requestRender();
+  });
+  await expect.poll(() => markInSight(page, assetId)).not.toBe('in sight');
+  // ...and F brings it back into the free area, keeping the heading.
+  await page.keyboard.press('f');
+  await expect.poll(() => markInSight(page, assetId), { timeout: 30000 }).toBe('in sight');
+  const heading = await page.evaluate(
+    () =>
+      (window as unknown as { __geotwinViewer: import('cesium').Viewer }).__geotwinViewer.camera
+        .heading,
+  );
+  expect(heading).toBeCloseTo(Math.PI / 2, 2);
+  // Without a card F has nothing to centre: a short note says so, and the button goes.
+  await page.keyboard.press('Escape');
+  await expect(card(page)).toBeHidden();
+  await expect(centre).toBeHidden();
+  await page.keyboard.press('f');
+  await expect(page.getByTestId('hint')).toHaveText(/primero selecciona un activo/);
+  await expect(page.getByTestId('hint')).toBeHidden({ timeout: 10000 });
+});
+
 test('keys 1, 2 and C work, but not while typing; Esc closes Capas and gives the focus back', async ({
   page,
 }) => {

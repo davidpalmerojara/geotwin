@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { Minus, Plus, Search } from 'lucide-react';
 import { useScene, type CameraInfo } from '../../stores/viewer';
 import { useTool } from '../../stores/tool';
+import { useUI } from '../../stores/ui';
 import { number } from '../../lib/format';
 import { Kbd } from './glyphs';
 import { NBSP, MINUS } from './readout';
@@ -94,12 +95,14 @@ function Tape({ heading }: { heading: number }) {
 
 /**
  * Top-right plates: «Ir a» (/), the heading plate (tape, pitch, camera height and the north
- * needle, which turns the view north up), zoom, and «Encuadre inicial» (0).
+ * needle, which turns the view north up), zoom, «Encuadre inicial» (0) and, with an asset's
+ * card open, «Centrar activo» (F) beside it, as in A/desktop-asset.
  */
 export function HeadingPlate() {
   const info = useCamera();
   const api = useScene((s) => s.api);
   const setPalette = useTool((s) => s.setPalette);
+  const selected = useUI((s) => s.selectedAssetId);
   const heading = info ? ((info.heading % 360) + 360) % 360 : 0;
   return (
     <div className="hud-tr">
@@ -167,19 +170,36 @@ export function HeadingPlate() {
           </div>
         </div>
       </div>
-      <button
-        type="button"
-        className="plate key-plate"
-        aria-label="Encuadre inicial"
-        aria-keyshortcuts="0"
-        title="Vuelve a encuadrar la instalación elegida o toda la red (tecla 0)"
-        data-map-overlay
-        disabled={!api}
-        onClick={() => api?.home()}
-      >
-        <Kbd>0</Kbd>
-        Encuadre inicial
-      </button>
+      <div className="hud-tr-row">
+        {selected && (
+          <button
+            type="button"
+            className="plate key-plate"
+            aria-label="Centrar activo"
+            aria-keyshortcuts="F"
+            title="Vuelve a centrar el activo de la ficha (tecla F)"
+            data-map-overlay
+            disabled={!api}
+            onClick={() => api?.centreAsset(selected)}
+          >
+            <Kbd>F</Kbd>
+            Centrar activo
+          </button>
+        )}
+        <button
+          type="button"
+          className="plate key-plate"
+          aria-label="Encuadre inicial"
+          aria-keyshortcuts="0"
+          title="Vuelve a encuadrar la instalación elegida o toda la red (tecla 0)"
+          data-map-overlay
+          disabled={!api}
+          onClick={() => api?.home()}
+        >
+          <Kbd>0</Kbd>
+          Encuadre inicial
+        </button>
+      </div>
     </div>
   );
 }

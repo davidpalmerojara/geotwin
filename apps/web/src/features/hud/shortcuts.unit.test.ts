@@ -13,6 +13,9 @@ describe('one-key shortcuts', () => {
     expect(shortcutFor(key('c'), on)).toBe('layers');
     expect(shortcutFor(key('C'), on)).toBe('layers');
     expect(shortcutFor(key('0'), on)).toBe('home');
+    expect(shortcutFor(key('f'), on)).toBe('centre');
+    expect(shortcutFor(key('F'), on)).toBe('centre');
+    expect(shortcutFor(key('f', { ctrlKey: true }), on)).toBeNull();
     expect(shortcutFor(key('N'), on)).toBe('north');
     expect(shortcutFor(key('/'), on)).toBe('palette');
     expect(shortcutFor(key('r'), on)).toBe('acknowledge');
@@ -34,6 +37,7 @@ describe('one-key shortcuts', () => {
       expect(isEditable(target)).toBe(true);
       expect(shortcutFor({ key: '1', target }, on)).toBeNull();
       expect(shortcutFor({ key: 'c', target }, on)).toBeNull();
+      expect(shortcutFor({ key: 'f', target }, on)).toBeNull();
     }
     // A checkbox or a slider takes no typing.
     expect(shortcutFor({ key: '2', target: { tagName: 'INPUT', type: 'checkbox' } }, on)).toBe(

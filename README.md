@@ -97,6 +97,7 @@ npm run format:check
 | `5`                | Radio                                                                        |
 | `C`                | Capas                                                                        |
 | `0`                | Encuadre inicial                                                             |
+| `F`                | Centrar activo: vuelve a la vista cercana del activo de la ficha             |
 | `N`                | Norte arriba                                                                 |
 | `/`                | «Ir a…» (también Ctrl/⌘+K, que funciona incluso con el foco en un campo)     |
 | `[` y `]`          | Estrechan o ensanchan la franja del perfil (de 0,25 a 5 m a cada lado)       |

@@ -29,6 +29,7 @@ export function createSceneApi(
     ground: (lng: number, lat: number) => number;
     labelBox: (installationId: string) => ScreenBox | null;
     home: () => void;
+    centreAsset: (id: string) => boolean;
     togglePhotoreal: () => void;
     toggleBuildings: () => void;
   },
@@ -158,6 +159,7 @@ export function createSceneApi(
       scene.requestRender();
     },
     home: actions.home,
+    centreAsset: actions.centreAsset,
     togglePhotoreal: actions.togglePhotoreal,
     toggleBuildings: actions.toggleBuildings,
   };

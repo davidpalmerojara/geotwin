@@ -5,12 +5,16 @@ import { useSection } from '../../stores/section';
 import { useScene } from '../../stores/viewer';
 import { shortcutFor, shortcutsEnabled } from './shortcuts';
 import { ACKNOWLEDGE_EVENT } from '../alerts/alert-actions';
+import { showHint } from './notes-stack';
+
+/** What F says when there is no asset to centre. */
+export const NO_ASSET_TO_CENTRE = 'Centrar activo (F): primero selecciona un activo.';
 
 /** A Radix dialog (modal) is open: it handles its own keys. */
 const modalOpen = () => !!document.querySelector('[role="dialog"][data-state="open"]');
 
 /**
- * Binds the HUD's keys: 1–5 tools, C Capas, 0 framing, N north up, / and Ctrl/⌘+K «Ir a», R
+ * Binds the HUD's keys: 1–5 tools, C Capas, 0 framing, F «Centrar activo», N north up, / and Ctrl/⌘+K «Ir a», R
  * «Reconocer» (the open card's alerts), [ and ] (the profile's slab), and
  * Esc, which closes the top-most thing: the panel, then the profile, the sheet and the asset card.
  */
@@ -44,6 +48,11 @@ export function useShortcuts() {
           break;
         case 'home':
           api?.home();
+          break;
+        case 'centre':
+          // The asset of the card; with none, a short note says what F needs.
+          if (!ui.selectedAssetId || !api?.centreAsset(ui.selectedAssetId))
+            showHint(NO_ASSET_TO_CENTRE);
           break;
         case 'north':
           api?.northUp();

@@ -53,6 +53,8 @@ export interface SceneApi {
   northUp: () => void;
   /** «Encuadre inicial»: the selected installation, or the whole network. */
   home: () => void;
+  /** «Centrar activo» (F): flies to an asset of the scene; false if it is not in the scene. */
+  centreAsset: (id: string) => boolean;
   togglePhotoreal: () => void;
   toggleBuildings: () => void;
 }
