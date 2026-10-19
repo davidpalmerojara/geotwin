@@ -142,11 +142,37 @@ export async function routePnoa(page: Page, mode: PnoaMode, okTiles = 6) {
   return log;
 }
 
-export const test = base.extend<{ pnoaMode: PnoaMode; pnoa: PnoaRequest[] }>({
+export const test = base.extend<{
+  pnoaMode: PnoaMode;
+  pnoa: PnoaRequest[];
+  resizeLoops: string[];
+}>({
   pnoaMode: ['mock', { option: true }],
   pnoa: [
     async ({ page, pnoaMode }, use) => {
       await use(await routePnoa(page, pnoaMode));
+    },
+    { auto: true },
+  ],
+  /*
+   * Every spec fails on «ResizeObserver loop completed with undelivered notifications»: a plate,
+   * panel or card resized inside an observer's callback (see the stage's measure). The browser
+   * reports it as a window error event with no error object; it is gathered across reloads.
+   */
+  resizeLoops: [
+    async ({ page }, use) => {
+      const loops: string[] = [];
+      await page.exposeFunction('__e2eResizeLoop', (message: string) => loops.push(message));
+      await page.addInitScript(() => {
+        window.addEventListener('error', (event) => {
+          if (/ResizeObserver loop/.test(String(event.message)))
+            void (window as unknown as { __e2eResizeLoop: (m: string) => void }).__e2eResizeLoop(
+              String(event.message),
+            );
+        });
+      });
+      await use(loops);
+      expect(loops, 'ResizeObserver loop errors in the page').toEqual([]);
     },
     { auto: true },
   ],

@@ -84,12 +84,26 @@ export function Stage() {
     };
     if (phone) return;
     measure();
-    const observer = new ResizeObserver(measure);
+    // The variables resize panels, sheets and the card, which other observers watch (the edge
+    // chips, the card's placement). Written inside a ResizeObserver callback, those changes come
+    // too late for the observers already run in that pass, and the browser reports «ResizeObserver
+    // loop completed with undelivered notifications». So the callback only asks for one
+    // measurement in the next frame, before its layout.
+    let frame = 0;
+    const schedule = () => {
+      if (!frame)
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          measure();
+        });
+    };
+    const observer = new ResizeObserver(schedule);
     for (const part of element.querySelectorAll('.hud-tl, .hud-bottom')) observer.observe(part);
-    window.addEventListener('resize', measure);
+    window.addEventListener('resize', schedule);
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', measure);
+      window.removeEventListener('resize', schedule);
+      cancelAnimationFrame(frame);
     };
   }, [phone]);
   const measureTool = api ? (
