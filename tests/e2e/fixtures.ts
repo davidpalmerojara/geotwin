@@ -157,13 +157,16 @@ export const test = base.extend<{
   /*
    * Every spec fails on «ResizeObserver loop completed with undelivered notifications»: a plate,
    * panel or card resized inside an observer's callback (see the stage's measure). The browser
-   * reports it as a window error event with no error object; it is gathered across reloads.
+   * reports it as a window error event with no error object; it is gathered across reloads and
+   * from every page of the test's context, not only `page` (demo.spec's observer, for one).
    */
   resizeLoops: [
-    async ({ page }, use) => {
+    async ({ context }, use) => {
       const loops: string[] = [];
-      await page.exposeFunction('__e2eResizeLoop', (message: string) => loops.push(message));
-      await page.addInitScript(() => {
+      await context.exposeBinding('__e2eResizeLoop', ({ page }, message: string) =>
+        loops.push(`${message} (${page.url()})`),
+      );
+      await context.addInitScript(() => {
         window.addEventListener('error', (event) => {
           if (/ResizeObserver loop/.test(String(event.message)))
             void (window as unknown as { __e2eResizeLoop: (m: string) => void }).__e2eResizeLoop(
@@ -172,7 +175,7 @@ export const test = base.extend<{
         });
       });
       await use(loops);
-      expect(loops, 'ResizeObserver loop errors in the page').toEqual([]);
+      expect(loops, 'ResizeObserver loop errors in the pages').toEqual([]);
     },
     { auto: true },
   ],
