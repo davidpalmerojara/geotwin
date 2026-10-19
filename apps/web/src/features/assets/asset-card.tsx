@@ -103,7 +103,9 @@ function usePlacement(
       frame = 0;
       const width = window.innerWidth,
         height = window.innerHeight;
-      const top = document.querySelector('.hud-tr')?.getBoundingClientRect().bottom ?? 66;
+      // Under the heading plate and «Encuadre inicial»: the «Cota m» ruler below them moves aside.
+      const rows = document.querySelectorAll('.hud-tr > .hud-tr-row');
+      const top = rows[rows.length - 1]?.getBoundingClientRect().bottom ?? 66;
       const bottomPlates = document.querySelector('.hud-bottom')?.getBoundingClientRect().top;
       const bottom = (bottomPlates ?? height - MARGIN) - GAP;
       const dockTop = top + GAP;

@@ -1352,22 +1352,76 @@ progress::-moz-progress-bar {
   font-size: 11px;
 }
 .height-legend {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
 }
-.height-legend i {
-  display: block;
-  height: 8px;
+.height-note {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0;
+  color: var(--fg-1);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+}
+.height-note i {
+  flex: none;
+  width: 6px;
   border-radius: 1px;
 }
-.height-legend span {
-  display: flex;
-  justify-content: space-between;
-  font: 400 11.5px var(--mono);
+/* The «Cota m» ruler (A/desktop-capas): under «Encuadre inicial», left of a docked card. */
+.hud-tr > .cota-plate {
+  padding: 0;
 }
-.height-legend small {
-  font-family: var(--sans);
-  color: var(--fg-1);
+.hud:has(> .asset-card[data-mode='dock']) .cota-plate {
+  margin-right: calc(var(--card-w, 372px) + var(--g));
+}
+@media (max-height: 539px) {
+  .cota-plate {
+    display: none;
+  }
+}
+.height-ruler {
+  display: block;
+  flex: none;
+}
+.height-ruler .ruler-title {
+  fill: var(--fg-1);
+  font: 400 12px var(--sans);
+}
+.height-ruler .ruler-sub {
+  fill: var(--fg-1);
+  font: 400 10.5px var(--mono);
+}
+.height-ruler .ruler-frame {
+  fill: none;
+  stroke: var(--ink-0);
+}
+.height-ruler .tick {
+  stroke: var(--fg-1);
+}
+.height-ruler .tick-major,
+.height-ruler .ruler-ground {
+  stroke: var(--fg-0);
+}
+.height-ruler .ruler-ground {
+  stroke-width: 1.5;
+}
+.height-ruler .tick-label {
+  fill: var(--fg-0);
+  font: 400 11px var(--mono);
+}
+.height-ruler .ruler-mark {
+  fill: var(--sig);
+}
+.height-ruler .ruler-above {
+  stroke: var(--sig);
+}
+.height-ruler .ruler-value {
+  fill: var(--sig-ink);
+  font: 600 11.5px var(--mono);
 }
 .class-filter {
   display: flex;
@@ -1939,7 +1993,7 @@ progress::-moz-progress-bar {
   top: 120px;
   right: var(--m);
   z-index: 3;
-  width: 372px;
+  width: var(--card-w, 372px);
   max-height: 560px;
   overflow: auto;
   overscroll-behavior: contain;
@@ -2682,8 +2736,8 @@ table.data {
       display: none;
     }
   }
-  .asset-card {
-    width: 360px;
+  .hud {
+    --card-w: 360px;
   }
   .ro-sobre,
   .ro-suelo {

@@ -98,7 +98,7 @@ function Tape({ heading }: { heading: number }) {
  * needle, which turns the view north up), zoom, «Encuadre inicial» (0) and, with an asset's
  * card open, «Centrar activo» (F) beside it, as in A/desktop-asset.
  */
-export function HeadingPlate() {
+export function HeadingPlate({ children }: { children?: React.ReactNode }) {
   const info = useCamera();
   const api = useScene((s) => s.api);
   const setPalette = useTool((s) => s.setPalette);
@@ -200,6 +200,7 @@ export function HeadingPlate() {
           Encuadre inicial
         </button>
       </div>
+      {children}
     </div>
   );
 }

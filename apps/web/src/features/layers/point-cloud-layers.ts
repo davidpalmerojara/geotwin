@@ -31,6 +31,8 @@ import {
   buildPointCloudStyle,
   effectiveClasses,
   ellipsoidalRange,
+  heightLegend,
+  sheetRampRange,
   globeShift,
   heightExpression,
   pointSpacing,
@@ -85,6 +87,11 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
     flyTo = useLayerView((s) => s.flyTo),
     setRender = useLayerView((s) => s.setRender);
   const loaded = useRef(new Map<string, Loaded>());
+  // The latest list, for a tileset that finishes loading after the list changed.
+  const latest = useRef(layers);
+  useEffect(() => {
+    latest.current = layers;
+  }, [layers]);
 
   // Load, show, hide and destroy tilesets.
   useEffect(() => {
@@ -140,7 +147,9 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
             cloudsChanged();
             tileset.tileFailed.addEventListener(() => setRender(id, 'error'));
             setRender(id, 'shown');
-            apply(viewer, layer, target, useLayerView.getState(), onTerrain);
+            const view = useLayerView.getState();
+            const shared = heightLegend(latest.current ?? [], view.hidden)?.range;
+            apply(viewer, layer, target, view, onTerrain, shared);
           })
           .catch(() => {
             target.failed = true;
@@ -157,9 +166,11 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewer, ready, layers, hidden, onTerrain, setRender]);
 
-  // Style, shading, quality and placement for every loaded tileset.
+  // Style, shading, quality and placement for every loaded tileset. Altura ramps every sheet over
+  // one Cota range, the union of the shown sheets' ranges, so colours compare across sheets.
   useEffect(() => {
     if (!viewer || !ready) return;
+    const shared = heightLegend(layers ?? [], hidden)?.range;
     for (const [id, entry] of loaded.current) {
       const layer = layers?.find((l) => l.id === id);
       if (layer && entry.tileset)
@@ -169,6 +180,7 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
           entry,
           { colorMode, classes, pointMode, pointSize, quality, realHeight, edl },
           onTerrain,
+          shared,
         );
     }
     viewer.scene.requestRender();
@@ -176,6 +188,7 @@ export function usePointCloudLayers(viewer: Viewer | null, ready: boolean, onTer
     viewer,
     ready,
     layers,
+    hidden,
     colorMode,
     classes,
     pointMode,
@@ -238,9 +251,16 @@ function placementShift(layer: Layer, realHeight: boolean, onTerrain: boolean) {
   return realHeight ? 0 : globeShift(ellipsoidalRange(layer), onTerrain);
 }
 
-function apply(viewer: Viewer, layer: Layer, entry: Loaded, view: Display, onTerrain: boolean) {
+function apply(
+  viewer: Viewer,
+  layer: Layer,
+  entry: Loaded,
+  view: Display,
+  onTerrain: boolean,
+  shared: { min: number; max: number } | undefined,
+) {
   const tileset = entry.tileset!;
-  const range = ellipsoidalRange(layer);
+  const range = shared && layer.height_range_m ? sheetRampRange(layer, shared) : undefined;
   const shift = placementShift(layer, view.realHeight, onTerrain);
   const center = layer.center;
   // Lower the cloud along the local vertical so it rests on the bare ellipsoid (h = 0); the

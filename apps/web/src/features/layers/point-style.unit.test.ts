@@ -4,7 +4,12 @@ import {
   ALL_CLASS_GROUPS,
   buildPointCloudStyle,
   classFilter,
+  cotaRange,
   ellipsoidalRange,
+  heightLegend,
+  rulerScale,
+  sharedCotaRange,
+  sheetRampRange,
   globeShift,
   heightExpression,
   HEIGHT_RAMP,
@@ -162,6 +167,65 @@ describe('Point-cloud style builders', () => {
     expect(globeShift({ min: 751.6 }, false)).toBe(751.6);
     expect(globeShift({ min: 751.6 }, true)).toBe(0);
     expect(globeShift(undefined, false)).toBe(0);
+  });
+  it('Altura shares one Cota range across sheets, so a colour is one height on all of them', () => {
+    const sheet = (id: string, min: number, max: number, n: number) => ({
+      id,
+      status: 'ready' as const,
+      height_range_m: { min, max },
+      vertical: {
+        datum: 'orthometric' as const,
+        override_m: null,
+        geoid_offset_m: n,
+        method: 'egm08_rednap_grid' as const,
+      },
+    });
+    const a = sheet('a', 692.84, 746.56, 53.1),
+      b = sheet('b', 704.0, 769.46, 53.08);
+    // Cota is what the readout gives: the file's orthometric heights.
+    expect(cotaRange(a)!.min).toBeCloseTo(692.84, 6);
+    expect(sharedCotaRange([a, b])).toEqual({ min: 692.84, max: 769.46 });
+    expect(sharedCotaRange([])).toBeUndefined();
+    // Hidden or unfinished sheets do not stretch the colours of the others.
+    expect(heightLegend([a, b], { b: true })).toEqual({
+      range: { min: 692.84, max: 746.56 },
+      sheets: 1,
+    });
+    expect(heightLegend([a, { ...b, status: 'processing' as const }], {})!.sheets).toBe(1);
+    expect(heightLegend([a], { a: true })).toBeUndefined();
+    // Each sheet ramps over the shared range plus its own N: its bins, back in Cota, are the
+    // same on both sheets (before, each sheet coloured its own range).
+    const shared = sharedCotaRange([a, b])!;
+    const bins = (layer: typeof a) => {
+      const range = sheetRampRange(layer, shared);
+      const style = buildPointCloudStyle({
+        mode: 'height',
+        classes: { ...ALL_CLASS_GROUPS },
+        center: centre,
+        range,
+      });
+      return (style.color as { conditions: [string, string][] }).conditions
+        .slice(0, -1)
+        .map(([test]) => Number(test.split('<')[1]) - layer.vertical.geoid_offset_m);
+    };
+    const [binsA, binsB] = [bins(a), bins(b)];
+    binsA.forEach((bound, i) => expect(bound).toBeCloseTo(binsB[i]!, 2));
+    expect(binsA[0]).toBeCloseTo(692.84 + (769.46 - 692.84) / HEIGHT_RAMP.length, 2);
+  });
+  it('the height ruler labels round heights around the range, as A/desktop-capas', () => {
+    const mockup = rulerScale(692.84, 746.56);
+    expect([mockup.low, mockup.high, mockup.step]).toEqual([690, 750, 10]);
+    expect(mockup.ticks.slice(0, 3)).toEqual([
+      { z: 690, major: true },
+      { z: 695, major: false },
+      { z: 700, major: true },
+    ]);
+    expect(mockup.ticks.at(-1)).toEqual({ z: 750, major: true });
+    // Eight sheets from 690 to 790 m: labels every 20 m; a flat sheet still gets a ruler.
+    expect(rulerScale(689.2, 788.4).step).toBe(20);
+    const flat = rulerScale(700.2, 700.4);
+    expect(flat.high - flat.low).toBeGreaterThan(0);
+    expect(flat.ticks.filter((t) => t.major).length).toBeGreaterThanOrEqual(2);
   });
   it('shading attenuates up to the chosen point size, with optional soft eye-dome lighting', () => {
     expect(shadingFor(3)).toMatchObject({

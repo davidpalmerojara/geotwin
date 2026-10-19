@@ -21,3 +21,6 @@ function useMedia(query: string) {
 
 /** Whether the screen is phone-sized: the HUD lays out as a top plate, a tool bar and sheets. */
 export const usePhone = () => useMedia(PHONE_QUERY);
+
+/** Screens tall enough for the long «Cota m» ruler (A/desktop-capas draws it 468 px high at 900). */
+export const useTallScreen = () => useMedia('(min-height: 820px)');

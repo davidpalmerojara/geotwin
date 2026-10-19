@@ -5,6 +5,7 @@ import { useScene } from '../../stores/viewer';
 import { useTool } from '../../stores/tool';
 import { useSection } from '../../stores/section';
 import { measuredGround } from '../layers/lidar-terrain';
+import { setCursorCota } from '../layers/height-ruler';
 import {
   assetReadout,
   formatMetres,
@@ -101,6 +102,8 @@ export function ReadoutPlate() {
       relief,
       chart: onChart,
     } = inputs.current;
+    // The «Cota m» ruler marks only the scene cursor.
+    setCursorCota(null, null);
     if (onChart) {
       write(profileReadout(onChart), 'Cursor');
       return;
@@ -190,6 +193,7 @@ export function ReadoutPlate() {
       const { lidar: grid, layers: sheets, relief } = inputs.current;
       const hit = surface?.point ?? api.pickGround(at.x, at.y);
       if (!hit) {
+        setCursorCota(null, null);
         write(
           readout({ point: null, ground: null, geoid: null, relief, missing: NO_GROUND }),
           'Cursor',
@@ -199,15 +203,11 @@ export function ReadoutPlate() {
       const ground = grid ? measuredGround(grid, hit.lng, hit.lat) : null;
       // The terrain is drawn a hair under the measured ground: a point on it is the ground.
       const h = surface?.cloud ? hit.h : (ground ?? hit.h);
-      write(
-        readout({
-          point: { ...hit, h },
-          ground,
-          geoid: geoidAt(sheets ?? [], hit.lng, hit.lat),
-          relief,
-        }),
-        'Cursor',
-      );
+      const geoid = geoidAt(sheets ?? [], hit.lng, hit.lat);
+      // The same values the plate shows (no relief, no geoid or no ground: no Cota).
+      if (relief && geoid !== null && ground !== null) setCursorCota(h - geoid, ground - geoid);
+      else setCursorCota(null, null);
+      write(readout({ point: { ...hit, h }, ground, geoid, relief }), 'Cursor');
     };
     const move = (event: PointerEvent) => {
       at = { x: event.clientX, y: event.clientY };
@@ -223,6 +223,7 @@ export function ReadoutPlate() {
     const leave = () => {
       at = null;
       clearTimeout(still);
+      setCursorCota(null, null);
       setCursor(false);
     };
     canvas.addEventListener('pointermove', move);

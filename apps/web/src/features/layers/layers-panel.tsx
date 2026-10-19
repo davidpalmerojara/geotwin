@@ -14,13 +14,13 @@ import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../../components/ui/dialog';
 import {
   CLASS_GROUPS,
-  ellipsoidalRange,
-  HEIGHT_RAMP,
   HYBRID_HIDDEN,
   type ColorMode,
   type PointMode,
   type Quality,
 } from './point-style';
+import { HeightRangeNote, HeightRuler, useHeightLegend } from './height-ruler';
+import { usePhone } from '../../hooks/media';
 import { mebibytes, quietMinutes, validateFile } from './upload';
 
 const stageLabel: Record<LayerStage, string> = {
@@ -165,9 +165,9 @@ export function LayersPanel() {
       setDeleting(false);
     }
   };
-  const single = ready.filter((l) => !view.hidden[l.id]);
   const withGround = ready.filter((l) => l.terrain_url).length;
-  const range = single.length === 1 ? ellipsoidalRange(single[0]!) : undefined;
+  const legend = useHeightLegend();
+  const phone = usePhone();
   const hybrid = view.pointMode === 'hybrid';
   const base = effectiveBase(view.baseImagery, view.pnoa.state);
   const groundIsPhoto = base === 'pnoa';
@@ -284,14 +284,10 @@ export function LayersPanel() {
                 ))}
               </div>
             </div>
-            {view.colorMode === 'height' && (
+            {legend && (
               <div className="height-legend">
-                <i style={{ background: `linear-gradient(90deg, ${HEIGHT_RAMP.join(', ')})` }} />
-                <span>
-                  {range ? `${number(range.min, 1)} m` : 'baja'}
-                  <small>altura elipsoidal{range ? '' : ', por capa'}</small>
-                  {range ? `${number(range.max, 1)} m` : 'alta'}
-                </span>
+                {phone && <HeightRuler range={legend.range} sheets={legend.sheets} height={200} />}
+                <HeightRangeNote range={legend.range} sheets={legend.sheets} aside={!phone} />
               </div>
             )}
             <div className="point-mode">

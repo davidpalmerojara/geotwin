@@ -24,7 +24,8 @@ import { RadiusPanel } from './radius-panel';
 import { useShortcuts } from './use-shortcuts';
 import { PhoneSheet } from './bottom-sheet';
 import { SceneAssetList } from './scene-asset-list';
-import { usePhone } from '../../hooks/media';
+import { usePhone, useTallScreen } from '../../hooks/media';
+import { CotaPlate } from '../layers/height-ruler';
 import { ProfileDrawer, ProfileHint } from '../section/profile-drawer';
 
 const CesiumView = lazy(() => import('../digital-twin/cesium-view'));
@@ -60,6 +61,7 @@ export function Stage() {
     lidarOn = useScene((s) => s.terrain === 'lidar'),
     lidar = useScene((s) => s.lidar);
   const phone = usePhone();
+  const tall = useTallScreen();
   const failed = assets.isError || installations.isError;
   // The viewer is never gated on query state: unmounting it would destroy the WebGL context, the
   // chosen base layer, ion terrain and buildings, and the camera.
@@ -253,7 +255,7 @@ export function Stage() {
               <RadiusPanel />
             </FloatingPanel>
           ) : null}
-          <HeadingPlate />
+          <HeadingPlate>{page === 'twin' && <CotaPlate tall={tall} />}</HeadingPlate>
           {profiling && <ProfileDrawer />}
           <AssetCard />
           <EdgeChips />

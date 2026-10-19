@@ -80,9 +80,50 @@ test('upload through the interface → worker → 3D Tiles on the map → style 
   // Colour modes and class filters.
   await panel.getByRole('button', { name: 'Altura', exact: true }).click();
   await expect(map).toHaveAttribute('data-color-mode', 'height');
-  await expect(panel.locator('.height-legend')).toContainText('m');
+  // One Cota range for every sheet shown (the union of theirs), on the «Cota m» ruler and in Capas.
+  const sheets = (await (await request.get('/api/layers')).json()) as {
+    status: string;
+    height_range_m: { min: number; max: number } | null;
+    vertical: { geoid_offset_m: number | null };
+  }[];
+  const ranged = sheets.filter((l) => l.status === 'ready' && l.height_range_m);
+  const low = Math.min(...ranged.map((l) => l.height_range_m!.min)),
+    high = Math.max(...ranged.map((l) => l.height_range_m!.max));
+  const ruler = page.getByTestId('cota-ruler');
+  await expect(ruler).toBeVisible();
+  await expect(ruler).toHaveAttribute('data-min', low.toFixed(2));
+  await expect(ruler).toHaveAttribute('data-max', high.toFixed(2));
+  await expect(ruler.getByRole('img')).toHaveAttribute('aria-label', /de cota, la misma en/);
+  const comma = (m: number) => m.toFixed(1).replace('.', ',');
+  await expect(panel.getByTestId('height-range')).toContainText(
+    `Cota de ${comma(low)} a ${comma(high)}`,
+  );
+  // Every cloud's first colour bin starts a ninth of the shared range up, plus its sheet's N:
+  // back in Cota it is the same height on all of them.
+  const firstBins = await page.evaluate(() => {
+    const v = (window as unknown as { __geotwinViewer: import('cesium').Viewer }).__geotwinViewer;
+    const bins: number[] = [];
+    for (let i = 0; i < v.scene.primitives.length; i++) {
+      const p = v.scene.primitives.get(i) as {
+        isCesium3DTileset?: boolean;
+        style?: { style?: { color?: { conditions?: [string, string][] } } };
+      };
+      const first = p.isCesium3DTileset && p.style?.style?.color?.conditions?.[0]?.[0];
+      if (first) bins.push(Number(first.split('<')[1]));
+    }
+    return bins;
+  });
+  expect(firstBins.length).toBeGreaterThan(0);
+  const offsets = ranged.map((l) => l.vertical.geoid_offset_m ?? 0);
+  const expected = low + (high - low) / 9;
+  for (const bin of firstBins)
+    expect(
+      offsets.some((n) => Math.abs(bin - n - expected) < 0.011),
+      `bin ${bin}`,
+    ).toBe(true);
   await panel.getByRole('button', { name: 'Clasificación', exact: true }).click();
   await expect(map).toHaveAttribute('data-color-mode', 'classification');
+  await expect(ruler).toBeHidden();
   const ground = panel.getByRole('checkbox', { name: 'Suelo', exact: true });
   await ground.uncheck();
   await expect(ground).not.toBeChecked();

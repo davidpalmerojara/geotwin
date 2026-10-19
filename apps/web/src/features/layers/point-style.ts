@@ -149,6 +149,85 @@ export function ellipsoidalRange(layer: Pick<Layer, 'height_range_m' | 'vertical
   return { min: layer.height_range_m.min + n, max: layer.height_range_m.max + n };
 }
 
+type Ranged = Pick<Layer, 'height_range_m' | 'vertical'>;
+/** Metres from a sheet's Cota (h − N, as the readout gives it) to its ellipsoidal heights. */
+const cotaOffset = (layer: Ranged) => layer.vertical.geoid_offset_m ?? 0;
+
+/** Height range of a processed layer as Cota: ellipsoidal heights minus the sheet's geoid N. */
+export function cotaRange(layer: Ranged) {
+  const range = ellipsoidalRange(layer);
+  if (!range) return undefined;
+  const n = cotaOffset(layer);
+  return { min: range.min - n, max: range.max - n };
+}
+
+/**
+ * The one Cota range that Altura colours on every sheet drawn: the union of their ranges, so a
+ * colour means the same height on all of them and the ruler can label it. Undefined when no
+ * sheet has a range.
+ */
+export function sharedCotaRange(layers: Ranged[]) {
+  let shared: { min: number; max: number } | undefined;
+  for (const layer of layers) {
+    const range = cotaRange(layer);
+    if (!range) continue;
+    shared = shared
+      ? { min: Math.min(shared.min, range.min), max: Math.max(shared.max, range.max) }
+      : range;
+  }
+  return shared;
+}
+
+/**
+ * What Altura colours over: the shared Cota range of the ready sheets that are shown, and how many
+ * they are (hidden sheets do not stretch the colours of the others).
+ */
+export function heightLegend(
+  layers: (Ranged & Pick<Layer, 'id' | 'status'>)[],
+  hidden: Record<string, boolean>,
+) {
+  const shown = layers.filter((l) => l.status === 'ready' && !hidden[l.id] && l.height_range_m);
+  const range = sharedCotaRange(shown);
+  return range ? { range, sheets: shown.length } : undefined;
+}
+
+/**
+ * The ellipsoidal range a sheet's style ramps over so that it paints the shared Cota range: each
+ * sheet adds its own geoid N, so two sheets give one colour to one Cota.
+ */
+export function sheetRampRange(layer: Ranged, shared: { min: number; max: number }) {
+  const n = cotaOffset(layer);
+  return { min: shared.min + n, max: shared.max + n };
+}
+
+export interface RulerScale {
+  /** Round ends of the ruler (multiples of `step`), around the coloured range. */
+  low: number;
+  high: number;
+  /** Metres between labelled ticks; unlabelled ticks fall halfway. */
+  step: number;
+  ticks: { z: number; major: boolean }[];
+}
+
+/**
+ * Ticks of the height ruler: labels every 1, 2 or 5 × 10ⁿ m, about `majors` of them over the
+ * range, a short tick halfway, and round ends (692,8–746,6 m gives 690 to 750 every 10 m, as
+ * A/desktop-capas).
+ */
+export function rulerScale(min: number, max: number, majors = 6): RulerScale {
+  const span = Math.max(max - min, 1);
+  const raw = span / majors;
+  const power = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 5, 10].map((m) => m * power).find((s) => s >= raw) ?? 10 * power;
+  const low = Math.floor(min / step) * step,
+    high = Math.max(Math.ceil(max / step) * step, low + step);
+  const ticks: RulerScale['ticks'] = [];
+  const count = Math.round((high - low) / (step / 2));
+  for (let i = 0; i <= count; i++)
+    ticks.push({ z: Number((low + (i * step) / 2).toPrecision(12)), major: i % 2 === 0 });
+  return { low, high, step, ticks };
+}
+
 /** Upper bounds of the height bins: HEIGHT_RAMP[i] colours heights below bounds[i]. */
 export function rampBounds(min: number, max: number, steps = HEIGHT_RAMP.length) {
   const span = Math.max(max - min, 0.01);
