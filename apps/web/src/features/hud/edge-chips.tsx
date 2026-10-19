@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useAssets, useInstallations } from '../../hooks/data';
 import { useScene } from '../../stores/viewer';
 import { useUI } from '../../stores/ui';
@@ -118,7 +119,7 @@ export function EdgeChips() {
         })),
     ];
     let frame = 0;
-    const update = () => {
+    const update = (now = false) => {
       frame = 0;
       const width = window.innerWidth,
         height = window.innerHeight;
@@ -195,22 +196,48 @@ export function EdgeChips() {
       const labels = [...document.querySelectorAll<HTMLElement>('.install-label')]
         .filter((l) => l.style.display !== 'none')
         .map((l) => l.getBoundingClientRect());
+      // And the assets' tags: they keep off the chips too, but during a flight they are placed in
+      // the same frame, before the chips have moved.
+      const tags = [...document.querySelectorAll<HTMLElement>('.scene-tags .scene-tag')]
+        .filter((t) => t.style.display !== 'none')
+        .map((t) => t.getBoundingClientRect())
+        .filter((b) => b.width > 0);
       const placed = placeChips(
         extra ? [...shown, extra] : shown,
         free,
         [...plates, ...values],
         marks,
         labels,
+        tags,
       );
       const tail = extra ? placed.pop() : null;
-      setChips(placed.filter((c): c is Chip => !!c));
-      setMore(tail ? { count: picked.more, left: tail.left, top: tail.top } : null);
+      const write = () => {
+        setChips(placed.filter((c): c is Chip => !!c));
+        setMore(tail ? { count: picked.more, left: tail.left, top: tail.top } : null);
+      };
+      // In a frame of the scene the chips are written before the browser paints it, so they
+      // never show a frame late, over a label that has just moved under them (during a flight).
+      if (now) flushSync(write);
+      else write();
     };
     const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(update);
+      if (!frame) frame = requestAnimationFrame(() => update());
     };
     schedule();
-    const off = api.onCamera(schedule);
+    // A camera move is placed in the frame that draws it: after the scene's render, once the
+    // installation labels of that frame are in place (their listener was added first). The
+    // animation frame stays as a fallback for a move that draws nothing.
+    let moved = false;
+    const off = api.onCamera(() => {
+      moved = true;
+      schedule();
+    });
+    const rendered = api.onRender(() => {
+      if (!moved) return;
+      moved = false;
+      cancelAnimationFrame(frame);
+      update(true);
+    });
     window.addEventListener('resize', schedule);
     // Panels opening and closing, and plates growing or settling (a list loading in Capas, a
     // card docking), change the free area without a camera move.
@@ -236,6 +263,7 @@ export function EdgeChips() {
     });
     return () => {
       off();
+      rendered();
       settle();
       clearTimeout(late);
       sizes.disconnect();

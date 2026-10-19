@@ -640,3 +640,48 @@ test.describe('on a touch screen', () => {
     await expect(readout.locator('.ro-k').first()).toHaveText('Selección');
   });
 });
+
+// While the camera flies, the edge chips are placed in the frame of the scene that moves the
+// labels and tags they keep off, before the browser paints it: a chip placed a frame later sat for
+// that frame over a label that had just moved under it (Torrelago's counts under the depósito's
+// chip, at 900 x 1200).
+test('edge chips move in the frame the scene draws, not a frame later', async ({ page }) => {
+  test.setTimeout(150000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openScene(page, '/gemelo?instalacion=10000000-0000-4000-8000-000000000001');
+  await expect(page.getByTestId('edge-chip').first()).toBeVisible({ timeout: 30000 });
+  // From 250 m to the side, «Encuadre inicial» flies back and the chips follow.
+  await page.evaluate(() => {
+    const v = (window as unknown as { __geotwinViewer: import('cesium').Viewer }).__geotwinViewer;
+    v.camera.cancelFlight();
+    v.camera.moveRight(250);
+    v.scene.requestRender();
+  });
+  await page.waitForTimeout(3000);
+  await page.evaluate(() => {
+    const v = (window as unknown as { __geotwinViewer: import('cesium').Viewer }).__geotwinViewer;
+    const w = window as unknown as { __chipMoves: { inside: number; outside: number } };
+    w.__chipMoves = { inside: 0, outside: 0 };
+    // Chips placed, added or removed, seen at the end of a frame of the scene, were placed in
+    // that frame; any other was placed between frames. (Their distance may be rewritten between
+    // frames, as the ground under the centre of the view loads.)
+    const watch = new MutationObserver((records) => (w.__chipMoves.outside += records.length));
+    watch.observe(document.querySelector('.edge-chips')!, {
+      attributeFilter: ['style'],
+      childList: true,
+      subtree: true,
+    });
+    v.scene.postRender.addEventListener(() => {
+      w.__chipMoves.inside += watch.takeRecords().length;
+    });
+  });
+  const moves = () =>
+    page.evaluate(
+      () => (window as unknown as { __chipMoves: { inside: number; outside: number } }).__chipMoves,
+    );
+  await page.getByRole('button', { name: /Encuadre inicial/ }).click();
+  await expect.poll(async () => (await moves()).inside, { timeout: 30000 }).toBeGreaterThan(0);
+  // The flight (1 s) and the settling after it.
+  await page.waitForTimeout(4000);
+  expect((await moves()).outside).toBe(0);
+});

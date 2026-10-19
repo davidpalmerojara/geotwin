@@ -282,6 +282,7 @@ export function pickChips<T extends { distance: number }>(
  * missing for one. `labels` (the installation labels in the scene) likewise, but given up first:
  * a label moves off a chip by itself on the next frame, a mark cannot. Avoiding them here keeps a
  * chip off a label while the camera flies, when the label is placed a frame behind the chips.
+ * `tags` (the assets' tags) likewise, and given up before the labels: a tag has more places to go.
  */
 export function placeChips<T extends EdgeChip & Size>(
   chips: T[],
@@ -289,11 +290,13 @@ export function placeChips<T extends EdgeChip & Size>(
   plates: Box[],
   marks: Box[] = [],
   labels: Box[] = [],
+  tags: Box[] = [],
 ) {
   const placed: T[] = [];
   return chips.map((chip) => {
     const hard = [...plates, ...placed.map((p) => boxOf(p.left, p.top, p))];
     const next =
+      placeChip(chip, free, [...hard, ...marks, ...labels, ...tags]) ??
       placeChip(chip, free, [...hard, ...marks, ...labels]) ??
       placeChip(chip, free, [...hard, ...marks]) ??
       placeChip(chip, free, hard);

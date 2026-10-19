@@ -326,6 +326,35 @@ describe('edge chips', () => {
     expect(onLabel).not.toBeNull();
     expect(marks.some((m) => intersects(box(onLabel!), m, 3))).toBe(false);
   });
+  it('slides a chip off an asset tag too, but gives the tag up before a label', () => {
+    const chip = edgeChip(free, size, { x: 2000, y: 400 }, 0)!;
+    const box = (c: { left: number; top: number }) => ({
+      left: c.left,
+      top: c.top,
+      right: c.left + size.width,
+      bottom: c.top + size.height,
+    });
+    // A sensor's tag where the chip would go (the south tower's tag under the depósito's chip
+    // while the camera flew to an asset at 900 x 1200).
+    const tag: Box = {
+      left: chip.left - 60,
+      right: chip.left + 40,
+      top: chip.top,
+      bottom: chip.top + 22,
+    };
+    const [clear] = placeChips([{ ...chip, ...size }], free, [], [], [], [tag]);
+    expect(intersects(box(clear!), tag)).toBe(false);
+    // With labels on the rest of the edge, the label wins: the chip stays on the tag.
+    const labels = Array.from({ length: 60 }, (_, i) => ({
+      left: chip.left,
+      right: chip.left + size.width,
+      top: free.top + i * 15,
+      bottom: free.top + i * 15 + 22,
+    })).filter((l) => !intersects(l, tag));
+    const [onTag] = placeChips([{ ...chip, ...size }], free, [], [], labels, [tag]);
+    expect(onTag).not.toBeNull();
+    expect(labels.some((l) => intersects(box(onTag!), l, 3))).toBe(false);
+  });
   it('leaves a chip out when its whole edge is covered', () => {
     const wall: Box = { left: 1000, top: 0, right: 1440, bottom: 900 };
     const chip = edgeChip(free, size, { x: 2000, y: 400 }, 0)!;
