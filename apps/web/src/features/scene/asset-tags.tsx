@@ -286,7 +286,8 @@ export default function AssetTags({
       const items: TagItem[] = [];
       for (const s of shown) {
         if (s.lod === 'mark') continue;
-        const size = sizes.current.get(s.info.id)?.[s.lod];
+        const measured = sizes.current.get(s.info.id);
+        const size = measured?.[s.lod];
         if (!size?.width) continue;
         items.push({
           id: s.info.id,
@@ -296,6 +297,8 @@ export default function AssetTags({
           height: size.height,
           distance: s.distance,
           rank: rankOf(s.info.status, s.info.id === selectedId, !!hits?.includes(s.info.id)),
+          // Name, value and word that fit nowhere fall back to the value alone (with its glyph).
+          compact: s.lod === 'full' && measured?.value.width ? measured.value : undefined,
         });
       }
       const blocked = [
@@ -384,7 +387,7 @@ export default function AssetTags({
             continue;
           }
           show(element);
-          element.dataset.lod = s.lod;
+          element.dataset.lod = at.compact ? 'value' : s.lod;
           element.style.transform = `translate(${at.left}px, ${at.top}px)`;
           toggle(element, 'occluded', fadesTag(s.info.status, hidden));
           sides.current.set(id, at.side);

@@ -34,9 +34,12 @@ export function lodFor(
   return status !== 'healthy' || selected ? 'full' : 'value';
 }
 
-/** Placement order: critical, warning, the selected asset, a Radio result, the rest. */
+/**
+ * Placement order: the selected asset (the one the user is looking at, with its card open), then
+ * critical, warning, a Radio result, the rest.
+ */
 export function rankOf(status: AssetStatus, selected = false, hit = false) {
-  return status === 'critical' ? 0 : status === 'warning' ? 1 : selected ? 2 : hit ? 3 : 4;
+  return selected ? 0 : status === 'critical' ? 1 : status === 'warning' ? 2 : hit ? 3 : 4;
 }
 
 export interface TagItem {
@@ -51,6 +54,8 @@ export interface TagItem {
   rank: number;
   /** Camera distance, m: nearer tags win between equal ranks. */
   distance: number;
+  /** A smaller form (the value alone) to fall back to when the tag does not fit at any spot. */
+  compact?: { width: number; height: number };
 }
 /** The eight spots around the mark, in the order they are tried. */
 export type Side = 'ne' | 'nw' | 'n' | 'e' | 'w' | 'se' | 'sw' | 's';
@@ -67,6 +72,8 @@ export interface TagPlacement {
   top: number;
   /** The leader from the mark to the nearest point of the tag. */
   leader: { x1: number; y1: number; x2: number; y2: number };
+  /** Placed in its compact form. */
+  compact: boolean;
 }
 
 /** The tag's box at one of the eight spots. */
@@ -116,7 +123,9 @@ export interface LayoutOptions {
 /**
  * Greedy placement: tags in order of rank (then nearest first) each take the first of the eight
  * spots that stays inside the scene and clear of the plates, of the tags already placed and of the
- * other marks; marks are only covered when there is no other spot. `null` means hidden.
+ * other marks; marks are only covered when there is no other spot. A tag with a compact form that
+ * fits nowhere whole tries again in that form (the value alone) before giving up. `null` means
+ * hidden.
  */
 export function layoutTags(items: TagItem[], options: LayoutOptions) {
   const { view, blocked = [], marks = new Map<string, ScreenBox>(), previous } = options;
@@ -142,21 +151,29 @@ export function layoutTags(items: TagItem[], options: LayoutOptions) {
     const sides = last ? [last, ...SIDES.filter((s) => s !== last)] : SIDES;
     const hard = [...blocked, ...placed];
     let chosen: Side | undefined;
-    for (const avoid of [[...hard, ...otherMarks], hard]) {
-      chosen = sides.find((side) => fits(tagBox(item, side), avoid));
-      if (chosen) break;
+    let sized: Pick<TagItem, 'x' | 'y' | 'width' | 'height'> = item;
+    for (const form of item.compact ? [item, { ...item, ...item.compact }] : [item]) {
+      for (const avoid of [[...hard, ...otherMarks], hard]) {
+        chosen = sides.find((side) => fits(tagBox(form, side), avoid));
+        if (chosen) break;
+      }
+      if (chosen) {
+        sized = form;
+        break;
+      }
     }
     if (!chosen) {
       result.set(item.id, null);
       continue;
     }
-    const box = tagBox(item, chosen);
+    const box = tagBox(sized, chosen);
     placed.push(box);
     result.set(item.id, {
       side: chosen,
       left: box.left,
       top: box.top,
       leader: leaderTo(item.x, item.y, box),
+      compact: sized !== item,
     });
   }
   return result;

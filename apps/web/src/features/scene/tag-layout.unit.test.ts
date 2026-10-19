@@ -54,12 +54,43 @@ describe('level of detail by distance', () => {
 });
 
 describe('placement priority', () => {
-  it('ranks critical, warning, selected, radius hit, operational', () => {
-    expect(rankOf('critical')).toBe(0);
-    expect(rankOf('warning', true, true)).toBe(1);
-    expect(rankOf('healthy', true, true)).toBe(2);
+  it('ranks selected, critical, warning, radius hit, operational', () => {
+    expect(rankOf('critical', true)).toBe(0);
+    expect(rankOf('healthy', true, true)).toBe(0);
+    expect(rankOf('critical')).toBe(1);
+    expect(rankOf('warning', false, true)).toBe(2);
     expect(rankOf('healthy', false, true)).toBe(3);
     expect(rankOf('healthy')).toBe(4);
+  });
+  it('gives the selected asset the spot another critical tag wants', () => {
+    const small = { width: 120, height: 60 };
+    const other = item('other', 20, 40, rankOf('critical'));
+    const selected = item('selected', 20, 40, rankOf('critical', true));
+    const result = layoutTags([other, selected], { view: small });
+    expect(result.get('selected')).not.toBeNull();
+    expect(result.get('other')).toBeNull();
+  });
+  it('falls back to the value alone when the whole tag fits nowhere (1280 × 800, Alertas and card)', () => {
+    // The selected critical gateway between the Alertas sheet (to x 572) and the docked card
+    // (from x 788): «Pasarela LoRa · torre sur 95,2 °C crítico» is 250 px, its value 84 px.
+    const sheet = { left: 12, top: 104, right: 572, bottom: 416 },
+      card = { left: 788, top: 114, right: 1160, bottom: 674 };
+    const view1280 = { width: 1280, height: 800 };
+    const whole = item('pasarela', 703, 393, rankOf('critical', true), 250, 22);
+    const blocked = [sheet, card];
+    expect(layoutTags([whole], { view: view1280, blocked }).get('pasarela')).toBeNull();
+    const tag = { ...whole, compact: { width: 84, height: 22 } };
+    const placed = layoutTags([tag], { view: view1280, blocked }).get('pasarela')!;
+    expect(placed.compact).toBe(true);
+    const box = {
+      left: placed.left,
+      top: placed.top,
+      right: placed.left + 84,
+      bottom: placed.top + 22,
+    };
+    for (const b of blocked) expect(overlaps(box, b)).toBe(false);
+    // With room, the whole tag is used.
+    expect(layoutTags([tag], { view: view1280 }).get('pasarela')!.compact).toBe(false);
   });
   it('gives the contested spot to the more important tag and hides the other one', () => {
     // Two marks in the same place in a scene with room for one tag only.
