@@ -67,7 +67,7 @@ import { useLayers } from '../../hooks/data';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
 import { renderUntil } from '../measure/render-until';
 import { dimensionLabelBoxes } from '../measure/dimension-lines';
-import { sceneMarks } from '../scene/scene-marks';
+import { sceneLabels, sceneMarks } from '../scene/scene-marks';
 import { useLidarTerrain } from '../layers/lidar-terrain-provider';
 import { terrainHeight, type LidarTerrain } from '../layers/lidar-terrain';
 import { usePnoaImagery } from '../layers/pnoa-imagery';
@@ -472,8 +472,9 @@ function CesiumView({
           top: b.top - rect.top,
           bottom: b.bottom - rect.top,
         })),
-        // The values of a measurement or a profile being read.
+        // The values of a measurement or a profile being read, and Radio's distances and radius.
         ...dimensionLabelBoxes(),
+        ...sceneLabels(),
       ];
       const current = installationIdRef.current;
       const ordered = [...installationsRef.current].sort(

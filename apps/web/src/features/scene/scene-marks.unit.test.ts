@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addSceneMarks, boxesAlong, sceneMarks } from './scene-marks';
+import { addSceneLabels, addSceneMarks, boxesAlong, sceneLabels, sceneMarks } from './scene-marks';
 
 describe('What the tools draw, as obstacles for the labels', () => {
   it('gives the boxes of every registered source until it is removed', () => {
@@ -8,6 +8,18 @@ describe('What the tools draw, as obstacles for the labels', () => {
     expect(sceneMarks()).toEqual([box]);
     remove();
     expect(sceneMarks()).toEqual([]);
+  });
+
+  it('keeps the values a tool writes apart from its marks', () => {
+    const value = { left: 10, right: 60, top: 0, bottom: 19 };
+    const mark = { left: 0, right: 6, top: 0, bottom: 6 };
+    const removeValue = addSceneLabels(() => [value]);
+    const removeMark = addSceneMarks(() => [mark]);
+    expect(sceneLabels()).toEqual([value]);
+    expect(sceneMarks()).toEqual([mark]);
+    removeValue();
+    removeMark();
+    expect(sceneLabels()).toEqual([]);
   });
 
   it('follows a line on screen with a small box every few pixels', () => {

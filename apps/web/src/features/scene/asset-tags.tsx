@@ -21,6 +21,7 @@ import {
 import type { Asset } from '@geotwin/shared';
 import type { ScreenBox } from '../digital-twin/camera';
 import { sceneBlockers } from '../hud/dom';
+import { sceneLabels } from './scene-marks';
 import { useTool } from '../../stores/tool';
 import { STATUS_WORD, useTagInfos, type TagInfo } from './tag-data';
 import {
@@ -306,6 +307,8 @@ export default function AssetTags({
         })),
         ...(labelBoxes.current ?? []),
         ...dimensionLabelBoxes(),
+        // Radio's distances and radius: a result's tag steps aside from its own distance.
+        ...sceneLabels(),
       ];
       // The mounting height's value: to the left of the dimension line, or to its right when a
       // plate (the card) is there; tags keep clear of it.

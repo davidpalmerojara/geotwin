@@ -14,6 +14,7 @@ import {
   ConstantPositionProperty,
   CustomDataSource,
   HorizontalOrigin,
+  JulianDate,
   LabelStyle,
   Math as CesiumMath,
   PolylineDashMaterialProperty,
@@ -28,10 +29,16 @@ import { metresPerDegree } from './section-math';
 import { renderUntil } from '../measure/render-until';
 import { clearForRedraw } from '../measure/entities';
 import { overlayBoxes } from '../hud/dom';
-import { DISTANCE_OFFSET, DISTANCE_PAD, distanceText } from './radius-label';
-
-/** Pixels between the ring and the bottom of its label. */
-const LABEL_LIFT = 6;
+import { addSceneLabels } from '../scene/scene-marks';
+import {
+  DISTANCE_OFFSET,
+  DISTANCE_PAD,
+  RING_LABEL_LIFT,
+  distanceLabelBox,
+  distanceText,
+  ringLabelBox,
+  ringLabelSize,
+} from './radius-label';
 const SIG = Color.fromCssColorString('#FFD21A'),
   INK = Color.fromCssColorString('#0E0E0D'),
   FG = Color.fromCssColorString('#EEECE6');
@@ -151,7 +158,10 @@ export class RadiusRing {
   private readonly handler: ScreenSpaceEventHandler;
   private stopRendering: (() => void) | undefined;
   private view: RingView | null = null;
+  /** Where each distance label hangs (the end of its leader), for `valueBoxes`. */
+  private ends: { at: Cartesian3; metres: number }[] = [];
   private readonly removeMoveEnd: () => void;
+  private readonly removeLabels: () => void;
 
   constructor(
     private readonly viewer: Viewer,
@@ -178,6 +188,26 @@ export class RadiusRing {
     }, ScreenSpaceEventType.LEFT_CLICK);
     // The label moves along the ring to a visible spot whenever the camera stops.
     this.removeMoveEnd = viewer.camera.moveEnd.addEventListener(() => this.placeLabel());
+    // The installation labels, the tags and the edge chips keep off the distances and the radius.
+    this.removeLabels = addSceneLabels(() => this.valueBoxes());
+  }
+
+  /** The distance labels and the radius label on screen (canvas px), as drawn now. */
+  private valueBoxes() {
+    const view = this.view,
+      viewer = this.viewer;
+    if (!view || viewer.isDestroyed()) return [];
+    const scene = viewer.scene;
+    const boxes = this.ends.flatMap(({ at, metres }) => {
+      const p = SceneTransforms.worldToWindowCoordinates(scene, at);
+      return p ? [distanceLabelBox(p, metres)] : [];
+    });
+    const ring = this.source.entities
+      .getById('radio:etiqueta')
+      ?.position?.getValue(JulianDate.now());
+    const p = ring ? SceneTransforms.worldToWindowCoordinates(scene, ring) : undefined;
+    if (p) boxes.push(ringLabelBox(p, radiusText(view.metres, view.items.length)));
+    return boxes;
   }
 
   /** Puts the radius label on the ring where it is on screen and clear of the plates. */
@@ -192,10 +222,12 @@ export class RadiusRing {
     );
     const canvas = viewer.scene.canvas;
     const frame = canvas.getBoundingClientRect();
-    // The label's box sits LABEL_LIFT px above the ring point; labelSpot takes box centres.
+    const text = radiusText(view.metres, view.items.length),
+      size = ringLabelSize(text);
+    // The label's box sits RING_LABEL_LIFT px above the ring point; labelSpot takes box centres.
     const points = positions.map((p) => {
       const w = SceneTransforms.worldToWindowCoordinates(viewer.scene, p);
-      return w ? { x: w.x, y: w.y - LABEL_LIFT - 12 } : null;
+      return w ? { x: w.x, y: w.y - RING_LABEL_LIFT - size.height / 2 } : null;
     });
     // The ring itself on screen (a point every 2,5°), which the label must not sit across.
     const path = circle(view.center, view.metres, 144).map((p) => {
@@ -205,7 +237,6 @@ export class RadiusRing {
       );
       return w ? { x: w.x, y: w.y } : null;
     });
-    const text = radiusText(view.metres, view.items.length);
     const plates = overlayBoxes(document).map((r) => ({
       left: r.left - frame.left,
       right: r.right - frame.left,
@@ -214,7 +245,7 @@ export class RadiusRing {
     }));
     const i = labelSpot(
       points,
-      { width: text.length * 7.3 + 14, height: 24 },
+      size,
       { width: canvas.clientWidth, height: canvas.clientHeight },
       plates,
       8,
@@ -229,6 +260,7 @@ export class RadiusRing {
     if (this.viewer.isDestroyed()) return;
     const entities = this.source.entities;
     clearForRedraw(entities);
+    this.ends = [];
     if (view) {
       // The ring follows the DTM (a point every 5 m or so, at the bilinear height of the ground
       // model the globe draws) instead of being classified on the terrain: the point clouds stand
@@ -282,7 +314,7 @@ export class RadiusRing {
           horizontalOrigin: HorizontalOrigin.CENTER,
           // Just above the ring, so the dashes do not run through the text.
           verticalOrigin: VerticalOrigin.BOTTOM,
-          pixelOffset: new Cartesian2(0, -LABEL_LIFT),
+          pixelOffset: new Cartesian2(0, -RING_LABEL_LIFT),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       });
@@ -297,6 +329,7 @@ export class RadiusRing {
           item.lat,
           this.ground(item.lng, item.lat) + item.mount + 1,
         );
+        this.ends.push({ at: end, metres: item.distance_m });
         entities.add({
           id: `radio:guia:${item.id}`,
           polyline: {
@@ -345,6 +378,7 @@ export class RadiusRing {
   destroy() {
     this.stopRendering?.();
     this.removeMoveEnd();
+    this.removeLabels();
     this.handler.destroy();
     delete this.host.dataset.radius;
     delete this.host.dataset.radiusCount;

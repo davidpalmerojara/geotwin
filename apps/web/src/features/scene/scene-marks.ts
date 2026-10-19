@@ -25,6 +25,25 @@ export function addSceneMarks(source: () => MarkBox[]) {
 export const sceneMarks = (): MarkBox[] => [...sources].flatMap((source) => source());
 
 /**
+ * Values a tool writes in the scene for the user to read (Radio's distance to each result and its
+ * «r = 300 m · 5 activos dentro»), in canvas px. Unlike the marks above they are hard obstacles:
+ * an installation label, an asset's tag or an edge chip never sits on one, as none of them may sit
+ * on a measurement's value either (`dimensionLabelBoxes`).
+ */
+const labelSources = new Set<() => MarkBox[]>();
+
+/** Adds a source of value boxes; the returned function removes it. */
+export function addSceneLabels(source: () => MarkBox[]) {
+  labelSources.add(source);
+  return () => {
+    labelSources.delete(source);
+  };
+}
+
+/** Every registered value box, as their sources give them now. */
+export const sceneLabels = (): MarkBox[] => [...labelSources].flatMap((source) => source());
+
+/**
  * Small boxes along a polyline on screen, one every `step` px and `size` px wide, so a label
  * can tell a line it would cross from the free space on either side of it.
  */

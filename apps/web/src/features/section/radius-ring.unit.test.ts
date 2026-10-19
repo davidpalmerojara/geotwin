@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { circle, labelSpot, radiusText, segmentHitsBox } from './radius-ring';
+import { RING_LABEL_LIFT, ringLabelBox, ringLabelSize } from './radius-label';
 
 const view = { width: 1440, height: 900 },
   label = { width: 200, height: 24 };
@@ -22,6 +23,17 @@ describe('the radius label', () => {
     expect(labelSpot(points, label, view, [card])).toBe(1);
     // Without the card the lower point wins.
     expect(labelSpot(points, label, view, [])).toBe(2);
+  });
+
+  it('has a box centred above its point on the ring, the size the spot is chosen for', () => {
+    const text = radiusText(300, 5);
+    const box = ringLabelBox({ x: 400, y: 500 }, text);
+    expect(box.bottom).toBe(500 - RING_LABEL_LIFT);
+    expect(box.right - box.left).toBe(ringLabelSize(text).width);
+    expect(box.bottom - box.top).toBe(ringLabelSize(text).height);
+    expect((box.left + box.right) / 2).toBe(400);
+    // Wide enough for its 28 characters of 12 px mono.
+    expect(box.right - box.left).toBeGreaterThanOrEqual(28 * 7.2);
   });
 
   it('falls back to the lowest point on screen when every one is under a plate', () => {

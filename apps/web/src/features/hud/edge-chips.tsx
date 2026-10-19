@@ -7,6 +7,7 @@ import { coveredEdges, distanceM } from '../digital-twin/camera';
 import { formatMetres } from './readout';
 import { Glyph } from './glyphs';
 import { overlayBoxes } from './dom';
+import { sceneLabels } from '../scene/scene-marks';
 import {
   bearing,
   compass,
@@ -172,8 +173,16 @@ export function EdgeChips() {
               target: { ...last.target, key: 'more' },
             }
           : null;
-      // Along their edges, apart from each other and clear of a card floating in the free area.
-      const placed = placeChips(extra ? [...shown, extra] : shown, free, plates);
+      // Along their edges, apart from each other and clear of a card floating in the free area and
+      // of the values a tool writes in the scene (Radio's distances, in canvas px).
+      const canvas = document.querySelector('.cesium-widget canvas')?.getBoundingClientRect();
+      const values = sceneLabels().map((b) => ({
+        left: b.left + (canvas?.left ?? 0),
+        right: b.right + (canvas?.left ?? 0),
+        top: b.top + (canvas?.top ?? 0),
+        bottom: b.bottom + (canvas?.top ?? 0),
+      }));
+      const placed = placeChips(extra ? [...shown, extra] : shown, free, [...plates, ...values]);
       const tail = extra ? placed.pop() : null;
       setChips(placed.filter((c): c is Chip => !!c));
       setMore(tail ? { count: picked.more, left: tail.left, top: tail.top } : null);

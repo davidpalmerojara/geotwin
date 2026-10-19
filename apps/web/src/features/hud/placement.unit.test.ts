@@ -255,6 +255,21 @@ describe('edge chips', () => {
     // The nearest free spot: just below the card.
     expect(moved!.top).toBe(card.bottom + 4);
   });
+  it('slides a chip off a distance Radio writes in the scene', () => {
+    // «180 m» at the end of a result's leader, right where a chip on the left edge would sit.
+    const chip = edgeChip(free, size, { x: -600, y: 290 }, 0)!;
+    const label = distanceLabelBox({ x: free.left + 20, y: chip.top + 25 }, 180);
+    const box = (c: { left: number; top: number }) => ({
+      left: c.left,
+      top: c.top,
+      right: c.left + size.width,
+      bottom: c.top + size.height,
+    });
+    expect(intersects(box(chip), label)).toBe(true);
+    const [placed] = placeChips([{ ...chip, ...size }], free, [label]);
+    expect(placed!.side).toBe('left');
+    expect(intersects(box(placed!), label)).toBe(false);
+  });
   it('leaves a chip out when its whole edge is covered', () => {
     const wall: Box = { left: 1000, top: 0, right: 1440, bottom: 900 };
     const chip = edgeChip(free, size, { x: 2000, y: 400 }, 0)!;
