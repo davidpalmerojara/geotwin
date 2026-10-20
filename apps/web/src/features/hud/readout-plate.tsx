@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useAssets, useLayers } from '../../hooks/data';
 import { useUI } from '../../stores/ui';
 import { useScene } from '../../stores/viewer';
@@ -137,20 +138,30 @@ export function ReadoutPlate() {
     let current: string | null = null,
       at: { x: number; y: number } | null = null,
       frame = 0;
-    const apply = (event: HoverEvent) => {
-      current = nextHover(current, event);
-      setOver(current);
+    const apply = (event: HoverEvent, now = false) => {
+      const next = nextHover(current, event);
+      if (now && next === current) return;
+      current = next;
+      // In a frame of the scene the readout is written before the browser paints it.
+      if (now) flushSync(() => setOver(next));
+      else setOver(next);
     };
-    const recheck = () => {
-      frame = 0;
+    const recheck = (now = false) => {
+      if (!now) frame = 0;
       if (current === null) return;
-      apply({
-        type: 'recheck',
-        asset: at ? assetOf(document.elementFromPoint(at.x, at.y)) : null,
-      });
+      apply(
+        { type: 'recheck', asset: at ? assetOf(document.elementFromPoint(at.x, at.y)) : null },
+        now,
+      );
     };
     const schedule = () => {
-      if (current !== null && !frame) frame = requestAnimationFrame(recheck);
+      if (current !== null && !frame) frame = requestAnimationFrame(() => recheck());
+    };
+    // After a frame of the scene, once every listener of that frame has laid out the marks (a
+    // microtask runs when the frame's callback returns, before the paint): «Activo» goes in the
+    // same frame that takes the mark away from the pointer, also the last frame of a flight.
+    const rendered = () => {
+      if (current !== null) queueMicrotask(() => recheck(true));
     };
     const over = (event: PointerEvent) => {
       at = event.pointerType === 'mouse' ? { x: event.clientX, y: event.clientY } : null;
@@ -168,7 +179,7 @@ export function ReadoutPlate() {
     document.addEventListener('pointermove', move, { passive: true });
     document.addEventListener('pointerout', out);
     // The marks are laid out after every frame, and React adds and removes them.
-    const offRender = api?.onRender(schedule);
+    const offRender = api?.onRender(rendered);
     const marks = new MutationObserver(schedule);
     marks.observe(document.body, { childList: true, subtree: true });
     return () => {

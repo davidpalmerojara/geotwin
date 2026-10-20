@@ -598,6 +598,25 @@ test('over an asset mark the readout gives that asset’s position, not dashes',
   // «Activo» goes with it.
   await page.mouse.move(x, y, { steps: 4 });
   await expect(readout.locator('.ro-k').first()).toHaveText('Activo');
+  // At the end of every frame of the scene (once its listeners have run, before the paint): is
+  // the mark still under the pointer, and what does the readout say?
+  await page.evaluate(
+    ([x, y]) => {
+      const v = (window as unknown as { __geotwinViewer: import('cesium').Viewer }).__geotwinViewer;
+      const w = window as unknown as { __hoverFrames: { gone: boolean; label: string }[] };
+      w.__hoverFrames = [];
+      v.scene.postRender.addEventListener(() =>
+        queueMicrotask(() =>
+          w.__hoverFrames.push({
+            gone: !document.elementFromPoint(x!, y!)?.closest('.scene-tags [data-asset]'),
+            label:
+              document.querySelector('[data-testid="readout"] .ro-k')?.textContent?.trim() ?? '',
+          }),
+        ),
+      );
+    },
+    [x, y],
+  );
   await page.evaluate(async () => {
     const { useScene } = (await import('/src/stores/viewer.ts' as string)) as {
       useScene: { getState(): { api: { zoom(direction: 1 | -1): void } } };
@@ -613,6 +632,13 @@ test('over an asset mark the readout gives that asset’s position, not dashes',
     )
     .toBe(true);
   await expect(readout.locator('.ro-k').first()).not.toHaveText('Activo');
+  // «Activo» went in the very frame that took the mark away, not a frame later.
+  const frames = await page.evaluate(
+    () =>
+      (window as unknown as { __hoverFrames: { gone: boolean; label: string }[] }).__hoverFrames,
+  );
+  expect(frames.some((f) => f.gone)).toBe(true);
+  expect(frames.filter((f) => f.gone && f.label === 'Activo')).toEqual([]);
 });
 
 test.describe('on a touch screen', () => {
