@@ -163,3 +163,48 @@ test('at 1280 × 800 with Alertas and the card open, the selected critical asset
     }, assetId);
   await expect.poll(clear, slow).toBe(true);
 });
+
+test('the selected asset keeps its name, value and word from afar, up to 2 km', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openScene(page, `/gemelo?instalacion=${installationId}&activo=${assetId}`);
+  await expect(card(page).getByRole('heading', { level: 2 })).toHaveText(
+    'Pasarela LoRa · torre sur',
+  );
+  await expect(tag(page)).toBeVisible(slow);
+  // The camera backs away along its view (the framing flight, if still under way, is cancelled):
+  // the selected asset is now well past 700 m, where other tags keep only their value.
+  await page.evaluate(() => {
+    const v = (window as unknown as { __geotwinViewer: import('cesium').Viewer }).__geotwinViewer;
+    v.camera.cancelFlight();
+    v.camera.moveBackward(1000);
+    v.scene.requestRender();
+  });
+  const shown = () =>
+    page.evaluate(
+      (id) =>
+        (window as unknown as { __geotwinTags?: { shown: Record<string, [number, string]> } })
+          .__geotwinTags?.shown[id] ?? null,
+      assetId,
+    );
+  await expect.poll(async () => ((await shown())?.[0] ?? 0) > 1000, slow).toBe(true);
+  const [distance, lod] = (await shown())!;
+  expect(distance).toBeLessThanOrEqual(2000);
+  expect(lod).toBe('full');
+  await expect(tag(page)).toBeVisible(slow);
+  await expect(tag(page)).toHaveAttribute('data-lod', 'full', slow);
+  await expect(tag(page)).toContainText('Pasarela LoRa · torre sur');
+  await expect(tag(page).locator('.tag-value')).toHaveText(/^\d+,\d °C$/);
+  // The other assets of the installation, also past 700 m, keep only their value.
+  const others = await page.evaluate(
+    (id) =>
+      Object.entries(
+        (window as unknown as { __geotwinTags: { shown: Record<string, [number, string]> } })
+          .__geotwinTags.shown,
+      ).filter(([other, [d]]) => other !== id && d > 700 && d <= 2000),
+    assetId,
+  );
+  expect(others.length).toBeGreaterThan(0);
+  for (const [, [, otherLod]] of others) expect(otherLod).toBe('value');
+});

@@ -449,6 +449,8 @@ export default function AssetTags({
       if (import.meta.env.DEV)
         (window as Window & { __geotwinTags?: unknown }).__geotwinTags = {
           placed: [...placement].filter(([, p]) => p).map(([id]) => id),
+          // The camera's distance (m) and the level of detail of each mark in view.
+          shown: Object.fromEntries(shown.map((s) => [s.info.id, [Math.round(s.distance), s.lod]])),
           occluded: [...occluded.current],
           samples: Object.fromEntries(depthSamples),
         };

@@ -17,10 +17,10 @@ export const FAR_M = 2000;
 
 /**
  * Level of detail by the camera's distance to the asset: up to 700 m warnings and critical assets
- * (and the selected one) show name, value and word, operational ones only their value; up to 2 km
- * every tag shows its value; further away only the mark is drawn. `quiet` (while a profile is
- * drawn) leaves operational assets with only their mark: warnings, critical assets and the selected
- * one keep their tags.
+ * show name, value and word, operational ones only their value; up to 2 km every tag shows its
+ * value; further away only the mark is drawn. The selected asset (its card is open) keeps name,
+ * value and word up to 2 km. `quiet` (while a profile is drawn) leaves operational assets with only
+ * their mark: warnings, critical assets and the selected one keep their tags.
  */
 export function lodFor(
   distance: number,
@@ -29,9 +29,10 @@ export function lodFor(
   quiet = false,
 ): TagLod {
   if (!Number.isFinite(distance) || distance > FAR_M) return 'mark';
-  if (quiet && status === 'healthy' && !selected) return 'mark';
+  if (selected) return 'full';
+  if (quiet && status === 'healthy') return 'mark';
   if (distance > NEAR_M) return 'value';
-  return status !== 'healthy' || selected ? 'full' : 'value';
+  return status !== 'healthy' ? 'full' : 'value';
 }
 
 /**

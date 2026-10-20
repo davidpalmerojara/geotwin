@@ -52,6 +52,11 @@ describe('level of detail by distance', () => {
     expect(lodFor(FAR_M + 1, 'critical')).toBe('mark');
     expect(lodFor(Number.NaN, 'healthy')).toBe('mark');
   });
+  it('keeps name, value and word for the selected asset up to 2 km (Radio seen from afar)', () => {
+    expect(lodFor(NEAR_M + 1, 'healthy', true)).toBe('full');
+    expect(lodFor(FAR_M, 'healthy', true, true)).toBe('full');
+    expect(lodFor(FAR_M + 1, 'healthy', true)).toBe('mark');
+  });
 });
 
 describe('placement priority', () => {
