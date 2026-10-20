@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   placeValue,
+  valueSpots,
   fadesTag,
   EDGE,
   FAR_M,
@@ -17,6 +18,7 @@ import {
   bracketsBox,
 } from './tag-layout';
 import { overlaps } from '../digital-twin/labels';
+import type { ScreenBox } from '../digital-twin/camera';
 
 const view = { width: 800, height: 600 };
 const item = (id: string, x: number, y: number, rank = 4, width = 80, height = 22): TagItem => ({
@@ -382,5 +384,91 @@ describe('placeValue (the mounting height)', () => {
     // Only marks to the right: drawn over them rather than under the plate on the left.
     const box = placeValue(at, size, 1440, [left], everywhere)!;
     expect(box.left).toBe(612);
+  });
+  it('takes no spot for a size of 0 × 0 (a hidden element measured)', () => {
+    expect(placeValue(at, { width: 0, height: 0 }, 1440, [], [])).toBeNull();
+  });
+});
+
+describe('the mounting height with Radio on settles (1440 × 900, 1,4 km from the east)', () => {
+  // A still frame of the check: the value point of the dimension line, the value's measured size,
+  // and what it keeps clear of: Radio's distances and radius, the installation labels and the
+  // plates (canvas px).
+  const at = { x: 695.875, y: 415.7 };
+  const size = { width: 174, height: 21 };
+  const values = [
+    [739, 414, 776, 433], // 63 m
+    [609, 381, 646, 400], // 85 m
+    [666, 357, 709, 376], // 101 m
+    [551, 388, 594, 407], // 136 m
+    [803, 326, 847, 345], // 158 m
+    [782, 302, 826, 321], // 171 m
+    [881, 378, 924, 397], // 180 m
+    [610, 657, 829, 681], // r = 300 m · 7 activos dentro
+  ];
+  const labels = [
+    [851, 309, 1019, 349], // Laguna y zona deportiva
+    [508, 446, 693, 486], // Torrelago · torres residenciales
+  ];
+  const plates = [
+    [12, 104, 342, 467], // Radio
+    [1056, 112, 1428, 807], // the card
+  ];
+  const box = ([left = 0, top = 0, right = 0, bottom = 0]: number[]) => ({
+    left,
+    top,
+    right,
+    bottom,
+  });
+  const blocked = [...values, ...labels, ...plates].map((b) => box(b));
+
+  it('fits in none of its six spots there, so it stays hidden frame after frame', () => {
+    for (const spot of valueSpots(at, size))
+      expect(blocked.some((b) => overlaps(spot, b))).toBe(true);
+    // The frame loop of asset-tags: each frame places the value with its measured size (it used
+    // the size read from the element, 0 × 0 while hidden: a spot then, none the next frame).
+    let shown: number | null = null;
+    const states: (number | null)[] = [];
+    for (let frame = 0; frame < 8; frame++) {
+      shown = placeValue(at, size, 1440, blocked, [], 12, shown)?.spot ?? null;
+      states.push(shown);
+    }
+    expect(states).toEqual(Array(8).fill(null));
+  });
+
+  it('keeps its spot while it stays free instead of going back to the first one', () => {
+    // Zoomed out once (chipmount): left of the line from 534 to 708 px or right from 732 to 906.
+    const point = { x: 720, y: 470 };
+    const left = placeValue(point, size, 1440, [], [])!;
+    expect([left.spot, left.left, left.right]).toEqual([0, 534, 708]);
+    // A label stood on the left spot in one frame: the value went right, and the label then left.
+    const label = { left: 520, right: 690, top: 455, bottom: 495 };
+    const right = placeValue(point, size, 1440, [label], [])!;
+    expect([right.spot, right.left, right.right]).toEqual([1, 732, 906]);
+    // The next frame both spots are free: it stays on the right (it went back to the left, so the
+    // label came back to its spot, and so on, frame after frame).
+    expect(placeValue(point, size, 1440, [], [], 12, right.spot)!.spot).toBe(1);
+    // Until its spot is taken: then the first free one again.
+    const card = { left: 730, right: 1440, top: 0, bottom: 900 };
+    expect(placeValue(point, size, 1440, [card], [], 12, right.spot)!.spot).toBe(0);
+  });
+
+  it('settles in two frames with the labels placed first, keeping off its last spot', () => {
+    // Each frame the labels are placed first and keep off the value's spot of the frame before
+    // (addReservedTags); then the value takes its spot clear of them.
+    const point = { x: 720, y: 470 };
+    const labelSpots = [
+      { left: 520, right: 690, top: 455, bottom: 495 },
+      { left: 520, right: 690, top: 500, bottom: 540 },
+    ];
+    let spot: number | null = null;
+    const states: string[] = [];
+    for (let frame = 0; frame < 8; frame++) {
+      const reserved: ScreenBox[] = spot === null ? [] : [valueSpots(point, size)[spot]!];
+      const label: ScreenBox = labelSpots.find((l) => !reserved.some((r) => overlaps(l, r)))!;
+      spot = placeValue(point, size, 1440, [label], [], 12, spot)?.spot ?? null;
+      states.push(`${spot}:${labelSpots.indexOf(label)}`);
+    }
+    expect(new Set(states.slice(1)).size).toBe(1);
   });
 });

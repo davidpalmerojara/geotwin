@@ -35,6 +35,7 @@ import {
   rankOf,
   reserveSelected,
   tagBox,
+  valueSpots,
   type Side,
   type TagItem,
   type TagLod,
@@ -158,6 +159,20 @@ export default function AssetTags({
   const mountLabel = useRef<{ at: Cartesian3; text: string } | null>(null);
   const mountElement = useRef<HTMLSpanElement>(null);
   const [mountText, setMountText] = useState('');
+  // Its size, measured once per text while it is laid out (a hidden element measures 0 × 0 px).
+  const mountSize = useRef<{ width: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    const value = mountElement.current;
+    mountSize.current = null;
+    if (!value || !mountText) return;
+    const { display, visibility } = value.style;
+    value.style.visibility = 'hidden';
+    value.style.display = '';
+    mountSize.current = { width: value.offsetWidth, height: value.offsetHeight };
+    value.style.display = display;
+    value.style.visibility = visibility;
+    viewer.scene.requestRender();
+  }, [mountText, fonts, viewer]);
   useEffect(() => {
     if (!mountKey) return;
     const [lng, lat, metres] = mountKey.split(',').map(Number) as [number, number, number];
@@ -250,6 +265,8 @@ export default function AssetTags({
     // labels, placed earlier in each frame, keep off both (see reserveSelected).
     let reserved: (TagReservation & { anchor: Cartesian3 }) | null = null;
     let selectedMark: Cartesian3 | null = null;
+    // The spot the mounting height's value took in the last frame (see placeValue), or null.
+    let valueSpot: number | null = null;
     // The marks drawn in the last frame, where they are now: Radio's distances keep off them.
     let drawn: { id: string; anchor: Cartesian3; selected: boolean }[] = [];
     const offMarks = addAssetMarks(() => {
@@ -271,6 +288,12 @@ export default function AssetTags({
       if (reserved && p) boxes.push(tagBox({ x: p.x, y: p.y, ...reserved }, reserved.side));
       const m = selectedMark && SceneTransforms.worldToWindowCoordinates(scene, selectedMark);
       if (m) boxes.push(bracketsBox({ left: m.x, right: m.x, top: m.y, bottom: m.y }));
+      // And the mounting height's value where it is: a label never takes its spot, so the value
+      // does not have to move off the label and the label back into the spot it leaves.
+      const label = mountLabel.current,
+        size = mountSize.current;
+      const v = valueSpot !== null && label && size && worldToWindow(scene, label.at);
+      if (v) boxes.push(valueSpots(v, size!)[valueSpot!]!);
       return boxes;
     });
     const place = () => {
@@ -350,21 +373,26 @@ export default function AssetTags({
         ...sceneLabels(),
       ];
       // The mounting height's value: to the left of the dimension line, or to its right when a
-      // plate (the card) is there; tags keep clear of it.
+      // plate (the card) is there; tags keep clear of it. Placed with its measured size and kept
+      // at its last spot while that is still free, so frame after frame it settles on one state.
       const value = mountElement.current,
-        label = mountLabel.current;
+        label = mountLabel.current,
+        size = mountSize.current;
       if (value) {
-        const at = label ? SceneTransforms.worldToWindowCoordinates(scene, label.at) : undefined;
-        const w = value.offsetWidth,
-          h = value.offsetHeight;
+        const at = label && size ? worldToWindow(scene, label.at) : undefined;
         // Clear of the other assets' marks too: one under the value hid its digits.
         const others = [...marks].filter(([id]) => id !== selectedId).map(([, b]) => b);
-        const box = at ? placeValue(at, { width: w, height: h }, width, blocked, others) : null;
+        const box = at ? placeValue(at, size!, width, blocked, others, 12, valueSpot) : null;
+        const before = valueSpot;
+        valueSpot = box ? box.spot : null;
         if (box) {
           value.style.display = '';
           value.style.transform = `translate(${box.left}px, ${box.top}px)`;
           blocked.push(box);
         } else value.style.display = 'none';
+        // The installation labels keep off the value from the next frame on: draw it when the
+        // value has moved (only then; once it stays, nothing asks for another frame).
+        if (valueSpot !== before) scene.requestRender();
       }
       const placement = layoutTags(items, {
         view: { width, height },
@@ -480,6 +508,8 @@ export default function AssetTags({
       if (import.meta.env.DEV)
         (window as Window & { __geotwinTags?: unknown }).__geotwinTags = {
           placed: [...placement].filter(([, p]) => p).map(([id]) => id),
+          // The mounting height's value: its spot (0 to 5) or null when hidden.
+          mount: valueSpot,
           // The camera's distance (m) and the level of detail of each mark in view.
           shown: Object.fromEntries(shown.map((s) => [s.info.id, [Math.round(s.distance), s.lod]])),
           occluded: [...occluded.current],
@@ -569,6 +599,11 @@ export default function AssetTags({
   );
 }
 
+/** A point on screen (canvas px), or undefined behind the camera. */
+function worldToWindow(scene: Viewer['scene'], at: Cartesian3) {
+  const p = SceneTransforms.worldToWindowCoordinates(scene, at);
+  return p ? { x: p.x, y: p.y } : undefined;
+}
 function sameHeights(a: Map<string, number>, b: Map<string, number>) {
   if (a.size !== b.size) return false;
   for (const [id, h] of a) if (Math.abs((b.get(id) ?? Infinity) - h) > 0.5) return false;
