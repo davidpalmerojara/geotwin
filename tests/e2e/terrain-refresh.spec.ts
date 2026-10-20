@@ -59,6 +59,11 @@ test('rebuilding the relief keeps the ground on screen while its tiles reload', 
   page,
 }) => {
   test.setTimeout(150000);
+  // The rebuilds are bound by the scene's renders: each reload of the view's tiles takes some 45
+  // of them, and at 1280 × 720 under SwiftShader on a loaded machine a render took over a second,
+  // so a reload came close to the 60 s the test gives it. The relief does not need a large view:
+  // at 800 × 500 the reload needs fewer and cheaper renders.
+  await page.setViewportSize({ width: 800, height: 500 });
   const map = await openScene(page);
   await expect(map).toHaveAttribute('data-terrain', 'lidar', { timeout: 60000 });
   // Over the sheet, looking down at it.
