@@ -464,6 +464,8 @@ La verificación independiente de `8b1710b` dio por buenos los 16 puntos con sus
 
 En local, sobre `036bde1`: lint, formato, tipos, unitarias 404/404 (47 ficheros), integración con PostGIS 46/46 (+1 de S3 sin servidor), pytest 20/20, compilación y las 60 E2E en 19,1 min, ninguna repetida.
 
+En local, sobre `23ca8ce` (con la etiqueta elegida completa hasta 2 km): lint, formato, tipos, unitarias 405/405 (47 ficheros), integración con PostGIS 46/46 (+1 de S3 sin servidor), pytest 20/20, compilación y las 61 E2E en 24,4 min, ninguna repetida.
+
 ## Límites del entorno
 
 - No hay despliegue público ni recursos en AWS; [aws.md](aws.md) es un plan.
