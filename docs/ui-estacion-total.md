@@ -351,6 +351,13 @@ Cada paso dejó verdes lint, formato, tipos, unitarias, integración, pytest, bu
 - **Rótulos de instalación con teclado**: son botones; con Tab se llega a ellos y Enter elige la instalación.
 - **Perfil en el móvil**: el pie del gráfico tenía «A» pero no «B»; ahora A y B quedan en los dos extremos del eje, la escala entre ellas y la leyenda debajo.
 
+**Tras la sexta verificación.**
+
+- **Chips de borde, sin escribirse entre fotogramas**: el respaldo de un fotograma de animación (al cambiar una placa, los datos o al asentarse las etiquetas) podía escribir los chips entre dos fotogramas de un vuelo, y un movimiento pequeño de la cámara que no lanza `camera.changed` los dejaba para ese respaldo. Ahora, mientras la cámara se mueve (de `moveStart` a `moveEnd`), cada fotograma que dibuja la escena coloca los chips y el respaldo solo los marca como pendientes; con la cámara quieta los coloca como antes (`frame-sync.ts`). La prueba de `hud.spec.ts` que fallaba una de cada tres o cuatro veces pasa 8 de 8 seguidas.
+- **«Activo» en la lectura**: se iba un fotograma después de que la marca se apartara del puntero. Ahora se comprueba al terminar cada fotograma de la escena, cuando ya están colocadas las marcas, y la placa se escribe antes de pintarse, también en el último fotograma de un vuelo.
+- **Etiqueta del activo elegido frente a los rótulos**: los rótulos de instalación se colocan antes que las etiquetas y eran obstáculo fijo para ellas, así que en Radio visto de lejos el rótulo de Torrelago dejaba la etiqueta elegida en su forma corta («37,0 °C»). Ahora la etiqueta elegida reserva el sitio donde cabe entera sin contar los rótulos (`reserveSelected`), y los rótulos lo evitan desde el fotograma siguiente.
+- **Ficha anclada y avisos**: un aviso que aparece encima de los créditos (el de relieve al cerrarse Capas) quedaba bajo la ficha anclada hasta el siguiente fotograma de animación, y la comprobación de solapes de `hud.spec.ts` lo pilló una vez a 1280 × 800. La ficha se recoloca ya en la misma tarea en que aparece el aviso.
+
 **Pendiente.**
 
 - **Ortofoto real.** Ninguna captura la lleva: la release `data-laguna` no trae `pnoa-laguna-z13-19.zip` y el entorno no llega a IDEE ni al IGN. Que esos servidores acepten las peticiones del navegador (CORS) sigue sin comprobarse.
