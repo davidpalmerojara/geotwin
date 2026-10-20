@@ -153,15 +153,20 @@ function usePlacement(
     const observer = new ResizeObserver(schedule);
     observer.observe(element);
     window.addEventListener('resize', schedule);
-    // Panels and sheets opening on the left change what the card must keep clear of.
+    // Panels and sheets opening on the left, and notes appearing above the credits, change what
+    // the card must keep clear of. Placed at once, in the task that added them (a microtask after
+    // React's commit), not in the next animation frame: in between the page could be read, or a
+    // frame painted, with the card still over a note that has just appeared.
     const hud = document.querySelector('.hud');
     const mutations = new MutationObserver((records) => {
       if (
         records.some(
           (r) => !element.contains(r.target) && !(r.target as Element).closest?.('.edge-chips'),
         )
-      )
-        schedule();
+      ) {
+        cancelAnimationFrame(frame);
+        update();
+      }
     });
     if (hud) mutations.observe(hud, { childList: true, subtree: true });
     return () => {

@@ -316,6 +316,42 @@ function markInSight(page: Page, id: string) {
   }, id);
 }
 
+// A note appearing above the credits (here a hint) moves the bottom of the free area up: the
+// docked card makes room in the same task that adds the note, never a frame later.
+test('the docked card makes room for a note as it appears, not a frame later', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openScene(page, `/gemelo?activo=${assetId}`);
+  await expect(card(page).getByTestId('meter').first()).toBeVisible();
+  await openSheet(page, 'Alertas');
+  await expect(card(page)).toHaveAttribute('data-mode', 'dock');
+  const seen = await page.evaluate(async () => {
+    const element = document.querySelector('[data-testid="asset-card"]')!;
+    const result: string[] = [];
+    // Created after the card's own observer, so it is told after it, in the same microtask.
+    const watch = new MutationObserver(() => {
+      const note = document.querySelector('[data-testid="hint"]');
+      if (!note) return;
+      watch.disconnect();
+      const a = element.getBoundingClientRect(),
+        b = note.getBoundingClientRect();
+      const over = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+      result.push(over ? `over by ${Math.round(a.bottom - b.top)} px` : 'clear');
+    });
+    watch.observe(document.querySelector('.hud')!, { childList: true, subtree: true });
+    const { showHint } = (await import('/src/features/hud/notes-stack.tsx' as string)) as {
+      showHint: (text: string, ms?: number) => void;
+    };
+    showHint(
+      'Una nota de prueba, larga, que ocupa varias líneas encima de los créditos para que la ficha anclada tenga que encogerse.',
+      8000,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return result;
+  });
+  expect(seen).toEqual(['clear']);
+  expect(await overlaps(page)).toEqual([]);
+});
+
 test('a shared link to an asset with a sheet frames it between the sheet and its card; Esc gives the focus to the scene', async ({
   page,
 }) => {
