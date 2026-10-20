@@ -63,6 +63,27 @@ export function addReservedTags(source: () => MarkBox[]) {
 export const reservedTags = (): MarkBox[] => [...reservedSources].flatMap((source) => source());
 
 /**
+ * The assets' marks on screen (canvas px), with the id of their asset; the selected asset's with
+ * its brackets. The values a tool writes in the scene keep off them (Radio's distances,
+ * `placeDistances`): a figure under a mark loses digits, a mark under a figure hides its asset.
+ */
+export interface AssetMarkBox extends MarkBox {
+  id: string;
+}
+const assetMarkSources = new Set<() => AssetMarkBox[]>();
+
+/** Adds a source of asset marks; the returned function removes it. */
+export function addAssetMarks(source: () => AssetMarkBox[]) {
+  assetMarkSources.add(source);
+  return () => {
+    assetMarkSources.delete(source);
+  };
+}
+
+/** Every asset mark, as its source gives it now. */
+export const assetMarks = (): AssetMarkBox[] => [...assetMarkSources].flatMap((source) => source());
+
+/**
  * Small boxes along a polyline on screen, one every `step` px and `size` px wide, so a label
  * can tell a line it would cross from the free space on either side of it.
  */

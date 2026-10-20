@@ -30,15 +30,16 @@ import { metresPerDegree } from './section-math';
 import { renderUntil } from '../measure/render-until';
 import { clearForRedraw } from '../measure/entities';
 import { overlayBoxes, platesKey, whenSteady } from '../hud/dom';
-import { addSceneLabels } from '../scene/scene-marks';
+import { addSceneLabels, assetMarks } from '../scene/scene-marks';
 import {
   DISTANCE_OFFSET,
   DISTANCE_PAD,
   RING_ANCHORS,
   RING_LABEL_LIFT,
   distanceLabelBox,
-  distanceSide,
+  distanceOffset,
   distanceText,
+  placeDistances,
   ringAnchorOffset,
   ringLabelBox,
   type DistanceSide,
@@ -214,7 +215,8 @@ export class RadiusRing {
     if (!view || viewer.isDestroyed()) return [];
     const scene = viewer.scene;
     const boxes = this.ends.flatMap(({ at, metres, side }) => {
-      const p = side === 'hidden' ? undefined : SceneTransforms.worldToWindowCoordinates(scene, at);
+      if (side === 'hidden') return [];
+      const p = SceneTransforms.worldToWindowCoordinates(scene, at);
       return p ? [distanceLabelBox(p, metres, side)] : [];
     });
     const ring = this.source.entities
@@ -234,7 +236,8 @@ export class RadiusRing {
 
   /**
    * Puts the radius label on the ring where it is on screen and clear of the plates and of the
-   * ring's dashes, and each distance on the side of its leader that is in sight (or hides it).
+   * ring's dashes, and each distance beside its leader's end clear of the plates, the radius label,
+   * the assets' marks and the other distances (or hides it: the panel lists them all).
    */
   private placeLabel() {
     const view = this.view,
@@ -287,21 +290,32 @@ export class RadiusRing {
         label.label.pixelOffset = new ConstantProperty(new Cartesian2(o.x, o.y));
       }
     }
-    // The distances: right of the leader's end, else left of it, else hidden (the panel lists them).
+    // The distances: beside the leader's end, clear of the marks and of each other, else hidden.
+    const ringBox = spot ? [ringLabelBox(points[spot.index]!, text, spot.anchor)] : [];
+    const sides = placeDistances(
+      this.ends.map((end) => {
+        const at = SceneTransforms.worldToWindowCoordinates(viewer.scene, end.at);
+        return { id: end.id, metres: end.metres, at: at ? { x: at.x, y: at.y } : null };
+      }),
+      size,
+      plates,
+      assetMarks(),
+      ringBox,
+    );
     for (const end of this.ends) {
       const entity = this.source.entities.getById(`radio:distancia:${end.id}`);
       if (!entity?.label) continue;
-      const at = SceneTransforms.worldToWindowCoordinates(viewer.scene, end.at);
-      end.side = distanceSide(at ? { x: at.x, y: at.y } : null, end.metres, size, plates);
+      end.side = sides.get(end.id) ?? 'hidden';
       entity.label.show = new ConstantProperty(end.side !== 'hidden');
       if (end.side === 'hidden') continue;
-      const left = end.side === 'left';
+      const o = distanceOffset(end.side);
       entity.label.horizontalOrigin = new ConstantProperty(
-        left ? HorizontalOrigin.RIGHT : HorizontalOrigin.LEFT,
+        o.horizontal === 'right' ? HorizontalOrigin.RIGHT : HorizontalOrigin.LEFT,
       );
-      entity.label.pixelOffset = new ConstantProperty(
-        new Cartesian2(left ? -DISTANCE_OFFSET.x : DISTANCE_OFFSET.x, DISTANCE_OFFSET.y),
+      entity.label.verticalOrigin = new ConstantProperty(
+        o.vertical === 'top' ? VerticalOrigin.TOP : VerticalOrigin.BOTTOM,
       );
+      entity.label.pixelOffset = new ConstantProperty(new Cartesian2(o.x, o.y));
     }
     viewer.scene.requestRender();
   }

@@ -21,7 +21,7 @@ import {
 import type { Asset } from '@geotwin/shared';
 import type { ScreenBox } from '../digital-twin/camera';
 import { sceneBlockers } from '../hud/dom';
-import { addReservedTags, sceneLabels } from './scene-marks';
+import { addAssetMarks, addReservedTags, sceneLabels, type AssetMarkBox } from './scene-marks';
 import { useTool } from '../../stores/tool';
 import { STATUS_WORD, useTagInfos, type TagInfo } from './tag-data';
 import {
@@ -250,6 +250,20 @@ export default function AssetTags({
     // labels, placed earlier in each frame, keep off both (see reserveSelected).
     let reserved: (TagReservation & { anchor: Cartesian3 }) | null = null;
     let selectedMark: Cartesian3 | null = null;
+    // The marks drawn in the last frame, where they are now: Radio's distances keep off them.
+    let drawn: { id: string; anchor: Cartesian3; selected: boolean }[] = [];
+    const offMarks = addAssetMarks(() => {
+      if (viewer.isDestroyed()) return [];
+      return drawn.flatMap(({ id, anchor, selected }): AssetMarkBox[] => {
+        const p = SceneTransforms.worldToWindowCoordinates(scene, anchor);
+        if (!p) return [];
+        const point = { left: p.x, right: p.x, top: p.y, bottom: p.y };
+        const box = selected
+          ? bracketsBox(point)
+          : { left: p.x - MARK, right: p.x + MARK, top: p.y - MARK, bottom: p.y + MARK };
+        return [{ id, ...box }];
+      });
+    });
     const offReserved = addReservedTags(() => {
       if (viewer.isDestroyed()) return [];
       const boxes: ScreenBox[] = [];
@@ -300,6 +314,11 @@ export default function AssetTags({
           if (f) feet.set(info.id, f);
         }
       }
+      drawn = shown.map((s) => ({
+        id: s.info.id,
+        anchor: anchors.get(s.info.id)!.anchor,
+        selected: s.info.id === selectedId,
+      }));
       const items: TagItem[] = [];
       for (const s of shown) {
         if (s.lod === 'mark') continue;
@@ -473,6 +492,7 @@ export default function AssetTags({
       offMove();
       offRender();
       offReserved();
+      offMarks();
     };
   }, [viewer, labelBoxes, photoreal, assets]);
   const meshHeightsRef = useRef(meshHeights);

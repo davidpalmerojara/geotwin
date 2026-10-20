@@ -5,6 +5,7 @@ import {
   RING_LABEL_LIFT,
   distanceLabelBox,
   distanceSide,
+  placeDistances,
   ringAnchorOffset,
   ringLabelBox,
   ringLabelSize,
@@ -144,5 +145,113 @@ describe('the distance of each result', () => {
     expect(distanceSide(null, 199, view, [])).toBe('hidden');
     // Near the left edge of the view the right side is used.
     expect(distanceSide({ x: 4, y: 400 }, 63, view, [])).toBe('right');
+  });
+});
+
+describe('the distances seen from afar (Radio of 300 m around the south tower, 1,9 km away)', () => {
+  // A real frame at 1440 × 900 with four LiDAR sheets: the end of each result's leader (on its
+  // mark) and the centre of every mark in view. The south tower (01) is the selected centre, with
+  // its brackets. Before, «63 m» sat on the brackets, «85 m» and «101 m» overlapped and «158 m»
+  // lay under the next mark (it read «8 m»).
+  const ends = [
+    { id: '06', metres: 63, at: { x: 678.2, y: 421.6 } },
+    { id: '02', metres: 85, at: { x: 741.6, y: 399.4 } },
+    { id: '05', metres: 101, at: { x: 768.4, y: 403.9 } },
+    { id: '03', metres: 136, at: { x: 734.1, y: 374.9 } },
+    { id: '11', metres: 158, at: { x: 808.1, y: 479.1 } },
+    { id: '10', metres: 171, at: { x: 827.6, y: 461.3 } },
+    { id: '12', metres: 180, at: { x: 747.8, y: 521.8 } },
+  ];
+  const centres: [string, number, number][] = [
+    ['09', 953.1, 483.2],
+    ['08', 1005, 621.9],
+    ['03', 734.1, 375.4],
+    ['11', 808, 479.6],
+    ['06', 678.2, 422.1],
+    ['02', 741.6, 397.9],
+    ['04', 788, 289.1],
+    ['01', 720, 414.8],
+    ['10', 827.5, 461.8],
+    ['07', 940.6, 514.8],
+    ['12', 747.8, 522.3],
+    ['05', 768.4, 404.4],
+  ];
+  const marks = centres.map(([id, x, y]) => {
+    const half = id === '01' ? 14 : 8;
+    return { id, left: x - half, right: x + half, top: y - half, bottom: y + half };
+  });
+  const panel = { left: 12, top: 104, right: 342, bottom: 466 },
+    card = { left: 1056, top: 114, right: 1428, bottom: 806 };
+  const ring = { left: 612, top: 594, right: 828, bottom: 616 };
+  const apart = (
+    a: { left: number; right: number; top: number; bottom: number },
+    b: { left: number; right: number; top: number; bottom: number },
+  ) => a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+
+  it('keeps every distance clear of the other marks, of each other and of the radius label', () => {
+    const sides = placeDistances(ends, view, [panel, card], marks, [ring]);
+    const shown = ends.flatMap((end) => {
+      const side = sides.get(end.id)!;
+      return side === 'hidden' ? [] : [{ end, box: distanceLabelBox(end.at, end.metres, side) }];
+    });
+    for (const { end, box } of shown) {
+      for (const m of marks)
+        if (m.id !== end.id) expect(apart(box, m), `${end.metres} m on ${m.id}`).toBe(true);
+      expect(apart(box, ring)).toBe(true);
+      for (const other of shown)
+        if (other.end !== end)
+          expect(apart(box, other.box), `${end.metres} m on ${other.end.metres} m`).toBe(true);
+    }
+    // Most still have room; the nearest results come first.
+    expect(shown.length).toBeGreaterThanOrEqual(5);
+    expect(sides.get('06')).not.toBe('hidden');
+  });
+
+  it('flips, steps or hides only when the usual spot is taken', () => {
+    // Alone in the view, every distance hangs right of its leader and up, as before.
+    for (const end of ends) expect(placeDistances([end], view, []).get(end.id)).toBe('right');
+    // A mark right of the end: the figure goes left of its leader.
+    const at = { x: 600, y: 500 };
+    const mark = { id: 'x', left: at.x + 10, right: at.x + 26, top: at.y - 26, bottom: at.y - 10 };
+    expect(placeDistances([{ id: 'a', at, metres: 63 }], view, [], [mark]).get('a')).toBe('left');
+    // Its own mark never counts.
+    const own = { ...mark, id: 'a' };
+    expect(placeDistances([{ id: 'a', at, metres: 63 }], view, [], [own]).get('a')).toBe('right');
+    // Two results on the same spot: the nearer keeps it, the other moves.
+    const two = placeDistances(
+      [
+        { id: 'far', at, metres: 101 },
+        { id: 'near', at, metres: 85 },
+      ],
+      view,
+      [],
+    );
+    expect(two.get('near')).toBe('right');
+    expect(two.get('far')).toBe('left');
+    // Marks all around: it is not written (the Radio panel lists it).
+    const around = [-40, 0, 40].flatMap((dx) =>
+      [-40, 0, 40].map((dy, k) => ({
+        id: `m${dx}${k}`,
+        left: at.x + dx - 30,
+        right: at.x + dx + 30,
+        top: at.y + dy - 30,
+        bottom: at.y + dy + 30,
+      })),
+    );
+    expect(placeDistances([{ id: 'a', at, metres: 63 }], view, [], around).get('a')).toBe('hidden');
+    expect(placeDistances([{ id: 'a', at: null, metres: 63 }], view, []).get('a')).toBe('hidden');
+  });
+
+  it('builds the box of each spot around the end of the leader', () => {
+    const at = { x: 500, y: 300 };
+    const right = distanceLabelBox(at, 63),
+      below = distanceLabelBox(at, 63, 'right-below'),
+      up = distanceLabelBox(at, 63, 'right-up'),
+      left = distanceLabelBox(at, 63, 'left-below');
+    expect(right.bottom).toBe(at.y + DISTANCE_OFFSET.y + 2);
+    expect(below.top).toBe(at.y - DISTANCE_OFFSET.y - 2);
+    expect(up.bottom).toBeLessThan(right.top);
+    expect(left.right).toBe(at.x - DISTANCE_OFFSET.x + 5);
+    expect(below.left).toBe(right.left);
   });
 });
