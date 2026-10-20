@@ -2,14 +2,14 @@
 
 Diseño y estado final de la interfaz del visor (rama `feat/estacion-total`, creada desde `eac5230` de `feat/laguna-de-duero`). Se construyó en cinco pasos, B1 a B5, cada uno a cargo de un agente distinto que trabajó después del anterior sobre la misma rama. Los apartados 1 a 5 son el diseño que se acordó y que se ha construido; el 6 resume los pasos; los apartados «Estado tras B1» a «Estado tras B4» guardan las decisiones de cada paso, y el último, [«Estado final»](#11-estado-final-tras-b5), dice qué está hecho, qué queda pendiente y en qué se diferencian las capturas de las maquetas.
 
-**Qué eligió David.** La base es la dirección A, «Estación total» (`design/A/concept.md` y sus maquetas). De la dirección C, «Sala de operaciones», se toman solo dos cosas:
+**Dirección elegida.** La base es la dirección A, «Estación total». Las maquetas de diseño (A y C) que se citan en este documento no están en el repositorio; las capturas de `docs/screenshots/` muestran el resultado. De la dirección C, «Sala de operaciones», se toman solo dos cosas:
 
 - los valores de los sensores dibujados en la escena junto a cada activo;
 - el haz de alerta que sube desde el activo.
 
 Del resto de C no entra nada: ni la línea de tiempo de reproducción, ni el menú de lugar, ni sus fuentes o colores.
 
-**Su última preferencia**, que manda sobre la maqueta A donde no coincidan: la interfaz **flota** sobre la escena, como en las maquetas de C (`C/desktop-overview.png`, `C/desktop-asset.png` y `C/phone.png`). Se mantiene el lenguaje visual de A, pero las franjas de A que ocupan todo el ancho del borde se sustituyen por placas sueltas.
+**Ajuste posterior**, que manda sobre la maqueta A donde no coincidan: la interfaz **flota** sobre la escena, como en las maquetas de C (`C/desktop-overview.png`, `C/desktop-asset.png` y `C/phone.png`). Se mantiene el lenguaje visual de A, pero las franjas de A que ocupan todo el ancho del borde se sustituyen por placas sueltas.
 
 ## 1. Lenguaje visual (de A)
 

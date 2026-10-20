@@ -1,6 +1,6 @@
 # GeoTwin Cloud
 
-[![CI](https://github.com/davidpalmerojara/geotwin-cloud/actions/workflows/ci.yml/badge.svg)](https://github.com/davidpalmerojara/geotwin-cloud/actions/workflows/ci.yml)
+[![CI](https://github.com/davidpalmerojara/geotwin/actions/workflows/ci.yml/badge.svg)](https://github.com/davidpalmerojara/geotwin/actions/workflows/ci.yml)
 
 **English summary.** GeoTwin Cloud is a 3D digital twin for infrastructure monitoring: React + TypeScript + CesiumJS in the browser, a Fastify API with Zod/OpenAPI contracts, PostgreSQL/PostGIS and WebSockets. It is a single-organization local demo with no authentication; the facilities are fictional, the telemetry is simulated and nothing is deployed. LiDAR point clouds (LAS/LAZ, e.g. PNOA-LiDAR tiles) can be uploaded through the API: they are streamed to S3-compatible storage (MinIO in Compose), queued with pg-boss on PostgreSQL and converted to 3D Tiles by a separate worker (py3dtiles), with the orthometric-to-ellipsoidal height correction, strip-overlap and noise points left out, a 2 m ground model (DTM) built from the ground class and live progress over WebSockets. The default scenario is **Laguna de Duero (Valladolid)**: eight real PNOA-LiDAR tiles (63.6 M points, 488 MB of LAZ, about 30 s each on 4 CPUs) loaded through that pipeline, their DTM used as the viewer's terrain without Cesium ion, and fictional assets placed on spots checked in the cloud (tower roofs, the lake shore, a 33 m tank-shaped structure) with simulated telemetry. A "Capas" panel uploads files, follows processing live and styles the clouds (RGB, height, ASPRS classification), drawn as round points with optional eye-dome lighting and per-device quality presets; a measuring tool gives 3D and geodesic distances, height differences and areas, drawn as dimension lines. The interface ("Estación total") is a full-screen 3D scene with opaque plates floating over it: the place and alarm annunciator, tools on keys 1-5 and C, a cursor readout with UTM 30N and orthometric heights, sensor values and alert beams drawn in the scene, and an A-B profile of the real LiDAR points (served by the API from the tiles) with a cut of the cloud in front of the line. With a Cesium ion token, an optional "Fotorrealista (Google)" layer streams Google Photorealistic 3D Tiles under the assets (not testable in the build environment, which has no access to Cesium ion; see docs/fotorrealista.md). Run it with `docker compose up -d --build --wait` and open `http://localhost:8080`.
 
@@ -109,10 +109,10 @@ Las teclas de una letra o un número no actúan mientras se escribe en un campo,
 
 ## Laguna de Duero con datos reales
 
-Ocho hojas de **PNOA-LiDAR, 3.ª cobertura** (vuelo de 2025, 1 × 1 km cada una, LAS 1.4 formato 8 con RGB de 16 bits e infrarrojo, 63,6 millones de puntos, 488 MB en LAZ, altitudes ortométricas REDNAP) cubren Laguna de Duero salvo una esquina. No están en el repositorio: se descargan del [Centro de Descargas del CNIG](https://centrodedescargas.cnig.es/) o, con acceso al repositorio, de su release `data-laguna`. Se cargan por la API, como cualquier usuario:
+Ocho hojas de **PNOA-LiDAR, 3.ª cobertura** (vuelo de 2025, 1 × 1 km cada una, LAS 1.4 formato 8 con RGB de 16 bits e infrarrojo, 63,6 millones de puntos, 488 MB en LAZ, altitudes ortométricas REDNAP) cubren Laguna de Duero salvo una esquina. No están en el repositorio: se descargan del [Centro de Descargas del CNIG](https://centrodedescargas.cnig.es/) o de la release `data-laguna` de este repositorio. Se cargan por la API, como cualquier usuario:
 
 ```bash
-gh release download data-laguna --repo davidpalmerojara/geotwin-cloud --dir data/laguna
+gh release download data-laguna --repo davidpalmerojara/geotwin --dir data/laguna
 scripts/upload-layers.sh data/laguna/*.LAZ                          # Compose (http://localhost:8080)
 scripts/upload-layers.sh -u http://localhost:3001 data/laguna/*.LAZ # npm run dev
 ```

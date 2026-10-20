@@ -466,7 +466,7 @@ En local, sobre `036bde1`: lint, formato, tipos, unitarias 404/404 (47 ficheros)
 
 En local, sobre `23ca8ce` (con la etiqueta elegida completa hasta 2 km): lint, formato, tipos, unitarias 405/405 (47 ficheros), integración con PostGIS 46/46 (+1 de S3 sin servidor), pytest 20/20, compilación y las 61 E2E en 24,4 min, ninguna repetida.
 
-CI: las ejecuciones de la rama privada siguen sin empezar por la facturación de GitHub. En la copia pública, el código de `897c542` (allí `498127c`, ejecución 39363508021) pasó en verde todos los trabajos: comprobaciones, integración, pytest, compilación, Docker y las 60 E2E en 30,3 min sin repeticiones, también la placa de lugar a 900 × 700 con las fuentes del ejecutor.
+CI: el código de `897c542` pasó en verde en GitHub Actions (ejecución 39363508021) todos los trabajos: comprobaciones, integración, pytest, compilación, Docker y las 60 E2E en 30,3 min sin repeticiones, también la placa de lugar a 900 × 700 con las fuentes del ejecutor.
 
 ## Límites del entorno
 

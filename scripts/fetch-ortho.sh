@@ -9,10 +9,11 @@
 # The zip is made by descargar_pnoa_laguna.py (see docs/laguna-de-duero.md). It is treated as
 # untrusted: it is unpacked into a new folder, and anything other than z/x/y.jpg tiles (JPEG
 # content) and LEEME.txt makes the script stop without touching apps/web/public/ortho/.
-# Downloading needs the GitHub CLI (gh) logged in, or GITHUB_TOKEN, because the repo is private.
+# Downloads with the GitHub CLI (gh) when it is logged in, otherwise through the public GitHub API
+# (GITHUB_TOKEN is used if set, to avoid the anonymous rate limit).
 set -euo pipefail
 
-REPO=${REPO:-davidpalmerojara/geotwin-cloud}
+REPO=${REPO:-davidpalmerojara/geotwin}
 TAG=${TAG:-data-laguna}
 ASSET=${ASSET:-pnoa-laguna-z13-19.zip}
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -35,10 +36,8 @@ if [ -z "$zip" ]; then
     # ${auth[@]+...}: an empty array under set -u aborts bash 3.2 (the macOS default).
     auth=()
     [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
-    need_auth=""
-    [ -n "${GITHUB_TOKEN:-}" ] || need_auth=" (repositorio privado: inicia sesión con gh o define GITHUB_TOKEN)"
     release=$(curl -fsSL ${auth[@]+"${auth[@]}"} "https://api.github.com/repos/$REPO/releases/tags/$TAG") ||
-      fail "no se pudo leer la release $TAG de $REPO$need_auth"
+      fail "no se pudo leer la release $TAG de $REPO (¿existe la release y trae $ASSET?)"
     id=$(printf '%s' "$release" | ASSET="$ASSET" python3 -I -c 'import json, os, sys
 for a in json.load(sys.stdin).get("assets", []):
     if a["name"] == os.environ["ASSET"]:

@@ -19,10 +19,10 @@ Capturas de la interfaz actual en esta página: las ocho hojas reales, renderiza
 | Clases    | 1 sin clasificar, 2 suelo, 3-5 vegetación, 6 edificación, 7 ruido, 12 solape entre pasadas            |
 | Alturas   | Ortométricas (REDNAP), de 692 a 770 m                                                                 |
 
-Las hojas **no están en el repositorio** (488 MB). Se descargan del [Centro de Descargas del CNIG](https://centrodedescargas.cnig.es/) (LiDAR → PNOA-LiDAR → tercera cobertura, buscando Laguna de Duero) o, para quien tenga acceso al repositorio, de su release `data-laguna`:
+Las hojas **no están en el repositorio** (488 MB). Se descargan del [Centro de Descargas del CNIG](https://centrodedescargas.cnig.es/) (LiDAR → PNOA-LiDAR → tercera cobertura, buscando Laguna de Duero) o de la release `data-laguna` de este repositorio:
 
 ```bash
-gh release download data-laguna --repo davidpalmerojara/geotwin-cloud --dir data/laguna
+gh release download data-laguna --repo davidpalmerojara/geotwin --dir data/laguna
 ```
 
 ## Cargarlas
