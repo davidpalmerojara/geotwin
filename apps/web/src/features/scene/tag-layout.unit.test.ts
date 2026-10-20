@@ -14,6 +14,7 @@ import {
   tagBox,
   type TagItem,
   type TagPlacement,
+  bracketsBox,
 } from './tag-layout';
 import { overlaps } from '../digital-twin/labels';
 
@@ -158,16 +159,22 @@ describe('tag layout', () => {
     expect(result.get('a')).toBeNull();
     expect(result.get('off')).toBeNull();
   });
-  it('keeps clear of other marks while there is room, and covers one rather than vanish', () => {
+  it('keeps clear of other marks, and hides rather than cover one', () => {
     const a = item('a', 400, 300);
     const marks = new Map([['b', { left: 414, top: 250, right: 500, bottom: 290 }]]);
     const placed = layoutTags([a], { view, marks }).get('a')!;
     expect(placed.side).not.toBe('ne');
-    // The only spot left is on another mark: it is still used.
+    // The only spot left is on another mark: the tag is hidden, the mark stays in sight.
     const tight = { width: 120, height: 60 };
     const near = item('n', 20, 40);
     const everywhere = new Map([['m', { left: 0, top: 0, right: 120, bottom: 60 }]]);
-    expect(layoutTags([near], { view: tight, marks: everywhere }).get('n')).not.toBeNull();
+    expect(layoutTags([near], { view: tight, marks: everywhere }).get('n')).toBeNull();
+    // In its compact form it fits beside the mark: that form is used rather than cover it.
+    const mark = new Map([['m', { left: 70, top: 0, right: 120, bottom: 60 }]]);
+    const wide = { ...item('w', 20, 40, 4, 90), compact: { width: 30, height: 22 } };
+    expect(layoutTags([wide], { view: tight, marks: mark }).get('w')).toMatchObject({
+      compact: true,
+    });
     // Its own mark never counts.
     const own = new Map([['n', { left: 0, top: 0, right: 120, bottom: 60 }]]);
     expect(layoutTags([near], { view: tight, marks: own }).get('n')?.side).toBe('ne');
@@ -185,6 +192,97 @@ describe('tag layout', () => {
     expect(tagBox(at, 'w').right).toBe(76);
     expect(tagBox(at, 'nw')).toEqual({ left: 46, top: 66, right: 86, bottom: 86 });
     expect(tagBox(at, 'se')).toEqual({ left: 114, top: 114, right: 154, bottom: 134 });
+  });
+});
+
+describe('the selected mark is never covered (phone, tap on Centro de transformación)', () => {
+  // The boxes of a real frame at 390 × 844 after tapping the mark of «Centro de transformación ·
+  // Torrelago» on a phone (four LiDAR sheets): the selected tag holds its whole spot above its
+  // mark, and «Grupo de presión» (7,50 mm/s, value only) took the spot above its own mark, right on
+  // the selected mark and its brackets.
+  const phone = { width: 390, height: 844 };
+  const blocked = [
+    { left: 10, top: 10, right: 380, bottom: 68.6 },
+    { left: 10, top: 76.6, right: 171, bottom: 120.6 },
+    { left: 261.2, top: 76.6, right: 380, bottom: 120.6 },
+    { left: 10, top: 464.2, right: 380, bottom: 768 },
+    { left: 10, top: 400.9, right: 380, bottom: 456.2 },
+    { left: 10, top: 776, right: 380, bottom: 834 },
+    // Torrelago's installation label.
+    { left: 113, top: 229, right: 298, bottom: 269 },
+  ];
+  const at: Record<string, [number, number, number, number, number]> = {
+    // x, y, distance, value width, full width
+    '03': [195, 318.377, 765, 66, 270],
+    '06': [96.3951, 386.188, 629, 59, 247],
+    '02': [206.303, 353.632, 720, 81, 241],
+    '04': [272.794, 201.272, 888, 66, 218],
+    '01': [169.188, 374.08, 635, 66, 206],
+    '05': [248.809, 360.486, 715, 74, 234],
+  };
+  const marks = new Map(
+    Object.entries(at).map(([id, [x, y]]) => [
+      id,
+      { left: x - 8, right: x + 8, top: y - 8, bottom: y + 8 },
+    ]),
+  );
+  const items: TagItem[] = Object.entries(at).map(([id, [x, y, distance, value, full]]) =>
+    id === '03'
+      ? {
+          id,
+          x,
+          y,
+          distance,
+          width: full,
+          height: 22,
+          rank: rankOf('healthy', true),
+          compact: { width: value, height: 22 },
+        }
+      : { id, x, y, distance, width: value, height: 22, rank: rankOf('healthy') },
+  );
+  const brackets = bracketsBox(marks.get('03')!);
+  it('keeps every other tag off the selected mark and its brackets', () => {
+    const result = layoutTags(items, { view: phone, blocked, marks, selected: '03' });
+    // The selected tag keeps its whole spot.
+    expect(result.get('03')).toMatchObject({ compact: false });
+    for (const i of items) {
+      const p = result.get(i.id);
+      if (!p || i.id === '03') continue;
+      const w = p.compact ? i.compact!.width : i.width;
+      const box = { left: p.left, top: p.top, right: p.left + w, bottom: p.top + i.height };
+      expect(overlaps(box, brackets), `${i.id} over the selected mark`).toBe(false);
+    }
+  });
+  it('drops to the compact form or hides rather than cover any mark', () => {
+    // «Grupo de presión» whole (warning) next to the selected mark, with its value as compact form.
+    const whole = items.map((i) =>
+      i.id === '02'
+        ? {
+            ...i,
+            width: 323,
+            height: 26,
+            rank: rankOf('warning'),
+            compact: { width: 99, height: 26 },
+          }
+        : i,
+    );
+    const result = layoutTags(whole, { view: phone, blocked, marks, selected: '03' });
+    for (const i of whole) {
+      const p = result.get(i.id);
+      if (!p || i.id === '03') continue;
+      const size = p.compact ? i.compact! : i;
+      const box = tagBox({ x: i.x, y: i.y, ...size }, p.side);
+      for (const [id, m] of marks)
+        if (id !== i.id) expect(overlaps(box, m), `${i.id} over the mark of ${id}`).toBe(false);
+    }
+  });
+  it('lets only the selected tag cover another mark when it has no other spot', () => {
+    const tight = { width: 120, height: 60 };
+    const everywhere = new Map([['m', { left: 0, top: 0, right: 120, bottom: 60 }]]);
+    const selected = { ...item('s', 20, 40, rankOf('healthy', true)) };
+    expect(
+      layoutTags([selected], { view: tight, marks: everywhere, selected: 's' }).get('s'),
+    ).not.toBeNull();
   });
 });
 

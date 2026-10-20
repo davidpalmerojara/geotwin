@@ -44,9 +44,10 @@ export function addSceneLabels(source: () => MarkBox[]) {
 export const sceneLabels = (): MarkBox[] => [...labelSources].flatMap((source) => source());
 
 /**
- * The selected asset's tag, whole, where it goes (canvas px): the installation labels keep off it
- * as they keep off a value, so the tag of the asset the user is looking at is not pushed to its
- * compact form by a label (see `reserveSelected`).
+ * The selected asset's tag, whole, where it goes, and its mark with the brackets around it (canvas
+ * px): the installation labels keep off them as they keep off a value, so the tag of the asset the
+ * user is looking at is not pushed to its compact form by a label (see `reserveSelected`) and its
+ * mark is never under one.
  */
 const reservedSources = new Set<() => MarkBox[]>();
 

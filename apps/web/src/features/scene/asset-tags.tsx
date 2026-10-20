@@ -26,6 +26,7 @@ import { useTool } from '../../stores/tool';
 import { STATUS_WORD, useTagInfos, type TagInfo } from './tag-data';
 import {
   OCCLUSION_SAMPLES,
+  bracketsBox,
   fadesTag,
   isOccluded,
   layoutTags,
@@ -245,13 +246,18 @@ export default function AssetTags({
     });
     // Development builds keep the last depth samples for checks.
     const depthSamples = new Map<string, (number | null)[]>();
-    // Where the selected asset's tag goes whole: the installation labels, placed earlier in each
-    // frame, keep off it (see reserveSelected).
+    // Where the selected asset's tag goes whole, and its mark with the brackets: the installation
+    // labels, placed earlier in each frame, keep off both (see reserveSelected).
     let reserved: (TagReservation & { anchor: Cartesian3 }) | null = null;
+    let selectedMark: Cartesian3 | null = null;
     const offReserved = addReservedTags(() => {
-      if (!reserved || viewer.isDestroyed()) return [];
-      const p = SceneTransforms.worldToWindowCoordinates(scene, reserved.anchor);
-      return p ? [tagBox({ x: p.x, y: p.y, ...reserved }, reserved.side)] : [];
+      if (viewer.isDestroyed()) return [];
+      const boxes: ScreenBox[] = [];
+      const p = reserved && SceneTransforms.worldToWindowCoordinates(scene, reserved.anchor);
+      if (reserved && p) boxes.push(tagBox({ x: p.x, y: p.y, ...reserved }, reserved.side));
+      const m = selectedMark && SceneTransforms.worldToWindowCoordinates(scene, selectedMark);
+      if (m) boxes.push(bracketsBox({ left: m.x, right: m.x, top: m.y, bottom: m.y }));
+      return boxes;
     });
     const place = () => {
       const root = layer.current;
@@ -346,6 +352,7 @@ export default function AssetTags({
         blocked,
         marks,
         previous: sides.current,
+        selected: selectedId,
       });
       const labels = new Set(labelBoxes.current ?? []);
       const chosen = selectedId ? placement.get(selectedId) : undefined;
@@ -357,9 +364,14 @@ export default function AssetTags({
           blocked: blocked.filter((b) => !labels.has(b)),
           marks,
           previous: sides.current,
+          selected: selectedId,
         },
       );
       const anchor = selectedId ? anchors.get(selectedId)?.anchor : undefined;
+      const markBefore = selectedMark;
+      selectedMark = anchor && selectedId && marks.has(selectedId) ? anchor : null;
+      // A label may sit on the newly selected mark this frame: the next one moves it off.
+      if (selectedMark && selectedMark !== markBefore) scene.requestRender();
       const before = reserved;
       reserved = reservation && anchor ? { ...reservation, anchor } : null;
       // A label took its spot this frame: the next one moves the label and places the tag whole.

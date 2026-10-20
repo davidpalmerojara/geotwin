@@ -3,7 +3,7 @@
  * same spirit as the installation labels (labels.ts): pure maths in CSS pixels, no Cesium, so it is
  * unit-tested in Node. Each tag sits at one of eight spots around its asset's mark, joined to it by
  * a short leader; the most important tags are placed first and a tag with no free spot is hidden
- * rather than drawn on top of another one or of a plate of the HUD.
+ * rather than drawn on top of another one, of a plate of the HUD or of another asset's mark.
  */
 import type { AssetStatus } from '@geotwin/shared';
 import type { ScreenBox } from '../digital-twin/camera';
@@ -115,21 +115,35 @@ export interface LayoutOptions {
   view: { width: number; height: number };
   /** Plates of the HUD and other labels: never covered. */
   blocked?: ScreenBox[];
-  /** The marks of every asset (by id): avoided when there is another spot. */
+  /** The marks of every asset (by id): other tags never cover them (see layoutTags). */
   marks?: Map<string, ScreenBox>;
   /** The side each tag had last time, tried first so tags do not jump while the camera moves. */
   previous?: Map<string, Side>;
+  /** The selected asset: its mark and the brackets around it are never covered by another tag. */
+  selected?: string | null;
+}
+
+/** Half the size of the selected asset's brackets around its mark, px (`.scene-mark[data-selected]`). */
+export const BRACKETS = 14;
+
+/** The selected asset's mark with its brackets: what no other tag or label may cover. */
+export function bracketsBox(mark: ScreenBox): ScreenBox {
+  const x = (mark.left + mark.right) / 2,
+    y = (mark.top + mark.bottom) / 2;
+  return { left: x - BRACKETS, right: x + BRACKETS, top: y - BRACKETS, bottom: y + BRACKETS };
 }
 
 /**
  * Greedy placement: tags in order of rank (then nearest first) each take the first of the eight
  * spots that stays inside the scene and clear of the plates, of the tags already placed and of the
- * other marks; marks are only covered when there is no other spot. A tag with a compact form that
- * fits nowhere whole tries again in that form (the value alone) before giving up. `null` means
- * hidden.
+ * other marks. A tag that fits nowhere whole tries its compact form (the value alone), and one that
+ * fits nowhere in either is hidden: an asset's mark is never covered by another asset's tag, as a
+ * mark under a tag hides the asset itself. Only the selected asset's tag, placed first, may cover
+ * another mark when it has no other spot (whole, then compact); and the selected mark, with its
+ * brackets, is never covered by any other tag. `null` means hidden.
  */
 export function layoutTags(items: TagItem[], options: LayoutOptions) {
-  const { view, blocked = [], marks = new Map<string, ScreenBox>(), previous } = options;
+  const { view, blocked = [], marks = new Map<string, ScreenBox>(), previous, selected } = options;
   const ordered = [...items].sort(
     (a, b) => a.rank - b.rank || a.distance - b.distance || (a.id < b.id ? -1 : 1),
   );
@@ -141,23 +155,31 @@ export function layoutTags(items: TagItem[], options: LayoutOptions) {
     box.right <= view.width - EDGE &&
     box.bottom <= view.height - EDGE &&
     !avoid.some((b) => overlaps(box, b));
+  const selectedMark = selected ? marks.get(selected) : undefined;
+  const brackets = selectedMark ? [bracketsBox(selectedMark)] : [];
   for (const item of ordered) {
     const onScreen = item.x >= 0 && item.x <= view.width && item.y >= 0 && item.y <= view.height;
     if (!onScreen) {
       result.set(item.id, null);
       continue;
     }
+    const isSelected = item.id === selected;
     const otherMarks = [...marks].filter(([id]) => id !== item.id).map(([, box]) => box);
     const last = previous?.get(item.id);
     const sides = last ? [last, ...SIDES.filter((s) => s !== last)] : SIDES;
-    const hard = [...blocked, ...placed];
+    const hard = [...blocked, ...placed, ...(isSelected ? [] : brackets)];
+    const forms = item.compact ? [item, { ...item, ...item.compact }] : [item];
+    // Every tag tries its forms clear of the marks; the selected one may then cover a mark.
+    const tries = isSelected
+      ? forms.flatMap((form) => [
+          { form, avoid: [...hard, ...otherMarks] },
+          { form, avoid: hard },
+        ])
+      : forms.map((form) => ({ form, avoid: [...hard, ...otherMarks] }));
     let chosen: Side | undefined;
     let sized: Pick<TagItem, 'x' | 'y' | 'width' | 'height'> = item;
-    for (const form of item.compact ? [item, { ...item, ...item.compact }] : [item]) {
-      for (const avoid of [[...hard, ...otherMarks], hard]) {
-        chosen = sides.find((side) => fits(tagBox(form, side), avoid));
-        if (chosen) break;
-      }
+    for (const { form, avoid } of tries) {
+      chosen = sides.find((side) => fits(tagBox(form, side), avoid));
       if (chosen) {
         sized = form;
         break;

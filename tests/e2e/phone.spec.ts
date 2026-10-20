@@ -268,3 +268,113 @@ test('the top plate shows the alarm row, which opens Alertas', async ({ page, re
     await request.patch(`/api/alerts/${alert.id}/resolve`);
   }
 });
+
+test.describe('a tap on a mark', () => {
+  test.use({ hasTouch: true, isMobile: true });
+  // As in the verification: the gateway of the south tower critical and the pressure group in
+  // warning, so their whole tags (name, value and word) crowd the selected mark on a phone.
+  const alerts = [
+    {
+      asset: '20000000-0000-4000-8000-000000000001',
+      sensor: '30000000-0000-4000-8000-000000000001',
+      mode: 'critical',
+    },
+    {
+      asset: '20000000-0000-4000-8000-000000000002',
+      sensor: '30000000-0000-4000-8000-000000000003',
+      mode: 'warning',
+    },
+  ];
+  const resolve = async (request: import('@playwright/test').APIRequestContext) => {
+    for (const { asset } of alerts) {
+      const active = await request.get(`/api/alerts?asset_id=${asset}&status=active`);
+      for (const alert of (await active.json()) as { id: string }[])
+        await request.patch(`/api/alerts/${alert.id}/resolve`);
+    }
+  };
+  test.afterEach(async ({ request }) => resolve(request));
+
+  test('leaves the selected mark and its brackets uncovered once the camera stops', async ({
+    page,
+    request,
+  }) => {
+    await resolve(request);
+    for (const { sensor, mode } of alerts)
+      expect(
+        (await request.post('/api/demo/anomalies', { data: { sensor_id: sensor, mode } })).ok(),
+      ).toBe(true);
+    await openScene(page, '/gemelo?instalacion=10000000-0000-4000-8000-000000000001');
+    const mark = page.locator(`.scene-mark[data-asset="${assetId}"]`);
+    // The mark is a point at the asset; its ring is drawn around it. Under a software renderer a
+    // frame can take seconds: scene checks wait longer.
+    await expect(mark.locator('i')).toBeVisible({ timeout: 60000 });
+    await page.evaluate(() => {
+      (
+        window as unknown as { __geotwinViewer: import('cesium').Viewer }
+      ).__geotwinViewer.scene.requestRenderMode = false;
+    });
+    // Where the mark is on top (its own ring, not a tag or a label over it), once the framing
+    // flight is over.
+    const reachable = () =>
+      page.evaluate((id) => {
+        const ring = document.querySelector(`.scene-mark[data-asset="${id}"] i`);
+        if (!ring) return null;
+        const r = ring.getBoundingClientRect();
+        const x = r.left + r.width / 2,
+          y = r.top + r.height / 2;
+        return document.elementFromPoint(x, y)?.closest('.scene-mark') === ring.parentElement
+          ? [x, y]
+          : null;
+      }, assetId);
+    await stillCamera(page);
+    await expect.poll(reachable, { timeout: 60000 }).not.toBeNull();
+    const [x, y] = (await reachable())!;
+    await page.touchscreen.tap(x!, y!);
+    await expect(card(page).getByRole('heading', { level: 2 })).toHaveText(
+      'Centro de transformación · Torrelago',
+    );
+    await expect(mark).toHaveAttribute('data-selected', 'true');
+    await stillCamera(page);
+    // At the centre of the selected mark and at the corners of its brackets, nothing but the mark:
+    // no other asset's tag, no installation label.
+    const covered = () =>
+      page.evaluate((id) => {
+        const element = document.querySelector<HTMLElement>(`.scene-mark[data-asset="${id}"]`)!;
+        const { left: x, top: y } = element.getBoundingClientRect();
+        const hits: string[] = [];
+        for (const [dx, dy] of [
+          [0, 0],
+          [-12, -12],
+          [12, -12],
+          [-12, 12],
+          [12, 12],
+        ] as const) {
+          const top = document.elementFromPoint(x + dx, y + dy);
+          if (!top || element.contains(top) || top.tagName === 'CANVAS') continue;
+          const what = top.closest<HTMLElement>('[data-testid], .scene-mark');
+          hits.push(`${dx},${dy}: ${what?.dataset.testid ?? what?.className ?? top.tagName}`);
+        }
+        return hits;
+      }, assetId);
+    await expect.poll(covered, { timeout: 30000 }).toEqual([]);
+    // And it stays so: the next frames do not bring a tag back over it.
+    await page.waitForTimeout(3000);
+    expect(await covered()).toEqual([]);
+  });
+});
+
+/** Waits until the camera has not moved for 1,5 s (a flight is over). */
+async function stillCamera(page: Page) {
+  let last: number[] = [],
+    still = 0;
+  for (let i = 0; i < 120 && still < 3; i++) {
+    const now = await page.evaluate(() => {
+      const c = (window as unknown as { __geotwinViewer: import('cesium').Viewer }).__geotwinViewer
+        .camera.positionWC;
+      return [c.x, c.y, c.z];
+    });
+    still = last.length && Math.hypot(...now.map((v, k) => v - last[k]!)) < 0.05 ? still + 1 : 0;
+    last = now;
+    await page.waitForTimeout(500);
+  }
+}
