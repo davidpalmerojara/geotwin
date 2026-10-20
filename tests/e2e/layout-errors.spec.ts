@@ -134,19 +134,28 @@ async function collectErrors(page: Page) {
   return () => [...new Set(errors)];
 }
 
-for (const size of sizes)
-  test(`opening and closing panels raises no page error (${size.name})`, async ({ page }) => {
+/**
+ * Opens the scene at `path` with the error collector, and waits for the LiDAR relief. Each part
+ * below loads the page once: every load makes the scene fetch its tiles again, and while they come
+ * each frame is a whole render, but one test for all of them came within seconds of its budget on
+ * a loaded machine (and past it with one more busy CPU). Each part is a test of its own, with its
+ * own budget, and each one checks that the window reported no error at all.
+ */
+async function open(page: Page, size: (typeof sizes)[number], path: string) {
+  await page.setViewportSize(size);
+  const errors = await collectErrors(page);
+  await openScene(page, path);
+  await expect(map(page)).toHaveAttribute('data-terrain', 'lidar', { timeout: 60000 });
+  return errors;
+}
+
+for (const size of sizes) {
+  const phone = size.width < 640;
+
+  test(`the card and the credits changing raise no page error (${size.name})`, async ({ page }) => {
     test.setTimeout(180000);
-    const phone = size.width < 640;
-    await page.setViewportSize(size);
-    const errors = await collectErrors(page);
-    // One page load: every load (and every camera flight) makes the scene load its tiles again,
-    // and while it does each frame waited for below is a whole render, seconds long under
-    // SwiftShader on a loaded machine. Reloading for the card twice more took the desktop run past
-    // its budget before the profile drawer was reached.
     // The card, opened by its deep link (on desktop with Capas beside it), and closed.
-    await openScene(page, `/gemelo?activo=${assetId}`);
-    await expect(map(page)).toHaveAttribute('data-terrain', 'lidar', { timeout: 60000 });
+    const errors = await open(page, size, `/gemelo?activo=${assetId}`);
     await expect(card(page).getByTestId('meter').first()).toBeVisible();
     await frames(page);
     await creditsChange(page);
@@ -159,8 +168,13 @@ for (const size of sizes)
     await card(page).getByRole('button', { name: 'Cerrar la ficha' }).click();
     await expect(card(page)).toBeHidden();
     await frames(page);
+    expect(errors()).toEqual([]);
+  });
 
-    // Capas, open and closed twice (the first time it opens its list loads and grows the panel).
+  test(`opening and closing Capas twice raises no page error (${size.name})`, async ({ page }) => {
+    test.setTimeout(180000);
+    const errors = await open(page, size, '/gemelo');
+    // The first time it opens its list loads and grows the panel.
     for (let i = 0; i < 2; i++) {
       const capas = await openCapas(page);
       await expect(capas).toBeVisible();
@@ -171,8 +185,13 @@ for (const size of sizes)
       await expect(capas).toBeHidden();
       await frames(page);
     }
+    expect(errors()).toEqual([]);
+  });
 
-    // Two section sheets in turn, then closed with Esc.
+  test(`two section sheets in turn raise no page error (${size.name})`, async ({ page }) => {
+    test.setTimeout(180000);
+    const errors = await open(page, size, '/gemelo');
+    // Opened from the menu, then closed with Esc.
     for (const name of ['Activos', 'Alertas'] as const) {
       await menuButton(page).click();
       await page
@@ -186,8 +205,13 @@ for (const size of sizes)
       await expect(sheet).toBeHidden();
       await frames(page);
     }
+    expect(errors()).toEqual([]);
+  });
 
-    // The profile drawer: A and B on the map, then Esc closes it.
+  test(`the profile drawer raises no page error (${size.name})`, async ({ page }) => {
+    test.setTimeout(180000);
+    const errors = await open(page, size, '/gemelo');
+    // A and B on the map, then Esc closes it.
     await page.getByRole('button', { name: 'Perfil', exact: true }).click();
     await expect(map(page)).toHaveAttribute('data-profile', 'on', { timeout: 30000 });
     const view = page.viewportSize()!;
@@ -208,6 +232,6 @@ for (const size of sizes)
     await page.keyboard.press('Escape');
     await expect(drawer).toBeHidden();
     await frames(page, 4);
-
     expect(errors()).toEqual([]);
   });
+}
