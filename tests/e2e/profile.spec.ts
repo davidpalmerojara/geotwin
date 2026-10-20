@@ -290,6 +290,8 @@ test('Perfil A–B, Corte and Radio on a synthetic layer', async ({ page, reques
     await expect(plate.getByTestId('readout-position')).toHaveText(/^41,\d{5}°\sN\s+4,\d{5}°\sO$/);
     const cota = await drawerValue('Cota');
     if (cota !== '—') await expect(plate.getByTestId('readout-cota')).toHaveText(cota);
+    // «Desde A» takes UTM's place: at 1440 px UTM shows for the scene's cursor, not for the chart's.
+    await expect(plate.locator('.ro-utm')).toBeHidden();
     // Off the chart, onto the scene: the plate reads the scene's cursor again.
     const [sx, sy] = await page.evaluate(
       ([x, y]) => {
@@ -304,6 +306,7 @@ test('Perfil A–B, Corte and Radio on a synthetic layer', async ({ page, reques
     await page.mouse.move(sx!, sy!, { steps: 3 });
     await expect(plate.getByTestId('readout-along')).toHaveCount(0);
     await expect(plate.locator('.ro-k').first()).toHaveText('Cursor');
+    await expect(plate.locator('.ro-utm')).toBeVisible();
 
     // Exportar CSV: «;» and a decimal comma, one row per point.
     const download = page.waitForEvent('download');
