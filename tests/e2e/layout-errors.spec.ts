@@ -81,24 +81,40 @@ async function creditsChange(page: Page) {
   }
 }
 
-/** Waits until the globe drawn under a page point can be picked (its terrain tiles are drawn). */
+/**
+ * Waits until the globe drawn under a page point is the ground there: Perfil picks A and B on the
+ * rendered terrain, and while its tiles load (for long on a loaded machine) the tile drawn under
+ * the point can be a coarse one, or none for a frame as tiles are replaced, so a click there sets
+ * the point hundreds of metres away or not at all, and the drawer never opens. The point counts as
+ * on the ground once the globe under it is within 2 m of the app's ground model (`groundAt`).
+ */
 async function onGround(page: Page, x: number, y: number) {
   await expect
     .poll(
       () =>
         page.evaluate(
-          ([x, y]) => {
+          async ([x, y]) => {
             const v = (window as unknown as { __geotwinViewer: import('cesium').Viewer })
               .__geotwinViewer;
             v.scene.requestRender();
             const ray = v.camera.getPickRay({ x, y } as never);
-            return !!ray && !!v.scene.globe.pick(ray, v.scene);
+            const hit = ray && v.scene.globe.pick(ray, v.scene);
+            if (!hit) return Infinity;
+            const { useScene } = (await import('/src/stores/viewer.ts' as string)) as {
+              useScene: {
+                getState(): { api: import('../../apps/web/src/stores/viewer').SceneApi };
+              };
+            };
+            const c = v.scene.globe.ellipsoid.cartesianToCartographic(hit);
+            const d = 180 / Math.PI;
+            const ground = useScene.getState().api.groundAt(c.longitude * d, c.latitude * d);
+            return Math.abs(c.height - ground);
           },
           [x, y],
         ),
-      { timeout: 30000 },
+      { message: `the globe drawn under ${x}, ${y} is the ground`, timeout: 30000 },
     )
-    .toBe(true);
+    .toBeLessThan(2);
   return [x, y] as const;
 }
 
@@ -124,11 +140,27 @@ for (const size of sizes)
     const phone = size.width < 640;
     await page.setViewportSize(size);
     const errors = await collectErrors(page);
-    await openScene(page);
+    // One page load: every load (and every camera flight) makes the scene load its tiles again,
+    // and while it does each frame waited for below is a whole render, seconds long under
+    // SwiftShader on a loaded machine. Reloading for the card twice more took the desktop run past
+    // its budget before the profile drawer was reached.
+    // The card, opened by its deep link (on desktop with Capas beside it), and closed.
+    await openScene(page, `/gemelo?activo=${assetId}`);
     await expect(map(page)).toHaveAttribute('data-terrain', 'lidar', { timeout: 60000 });
+    await expect(card(page).getByTestId('meter').first()).toBeVisible();
+    await frames(page);
+    await creditsChange(page);
+    if (!phone) {
+      await openCapas(page);
+      await frames(page);
+      await page.getByRole('button', { name: 'Capas', exact: true }).click();
+      await expect(panel(page, 'Capas')).toBeHidden();
+    }
+    await card(page).getByRole('button', { name: 'Cerrar la ficha' }).click();
+    await expect(card(page)).toBeHidden();
     await frames(page);
 
-    // Capas, open and closed twice (its list loads and grows the panel the first time).
+    // Capas, open and closed twice (the first time it opens its list loads and grows the panel).
     for (let i = 0; i < 2; i++) {
       const capas = await openCapas(page);
       await expect(capas).toBeVisible();
@@ -153,25 +185,6 @@ for (const size of sizes)
       await page.keyboard.press('Escape');
       await expect(sheet).toBeHidden();
       await frames(page);
-    }
-
-    // The card, opened by its deep link and closed, then opened again with Capas beside it.
-    await page.goto(`/gemelo?activo=${assetId}`);
-    await expect(map(page)).toHaveAttribute('data-ready', 'true', { timeout: 60000 });
-    await expect(card(page).getByTestId('meter').first()).toBeVisible();
-    await creditsChange(page);
-    await card(page).getByRole('button', { name: 'Cerrar la ficha' }).click();
-    await expect(card(page)).toBeHidden();
-    await frames(page);
-    if (!phone) {
-      await page.goto(`/gemelo?activo=${assetId}`);
-      await expect(card(page).getByTestId('meter').first()).toBeVisible();
-      await openCapas(page);
-      await frames(page);
-      await page.getByRole('button', { name: 'Capas', exact: true }).click();
-      await expect(panel(page, 'Capas')).toBeHidden();
-      await card(page).getByRole('button', { name: 'Cerrar la ficha' }).click();
-      await expect(card(page)).toBeHidden();
     }
 
     // The profile drawer: A and B on the map, then Esc closes it.

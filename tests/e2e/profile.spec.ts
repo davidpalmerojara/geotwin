@@ -42,24 +42,43 @@ async function screen(page: Page, p: { lng: number; lat: number }) {
   return [at.x, at.y] as [number, number];
 }
 /**
- * The page position of a ground point once the globe can be picked there: A and B are picked on
- * the rendered terrain (globe.pick), and right after the camera jumps the terrain tiles under the
- * new view may not be drawn yet on a slow renderer, so a click would land on nothing.
+ * The page position of a ground point once the globe drawn there is the ground itself. A and B are
+ * picked on the rendered terrain (globe.pick) and the tool then walks the ray to the DTM, at most
+ * 50 m. Right after the camera jumps, and for much longer on a loaded machine, the tile drawn under
+ * the point can still be a coarse one or one of the previous view: the pick then meets it hundreds
+ * of metres along the ray (A 354 m off made a 344,5 m line instead of 198 m). So the point counts as
+ * pickable only once the globe under it is within 3 m of the point on the app's ground model.
  */
 async function pickable(page: Page, p: { lng: number; lat: number }) {
   const at = await screen(page, p);
   await expect
     .poll(
       () =>
-        page.evaluate(([x, y]) => {
-          const v = (window as unknown as { __geotwinViewer: V }).__geotwinViewer;
-          v.scene.requestRender();
-          const ray = v.camera.getPickRay({ x, y } as never);
-          return !!ray && !!v.scene.globe.pick(ray, v.scene);
-        }, at),
-      { timeout: 30000 },
+        page.evaluate(
+          async ([x, y, lng, lat]) => {
+            const v = (window as unknown as { __geotwinViewer: V }).__geotwinViewer;
+            v.scene.requestRender();
+            const ray = v.camera.getPickRay({ x, y } as never);
+            const hit = ray && v.scene.globe.pick(ray, v.scene);
+            if (!hit) return Infinity;
+            const { useScene } = (await import('/src/stores/viewer.ts' as string)) as {
+              useScene: {
+                getState(): { api: import('../../apps/web/src/stores/viewer').SceneApi };
+              };
+            };
+            const r = Math.PI / 180;
+            const ground = v.scene.globe.ellipsoid.cartographicToCartesian({
+              longitude: lng! * r,
+              latitude: lat! * r,
+              height: useScene.getState().api.groundAt(lng!, lat!),
+            } as never);
+            return Math.hypot(hit.x - ground.x, hit.y - ground.y, hit.z - ground.z);
+          },
+          [...at, p.lng, p.lat],
+        ),
+      { message: `the globe drawn under ${p.lng}, ${p.lat} is the ground`, timeout: 30000 },
     )
-    .toBe(true);
+    .toBeLessThan(3);
   return at;
 }
 /** Waits until the camera has not moved for 1,5 s (the app's own first flights are over). */

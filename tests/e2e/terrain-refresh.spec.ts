@@ -75,14 +75,21 @@ test('rebuilding the relief keeps the ground on screen while its tiles reload', 
       orientation: { heading: 0, pitch: -50 * r, roll: 0 },
     });
     v.scene.requestRenderMode = false;
+    // Frames drawn from this view on, and how many of them had ground.
+    const w = window as unknown as { __groundFrames: number };
+    w.__groundFrames = 0;
+    const surface = (v.scene.globe as unknown as { _surface: { _tilesToRender: unknown[] } })
+      ._surface;
+    v.scene.postRender.addEventListener(() => {
+      if (surface._tilesToRender.length > 0) w.__groundFrames++;
+    });
   }, layer!.center);
-  const settled = () =>
-    page.evaluate(
-      () =>
-        (window as unknown as { __geotwinViewer: import('cesium').Viewer }).__geotwinViewer.scene
-          .globe.tilesLoaded,
-    );
-  await expect.poll(settled, { timeout: 60000 }).toBe(true);
+  // The ground is on screen: frames of this view draw globe tiles. Not every tile of the view has
+  // to be in (on a loaded machine that took a minute of the test's budget): the new provider below
+  // frees them all and the rebuild waits until they are loaded again.
+  const ground = () =>
+    page.evaluate(() => (window as unknown as { __groundFrames: number }).__groundFrames);
+  await expect.poll(ground, { timeout: 60000 }).toBeGreaterThan(3);
 
   /** Rebuilds the relief with the same heights, in place or with a new provider (as before). */
   const rebuild = (inPlace: boolean) =>
