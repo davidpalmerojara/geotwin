@@ -40,6 +40,8 @@ export interface SceneApi {
   onCamera: (callback: () => void) => () => void;
   /** Calls back after every rendered frame. */
   onRender: (callback: () => void) => () => void;
+  /** Whether the camera is moving: from Cesium's moveStart to its moveEnd. */
+  moving: () => boolean;
   camera: () => CameraInfo;
   /** The globe (the terrain) under a page pixel. */
   pickGround: (x: number, y: number) => GeoPoint | null;

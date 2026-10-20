@@ -38,6 +38,11 @@ export function createSceneApi(
     camera = v.camera;
   // Camera events fire for small moves too: plates follow the camera smoothly.
   camera.percentageChanged = 0.001;
+  // moveStart comes with the first frame that draws a move, moveEnd once it has stopped for a
+  // moment (scene.cameraEventWaitTime).
+  let moving = false;
+  camera.moveStart.addEventListener(() => (moving = true));
+  camera.moveEnd.addEventListener(() => (moving = false));
   const local = (x: number, y: number) => {
     const rect = scene.canvas.getBoundingClientRect();
     return new Cartesian2(x - rect.left, y - rect.top);
@@ -80,6 +85,7 @@ export function createSceneApi(
       };
     },
     onRender: (callback) => scene.postRender.addEventListener(callback),
+    moving: () => moving,
     camera: () => {
       const c = camera.positionCartographic;
       const lng = CesiumMath.toDegrees(c.longitude),

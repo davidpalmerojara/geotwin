@@ -8,6 +8,7 @@ import { coveredEdges, distanceM } from '../digital-twin/camera';
 import { formatMetres } from './readout';
 import { Glyph } from './glyphs';
 import { overlayBoxes } from './dom';
+import { frameSync } from './frame-sync';
 import { sceneLabels } from '../scene/scene-marks';
 import {
   bearing,
@@ -118,9 +119,7 @@ export function EdgeChips() {
           mount: a.mount_height_m,
         })),
     ];
-    let frame = 0;
-    const update = (now = false) => {
-      frame = 0;
+    const update = (now: boolean) => {
       const width = window.innerWidth,
         height = window.innerHeight;
       const plates = overlayBoxes();
@@ -220,24 +219,20 @@ export function EdgeChips() {
       if (now) flushSync(write);
       else write();
     };
-    const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(() => update());
-    };
+    // While the camera moves the chips are placed only in the frames the scene draws (after its
+    // render, once the installation labels and the tags of that frame are in place: their
+    // listeners were added first), never between them; while it is still, a change of the page
+    // is placed in the next animation frame (see frame-sync.ts).
+    const sync = frameSync({
+      place: update,
+      moving: api.moving,
+      requestFrame: (cb) => requestAnimationFrame(cb),
+      cancelFrame: (h) => cancelAnimationFrame(h),
+    });
+    const schedule = sync.schedule;
     schedule();
-    // A camera move is placed in the frame that draws it: after the scene's render, once the
-    // installation labels of that frame are in place (their listener was added first). The
-    // animation frame stays as a fallback for a move that draws nothing.
-    let moved = false;
-    const off = api.onCamera(() => {
-      moved = true;
-      schedule();
-    });
-    const rendered = api.onRender(() => {
-      if (!moved) return;
-      moved = false;
-      cancelAnimationFrame(frame);
-      update(true);
-    });
+    const off = api.onCamera(sync.cameraMoved);
+    const rendered = api.onRender(sync.rendered);
     window.addEventListener('resize', schedule);
     // Panels opening and closing, and plates growing or settling (a list loading in Capas, a
     // card docking), change the free area without a camera move.
@@ -269,7 +264,7 @@ export function EdgeChips() {
       sizes.disconnect();
       observer.disconnect();
       window.removeEventListener('resize', schedule);
-      cancelAnimationFrame(frame);
+      sync.dispose();
     };
   }, [api, installations, assets, relief, terrain, lidar, hits, all]);
   return (
