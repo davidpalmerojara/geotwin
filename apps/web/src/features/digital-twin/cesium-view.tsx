@@ -83,7 +83,7 @@ import { useLayers, useNetworkAssets } from '../../hooks/data';
 import { usePointCloudLayers } from '../layers/point-cloud-layers';
 import { renderUntil } from '../measure/render-until';
 import { dimensionLabelBoxes } from '../measure/dimension-lines';
-import { sceneLabels, sceneMarks } from '../scene/scene-marks';
+import { reservedTags, sceneLabels, sceneMarks } from '../scene/scene-marks';
 import { useLidarTerrain } from '../layers/lidar-terrain-provider';
 import { terrainHeight, type LidarTerrain } from '../layers/lidar-terrain';
 import { usePnoaImagery } from '../layers/pnoa-imagery';
@@ -579,6 +579,8 @@ function CesiumView({
         // The values of a measurement or a profile being read, and Radio's distances and radius.
         ...dimensionLabelBoxes(),
         ...sceneLabels(),
+        // The selected asset's tag, whole, where it goes: it wins its spot over a label.
+        ...reservedTags(),
       ];
       const current = installationIdRef.current;
       const ordered = [...installationsRef.current].sort(

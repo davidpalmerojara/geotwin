@@ -44,6 +44,24 @@ export function addSceneLabels(source: () => MarkBox[]) {
 export const sceneLabels = (): MarkBox[] => [...labelSources].flatMap((source) => source());
 
 /**
+ * The selected asset's tag, whole, where it goes (canvas px): the installation labels keep off it
+ * as they keep off a value, so the tag of the asset the user is looking at is not pushed to its
+ * compact form by a label (see `reserveSelected`).
+ */
+const reservedSources = new Set<() => MarkBox[]>();
+
+/** Adds a source of reserved boxes; the returned function removes it. */
+export function addReservedTags(source: () => MarkBox[]) {
+  reservedSources.add(source);
+  return () => {
+    reservedSources.delete(source);
+  };
+}
+
+/** Every reserved box, as their sources give them now. */
+export const reservedTags = (): MarkBox[] => [...reservedSources].flatMap((source) => source());
+
+/**
  * Small boxes along a polyline on screen, one every `step` px and `size` px wide, so a label
  * can tell a line it would cross from the free space on either side of it.
  */

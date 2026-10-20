@@ -10,6 +10,7 @@ import {
   layoutTags,
   lodFor,
   rankOf,
+  reserveSelected,
   tagBox,
   type TagItem,
   type TagPlacement,
@@ -179,6 +180,37 @@ describe('tag layout', () => {
     expect(tagBox(at, 'w').right).toBe(76);
     expect(tagBox(at, 'nw')).toEqual({ left: 46, top: 66, right: 86, bottom: 86 });
     expect(tagBox(at, 'se')).toEqual({ left: 114, top: 114, right: 154, bottom: 134 });
+  });
+});
+
+describe('reserveSelected (the selected tag wins over the installation labels)', () => {
+  // As in the far Radio view: Torrelago's label took the spot beside the selected mark, and the
+  // tag fell back to «37,0 °C». The mark at the left edge, a plate below.
+  const plate = { left: 0, top: 330, right: 800, bottom: 600 },
+    label = { left: 170, top: 230, right: 450, bottom: 292 };
+  const tag: TagItem = {
+    ...item('sonda', 150, 300, rankOf('warning', true), 180, 22),
+    compact: { width: 60, height: 22 },
+  };
+  it('reserves the spot where it fits whole once the labels are left out', () => {
+    const placed = layoutTags([tag], { view, blocked: [plate, label] }).get('sonda')!;
+    expect(placed.compact).toBe(true);
+    const reserved = reserveSelected(tag, placed, { view, blocked: [plate] })!;
+    expect(reserved).toEqual({ side: 'ne', width: 180, height: 22 });
+    // The label keeps off that box in the next frame (it steps up), and the tag goes there whole.
+    const box = tagBox({ x: tag.x, y: tag.y, ...reserved }, reserved.side);
+    expect(overlaps(label, box)).toBe(true);
+    const moved = { left: 170, top: 200, right: 450, bottom: box.top - 2 };
+    const next = layoutTags([tag], { view, blocked: [plate, moved] }).get('sonda')!;
+    expect(next).toMatchObject({ side: 'ne', compact: false });
+    // Placed whole, it keeps its spot.
+    expect(reserveSelected(tag, next, { view, blocked: [plate] })).toEqual(reserved);
+  });
+  it('reserves nothing when the tag fits whole nowhere, nor without a selection', () => {
+    const wall = { left: 0, top: 0, right: 800, bottom: 290 };
+    const placed = layoutTags([tag], { view, blocked: [plate, wall] }).get('sonda') ?? null;
+    expect(reserveSelected(tag, placed, { view, blocked: [plate, wall] })).toBeNull();
+    expect(reserveSelected(undefined, null, { view })).toBeNull();
   });
 });
 

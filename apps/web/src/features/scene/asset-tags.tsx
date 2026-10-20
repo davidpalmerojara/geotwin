@@ -21,7 +21,7 @@ import {
 import type { Asset } from '@geotwin/shared';
 import type { ScreenBox } from '../digital-twin/camera';
 import { sceneBlockers } from '../hud/dom';
-import { sceneLabels } from './scene-marks';
+import { addReservedTags, sceneLabels } from './scene-marks';
 import { useTool } from '../../stores/tool';
 import { STATUS_WORD, useTagInfos, type TagInfo } from './tag-data';
 import {
@@ -32,9 +32,12 @@ import {
   lodFor,
   placeValue,
   rankOf,
+  reserveSelected,
+  tagBox,
   type Side,
   type TagItem,
   type TagLod,
+  type TagReservation,
 } from './tag-layout';
 import { AlertBeams, type BeamSpec, type PulseMotion } from './alert-beams';
 import {
@@ -242,6 +245,14 @@ export default function AssetTags({
     });
     // Development builds keep the last depth samples for checks.
     const depthSamples = new Map<string, (number | null)[]>();
+    // Where the selected asset's tag goes whole: the installation labels, placed earlier in each
+    // frame, keep off it (see reserveSelected).
+    let reserved: (TagReservation & { anchor: Cartesian3 }) | null = null;
+    const offReserved = addReservedTags(() => {
+      if (!reserved || viewer.isDestroyed()) return [];
+      const p = SceneTransforms.worldToWindowCoordinates(scene, reserved.anchor);
+      return p ? [tagBox({ x: p.x, y: p.y, ...reserved }, reserved.side)] : [];
+    });
     const place = () => {
       const root = layer.current;
       if (!root || viewer.isDestroyed()) return;
@@ -336,6 +347,30 @@ export default function AssetTags({
         marks,
         previous: sides.current,
       });
+      const labels = new Set(labelBoxes.current ?? []);
+      const chosen = selectedId ? placement.get(selectedId) : undefined;
+      const reservation = reserveSelected(
+        items.find((i) => i.id === selectedId),
+        chosen,
+        {
+          view: { width, height },
+          blocked: blocked.filter((b) => !labels.has(b)),
+          marks,
+          previous: sides.current,
+        },
+      );
+      const anchor = selectedId ? anchors.get(selectedId)?.anchor : undefined;
+      const before = reserved;
+      reserved = reservation && anchor ? { ...reservation, anchor } : null;
+      // A label took its spot this frame: the next one moves the label and places the tag whole.
+      if (
+        reserved &&
+        (!chosen || chosen.compact) &&
+        (before?.side !== reserved.side ||
+          before.width !== reserved.width ||
+          before.height !== reserved.height)
+      )
+        scene.requestRender();
       // Occlusion: read from the depth of a finished frame, after the camera stops.
       const due = occlusionDue.current;
       if (due !== null && (tilesLoaded() || performance.now() - due > TILES_WAIT_MS)) {
@@ -423,6 +458,7 @@ export default function AssetTags({
     return () => {
       offMove();
       offRender();
+      offReserved();
     };
   }, [viewer, labelBoxes, photoreal, assets]);
   const meshHeightsRef = useRef(meshHeights);

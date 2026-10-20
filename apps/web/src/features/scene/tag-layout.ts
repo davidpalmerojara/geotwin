@@ -179,6 +179,32 @@ export function layoutTags(items: TagItem[], options: LayoutOptions) {
   return result;
 }
 
+/** The spot the selected asset's tag holds whole, around its mark. */
+export interface TagReservation {
+  side: Side;
+  width: number;
+  height: number;
+}
+
+/**
+ * The selected tag wins its spot over the installation labels: they are placed before the tags in
+ * a frame, so the tag tells them where it goes whole and they keep off it from the next frame on.
+ * `placed` is its placement this frame; `options` are the layout's without the labels. When it was
+ * placed whole that spot is kept; when it had to drop to its compact form (or hide), the first spot
+ * where it fits whole leaving the labels out; `null` when it fits whole nowhere even then.
+ */
+export function reserveSelected(
+  item: TagItem | undefined,
+  placed: TagPlacement | null | undefined,
+  options: LayoutOptions,
+): TagReservation | null {
+  if (!item) return null;
+  const size = { width: item.width, height: item.height };
+  if (placed && !placed.compact) return { side: placed.side, ...size };
+  const whole = layoutTags([{ ...item, compact: undefined }], options).get(item.id);
+  return whole ? { side: whole.side, ...size } : null;
+}
+
 /** Depth samples (px offsets from the mark) read to tell whether something hides it. */
 export const OCCLUSION_SAMPLES: [number, number][] = [
   [0, 0],
