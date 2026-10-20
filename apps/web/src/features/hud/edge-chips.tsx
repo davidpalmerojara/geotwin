@@ -10,8 +10,10 @@ import { Glyph } from './glyphs';
 import { overlayBoxes } from './dom';
 import { frameSync } from './frame-sync';
 import { sceneLabels } from '../scene/scene-marks';
+import { BRACKETS } from '../scene/tag-layout';
 import {
   bearing,
+  chipTargets,
   compass,
   edgeChip,
   MARGIN,
@@ -76,7 +78,8 @@ function tagBox(id: string) {
  * pointing at them, with the compass bearing and the distance from the centre of the view. One
  * that is visible between the plates keeps only its mark and tag: so does one whose mark is at
  * a plate's edge while its tag (or the installation's label) shows. At most MAX_CHIPS show, the
- * most urgent first; a «+n» chip shows the rest. A click flies there.
+ * most urgent first; a «+n» chip shows the rest. A click flies there. With a sheet open on a
+ * phone only critical assets get one (chipTargets).
  */
 export function EdgeChips() {
   const api = useScene((s) => s.api),
@@ -138,7 +141,9 @@ export function EdgeChips() {
       const camera = api.camera();
       const from = camera.center ?? null;
       const next: Chip[] = [];
-      for (const t of targets) {
+      // A sheet open on a phone: only critical assets (see chipTargets).
+      const phoneSheet = !!document.querySelector('.hud-phone .bottom-sheet');
+      for (const t of chipTargets(targets, phoneSheet)) {
         const h = api.groundAt(t.lng, t.lat) + (relief ? t.mount : 0);
         const at = api.project(t.lng, t.lat, h);
         if (!outOfSight(at, { width, height }, plates)) continue;
@@ -201,6 +206,18 @@ export function EdgeChips() {
         .filter((t) => t.style.display !== 'none')
         .map((t) => t.getBoundingClientRect())
         .filter((b) => b.width > 0);
+      // The selected asset's mark with its brackets: no chip covers it (BRACKETS, tag-layout.ts).
+      const keep = [...document.querySelectorAll<HTMLElement>('.scene-tags .scene-mark')]
+        .filter((m) => m.dataset.selected && m.style.display !== 'none')
+        .map((m) => {
+          const { left: x, top: y } = m.getBoundingClientRect();
+          return {
+            left: x - BRACKETS,
+            right: x + BRACKETS,
+            top: y - BRACKETS,
+            bottom: y + BRACKETS,
+          };
+        });
       const placed = placeChips(
         extra ? [...shown, extra] : shown,
         free,
@@ -208,6 +225,7 @@ export function EdgeChips() {
         marks,
         labels,
         tags,
+        keep,
       );
       const tail = extra ? placed.pop() : null;
       const write = () => {

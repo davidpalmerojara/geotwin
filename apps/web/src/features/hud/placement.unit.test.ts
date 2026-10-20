@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   bearing,
+  chipTargets,
   compass,
   edgeChip,
   intersects,
@@ -14,6 +15,7 @@ import {
   type Box,
 } from './placement';
 import { distanceLabelBox } from '../section/radius-label';
+import { coveredEdges } from '../digital-twin/camera';
 
 const viewport = { width: 1440, height: 900 };
 const card = { width: 372, height: 520 };
@@ -359,5 +361,86 @@ describe('edge chips', () => {
     const wall: Box = { left: 1000, top: 0, right: 1440, bottom: 900 };
     const chip = edgeChip(free, size, { x: 2000, y: 400 }, 0)!;
     expect(placeChips([{ ...chip, ...size }], free, [wall])).toEqual([null]);
+  });
+});
+
+describe('a critical asset under a plate on a phone with a sheet open', () => {
+  // The check's phone (390 × 844) after a tap on «Centro de transformación · Torrelago», the sheet
+  // at 45 %: the gateway of the south tower, critical, has its mark at (168, 417) under the credits
+  // strip above the sheet, and its tag found no spot clear of the other marks.
+  const phone = { width: 390, height: 844 };
+  const plates: Box[] = [
+    { left: 10, top: 10, right: 380, bottom: 150 }, // top plate with the annunciator row
+    { left: 10, top: 159, right: 170, bottom: 201 }, // scale
+    { left: 261, top: 159, right: 380, bottom: 201 }, // heading
+    { left: 10, top: 401, right: 380, bottom: 456 }, // credits
+    { left: 10, top: 464, right: 380, bottom: 768 }, // the asset sheet
+    { left: 10, top: 776, right: 380, bottom: 834 }, // tool bar
+  ];
+  const gateway = { x: 168, y: 417 };
+  const edges = coveredEdges({ left: 0, top: 0, right: 390, bottom: 844 }, plates);
+  const free: Box = {
+    left: Math.max(12, edges.left + 8),
+    top: Math.max(12, edges.top + 8),
+    right: 390 - Math.max(12, edges.right + 8),
+    bottom: 844 - Math.max(12, edges.bottom + 8),
+  };
+  const targets = [
+    { key: 'i:Torrelago' },
+    { key: 'i:Depósito elevado del cerro' },
+    { key: 'a:Grupo de presión', status: 'warning' },
+    { key: 'a:Pasarela LoRa · torre sur', status: 'critical' },
+  ];
+
+  it('keeps only the critical assets among the targets, and every target without a sheet', () => {
+    expect(chipTargets(targets, true).map((t) => t.key)).toEqual(['a:Pasarela LoRa · torre sur']);
+    expect(chipTargets(targets, false)).toEqual(targets);
+  });
+
+  it('puts its chip on the free edge nearest its mark, clear of the selected brackets', () => {
+    // Under the credits, so out of sight, and the area above the sheet is room enough for chips.
+    expect(outOfSight(gateway, phone, plates)).toBe(true);
+    expect(free.bottom).toBeLessThanOrEqual(401 - 8);
+    expect(free.bottom - free.top).toBeGreaterThanOrEqual(120);
+    const size = { width: 268, height: 24 };
+    const chip = edgeChip(free, size, gateway, 0)!;
+    expect(chip.side).toBe('bottom');
+    // The selected mark of the transformer with its brackets (28 px) is a mark it keeps off.
+    const brackets: Box = { left: 181, top: 337, right: 209, bottom: 365 };
+    const [placed] = placeChips([{ ...chip, ...size }], free, plates, [brackets]);
+    expect(placed).not.toBeNull();
+    const box = {
+      left: placed!.left,
+      top: placed!.top,
+      right: placed!.left + size.width,
+      bottom: placed!.top + size.height,
+    };
+    expect(plates.some((p) => intersects(box, p))).toBe(false);
+    expect(intersects(box, brackets)).toBe(false);
+  });
+
+  it('never covers the selected mark: off the edge when the edge has no room beside it', () => {
+    // Without relief a note sits above the credits: the free area is a strip from 168 to 339 px
+    // and the selected mark, with its brackets, is at its bottom edge, where the chip goes.
+    const strip: Box = { left: 12, top: 168, right: 378, bottom: 339 };
+    const brackets: Box = { left: 176, top: 313, right: 204, bottom: 341 };
+    const size = { width: 268, height: 24 };
+    const chip = edgeChip(strip, size, { x: 160, y: 411 }, 0)!;
+    expect(chip.side).toBe('bottom');
+    const box = (c: { left: number; top: number }) => ({
+      left: c.left,
+      top: c.top,
+      right: c.left + size.width,
+      bottom: c.top + size.height,
+    });
+    // As a mark only, the chip ends over it: no spot along the edge is clear of it.
+    const [over] = placeChips([{ ...chip, ...size }], strip, [], [brackets]);
+    expect(intersects(box(over!), brackets)).toBe(true);
+    // Kept clear: the chip steps up off the edge, just above the brackets, inside the strip.
+    const [placed] = placeChips([{ ...chip, ...size }], strip, [], [], [], [], [brackets]);
+    expect(placed).not.toBeNull();
+    expect(intersects(box(placed!), brackets, 3)).toBe(false);
+    expect(placed!.top).toBe(313 - 4 - 24);
+    expect(placed!.top).toBeGreaterThanOrEqual(strip.top);
   });
 });

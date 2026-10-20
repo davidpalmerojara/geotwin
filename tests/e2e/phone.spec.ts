@@ -294,10 +294,8 @@ test.describe('a tap on a mark', () => {
   };
   test.afterEach(async ({ request }) => resolve(request));
 
-  test('leaves the selected mark and its brackets uncovered once the camera stops', async ({
-    page,
-    request,
-  }) => {
+  /** Injects the alerts, opens Torrelago and taps the mark of the transformer once it is on top. */
+  async function tapCentre(page: Page, request: import('@playwright/test').APIRequestContext) {
     await resolve(request);
     for (const { sensor, mode } of alerts)
       expect(
@@ -335,6 +333,14 @@ test.describe('a tap on a mark', () => {
     );
     await expect(mark).toHaveAttribute('data-selected', 'true');
     await stillCamera(page);
+    return mark;
+  }
+
+  test('leaves the selected mark and its brackets uncovered once the camera stops', async ({
+    page,
+    request,
+  }) => {
+    await tapCentre(page, request);
     // At the centre of the selected mark and at the corners of its brackets, nothing but the mark:
     // no other asset's tag, no installation label.
     const covered = () =>
@@ -360,6 +366,71 @@ test.describe('a tap on a mark', () => {
     // And it stays so: the next frames do not bring a tag back over it.
     await page.waitForTimeout(3000);
     expect(await covered()).toEqual([]);
+  });
+
+  test('keeps the critical gateway in sight: its mark, its tag or an edge chip', async ({
+    page,
+    request,
+  }) => {
+    await tapCentre(page, request);
+    // The gateway of the south tower is critical: with the transformer's sheet open its mark may
+    // end under a plate (the credits above the sheet) and its tag find no spot clear of the marks.
+    // Then its edge chip says where it is, as for anything under a plate.
+    const gateway = alerts[0]!.asset;
+    await expect(page.locator(`.scene-tag[data-asset="${gateway}"]`)).toHaveAttribute(
+      'data-status',
+      'critical',
+      { timeout: 60000 },
+    );
+    const signals = () =>
+      page.evaluate((id) => {
+        const free = (box: DOMRect) => {
+          // The share of a box on screen and under no plate, on a 6 × 3 grid.
+          const plates = [...document.querySelectorAll('[data-map-overlay]')]
+            .filter((p) => p.checkVisibility({ visibilityProperty: true }))
+            .map((p) => p.getBoundingClientRect());
+          let seen = 0;
+          for (let i = 0; i < 6; i++)
+            for (let j = 0; j < 3; j++) {
+              const x = box.left + ((i + 0.5) * box.width) / 6,
+                y = box.top + ((j + 0.5) * box.height) / 3;
+              if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
+              if (plates.some((b) => x >= b.left && x <= b.right && y >= b.top && y <= b.bottom))
+                continue;
+              seen++;
+            }
+          return seen / 18;
+        };
+        const ring = document.querySelector(`.scene-mark[data-asset="${id}"] i`);
+        const r = ring?.checkVisibility() ? ring.getBoundingClientRect() : null;
+        const top = r && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        const tag = document.querySelector<HTMLElement>(`.scene-tag[data-asset="${id}"]`);
+        const t = tag?.checkVisibility() ? tag.getBoundingClientRect() : null;
+        const chips = [...document.querySelectorAll<HTMLElement>('[data-testid="edge-chip"]')]
+          .filter((c) => c.checkVisibility({ visibilityProperty: true }))
+          .map((c) => c.getAttribute('aria-label') ?? '');
+        return {
+          mark: !!top && top.closest('.scene-mark') === ring!.parentElement,
+          tag: !!t && t.width > 0 && free(t) >= 0.5,
+          chip: chips.some((c) => c.startsWith('Pasarela LoRa · torre sur:')),
+          where: r
+            ? `${Math.round(r.left)},${Math.round(r.top)} under ${top?.closest('[data-testid]')?.getAttribute('data-testid') ?? top?.tagName}`
+            : 'no mark',
+        };
+      }, gateway);
+    await expect
+      .poll(
+        async () => {
+          const s = await signals();
+          return s.mark || s.tag || s.chip ? 'in sight' : `hidden: ${s.where}`;
+        },
+        { timeout: 30000 },
+      )
+      .toBe('in sight');
+    // And it stays so once the scene has settled.
+    await page.waitForTimeout(3000);
+    const s = await signals();
+    expect(s.mark || s.tag || s.chip, JSON.stringify(s)).toBe(true);
   });
 });
 

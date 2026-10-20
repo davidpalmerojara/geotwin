@@ -257,6 +257,16 @@ export function shownShare(box: Box, viewport: Size, plates: Box[], columns = 8,
   return seen / (columns * rows);
 }
 
+/**
+ * What gets an edge chip. With a sheet open on a phone the scene left above it is small, so only
+ * critical assets keep theirs: a critical asset has to stay easy to notice, and its mark may be
+ * under the credits above the sheet while its tag finds no spot clear of the other marks. The
+ * installations, the warnings and Radio's results wait until the sheet closes.
+ */
+export function chipTargets<T extends { status?: string }>(targets: T[], phoneSheet: boolean) {
+  return phoneSheet ? targets.filter((t) => t.status === 'critical') : targets;
+}
+
 /** Most edge chips shown at once; the rest are counted in a «+n» chip that shows them all. */
 export const MAX_CHIPS = 3;
 /**
@@ -283,6 +293,9 @@ export function pickChips<T extends { distance: number }>(
  * a label moves off a chip by itself on the next frame, a mark cannot. Avoiding them here keeps a
  * chip off a label while the camera flies, when the label is placed a frame behind the chips.
  * `tags` (the assets' tags) likewise, and given up before the labels: a tag has more places to go.
+ * `keep` (the selected asset's mark with its brackets) is never covered: a chip that finds no spot
+ * clear of it along its edge steps off the edge into the free area, the nearest spot first (on a
+ * phone with a sheet open the free area is a strip, and the selected mark is often at its edge).
  */
 export function placeChips<T extends EdgeChip & Size>(
   chips: T[],
@@ -291,18 +304,38 @@ export function placeChips<T extends EdgeChip & Size>(
   marks: Box[] = [],
   labels: Box[] = [],
   tags: Box[] = [],
+  keep: Box[] = [],
 ) {
   const placed: T[] = [];
   return chips.map((chip) => {
-    const hard = [...plates, ...placed.map((p) => boxOf(p.left, p.top, p))];
+    const hard = [...plates, ...keep, ...placed.map((p) => boxOf(p.left, p.top, p))];
     const next =
       placeChip(chip, free, [...hard, ...marks, ...labels, ...tags]) ??
       placeChip(chip, free, [...hard, ...marks, ...labels]) ??
       placeChip(chip, free, [...hard, ...marks]) ??
-      placeChip(chip, free, hard);
+      placeChip(chip, free, hard) ??
+      (keep.length
+        ? (offEdge(chip, free, [...hard, ...marks]) ?? offEdge(chip, free, hard))
+        : null);
     if (next) placed.push(next);
     return next;
   });
+}
+
+/** A chip moved across its edge, into the free area, to the nearest spot clear of `obstacles`. */
+function offEdge<T extends EdgeChip & Size>(chip: T, free: Box, obstacles: Box[]): T | null {
+  const along = chip.side === 'left' || chip.side === 'right';
+  const start = along ? chip.left : chip.top;
+  const size = along ? chip.width : chip.height;
+  const spots = obstacles
+    .flatMap((o) => (along ? [o.left - 4 - size, o.right + 4] : [o.top - 4 - size, o.bottom + 4]))
+    .sort((a, b) => Math.abs(a - start) - Math.abs(b - start));
+  for (const spot of spots) {
+    const moved = along ? { ...chip, left: spot } : { ...chip, top: spot };
+    const next = placeChip(moved, free, obstacles);
+    if (next) return next;
+  }
+  return null;
 }
 
 function placeChip<T extends EdgeChip & Size>(chip: T, free: Box, obstacles: Box[]): T | null {

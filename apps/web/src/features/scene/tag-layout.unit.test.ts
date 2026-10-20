@@ -197,6 +197,91 @@ describe('tag layout', () => {
   });
 });
 
+describe('critical tags before warnings (phone, tap on Centro de transformación, with alerts)', () => {
+  // The check's frame at 390 × 844 after the tap, with the gateway of the south tower critical and
+  // the pressure group in warning: marks, tag sizes and plates (the top plate with the annunciator
+  // row, scale, heading, the credits above the sheet at 45 %, the sheet, the tool bar and
+  // Torrelago's label).
+  const phone = { width: 390, height: 844 };
+  const credits = { left: 10, top: 400.9, right: 380, bottom: 456.2 };
+  const plates = [
+    { left: 10, top: 10, right: 380, bottom: 150 },
+    { left: 10, top: 159, right: 170, bottom: 201 },
+    { left: 261, top: 159, right: 380, bottom: 201 },
+    { left: 10, top: 464.2, right: 380, bottom: 768 },
+    { left: 10, top: 776, right: 380, bottom: 834 },
+    { left: 61, top: 262, right: 351, bottom: 302 },
+  ];
+  const at: Record<string, [number, number, 'healthy' | 'warning' | 'critical', number, number]> = {
+    // x, y, status, value width, whole width
+    '03': [195, 351, 'healthy', 66, 270],
+    '06': [90, 430, 'healthy', 59, 247],
+    '02': [207, 390, 'warning', 99, 241],
+    '04': [276, 225, 'healthy', 66, 218],
+    '01': [168, 417, 'critical', 90, 250],
+    '05': [252, 397, 'healthy', 74, 234],
+  };
+  const marks = new Map(
+    Object.entries(at).map(([id, [x, y]]) => [
+      id,
+      { left: x - 8, right: x + 8, top: y - 8, bottom: y + 8 },
+    ]),
+  );
+  const items: TagItem[] = Object.entries(at).map(([id, [x, y, status, value, whole]]) => {
+    const full = id === '03' || status !== 'healthy';
+    const height = id === '03' ? 22 : 26;
+    return {
+      id,
+      x,
+      y,
+      distance: 700,
+      width: full ? whole : value,
+      height,
+      rank: rankOf(status, id === '03'),
+      compact: full ? { width: value, height } : undefined,
+    };
+  });
+  const layout = (blocked: typeof plates) =>
+    layoutTags(items, { view: phone, blocked, marks, selected: '03' });
+
+  it('places the selected tag whole, then the critical one, then the warning', () => {
+    const placed = layout([...plates, credits]);
+    expect(placed.get('03')).toMatchObject({ side: 'n', compact: false });
+    // The gateway's mark is under the credits: none of its spots is clear of them and of the
+    // other marks, so its tag hides (its edge chip says where it is, see chipTargets).
+    expect(placed.get('01')).toBeNull();
+    // The warning keeps its value on the spot of the check (221, 350).
+    expect(placed.get('02')).toMatchObject({ side: 'ne', compact: true });
+    expect(Math.round(placed.get('02')!.left)).toBe(221);
+    // With the sheet lower (the credits out of the way), the critical tag takes a spot, in its
+    // compact form, before the warning is placed.
+    const lower = layout(plates);
+    expect(lower.get('01')).toMatchObject({ compact: true });
+    expect(lower.get('02')).toMatchObject({ side: 'ne', compact: true });
+  });
+
+  it('never lets a warning’s compact tag take the spot a critical tag could use', () => {
+    // Room for one compact tag only, up and to the right of two marks in the same place; the
+    // warning is nearer the camera, which wins between equal ranks only.
+    const view = { width: 120, height: 50 };
+    const tag = (id: string, status: 'critical' | 'warning', distance: number): TagItem => ({
+      id,
+      x: 20,
+      y: 40,
+      width: 200,
+      height: 22,
+      distance,
+      rank: rankOf(status),
+      compact: { width: 60, height: 22 },
+    });
+    const placed = layoutTags([tag('warning', 'warning', 100), tag('critical', 'critical', 900)], {
+      view,
+    });
+    expect(placed.get('critical')).toMatchObject({ side: 'ne', compact: true });
+    expect(placed.get('warning')).toBeNull();
+  });
+});
+
 describe('the selected mark is never covered (phone, tap on Centro de transformación)', () => {
   // The boxes of a real frame at 390 × 844 after tapping the mark of «Centro de transformación ·
   // Torrelago» on a phone (four LiDAR sheets): the selected tag holds its whole spot above its
